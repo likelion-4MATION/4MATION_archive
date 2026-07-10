@@ -22,10 +22,10 @@ _주제 확정 후 한 줄 소개가 여기에 들어갑니다._
 
 | 이름 | 역할 | GitHub |
 |------|------|--------|
-| TBD | 팀장 / TBD | [@id](https://github.com/id) |
-| TBD | TBD | [@id](https://github.com/id) |
-| TBD | TBD | [@id](https://github.com/id) |
-| TBD | TBD | [@id](https://github.com/id) |
+| 김경은 | 팀장 / TBD | [@Gyeong-Eun](https://github.com/Gyeong-Eun) |
+| 박유상 | TBD | [@us788](https://github.com/us788) |
+| 양현욱 | TBD | [@ukkhnn](https://github.com/ukkhnn) |
+| 문규남 | TBD | [@mungn0603-code](https://github.com/mungn0603-code) |
 
 ## 🛠 기술 스택
 
@@ -64,4 +64,4 @@ cd 4MATION
 
 ## 📅 프로젝트 기간
 
-`2026.07. ~ TBD`
+`2026.07.10 ~ 2026.09.02`
