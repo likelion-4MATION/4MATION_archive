@@ -1,0 +1,67 @@
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== IDE / Editor =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== 환경변수 / 시크릿 =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# ===== ML 산출물 =====
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.h5
+*.onnx
+wandb/
+mlruns/
+runs/
+checkpoints/
+data/raw/
+data/processed/
+*.csv.gz
+*.parquet
+
+# ===== Node =====
+node_modules/
+.next/
+.nuxt/
+.cache/
+coverage/
+*.log
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# ===== 기타 =====
+tmp/
+
+# ===== Vector DB / RAG 로컬 산출물 =====
+chroma_db/
+*.faiss
+*.index
+corpus/
