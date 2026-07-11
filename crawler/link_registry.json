@@ -1,0 +1,64 @@
+{
+  "_meta": {
+    "purpose": "소관 밖/동적조회 질문을 RAG 답변 대신 링크로 안내하기 위한 라우팅 레지스트리 (D2 가드에서 사용).",
+    "source": "URL·판정은 02_검색범위정의서_초안.md에서 추출. 외부 담당기관 URL은 원래 분석필요태깅_포함여부분석.xlsx의 '링크만' 판정에서 왔으나 xlsx 부재 → 미확보분은 url 공란 + HOLES.md 기록. 문서에 없는 URL은 창작하지 않음.",
+    "generated_for": "ASSIGNMENT_D0 · T3",
+    "url_field_convention": "url = 사용자에게 제시할 링크. 02 정의서에서 확인되는 KDIC 안내/조회 페이지만 채웠고, 외부 담당기관(법원·신용회복위원회 등) 실제 URL은 kdic_reference_url이 아닌 별도 확인 필요 → note 참조."
+  },
+  "entries": [
+    {
+      "intent_id": "overseas_deposit_protection",
+      "keywords": ["해외 예금자보호한도", "외국 예금보험", "해외 예금보호제도", "미국 FDIC 한도", "일본 예금보험", "해외 은행 예금보호"],
+      "message": "다른 나라의 예금자보호한도·제도는 예금보험공사 소관이 아닙니다. 해당 국가의 예금보험기구(예: 미국 FDIC, 일본 예금보험기구) 또는 국제예금보험협회(IADI)에서 안내받으실 수 있습니다. 국내 예금자보호한도(2025-09-01부터 1억 원)는 예금보험공사 보호한도 안내를 참고하세요.",
+      "org": "해당 국가 예금보험기구 / 국제예금보험협회(IADI)",
+      "url": "",
+      "source_judgment": "링크만",
+      "note": "외부기관 URL이 02 정의서·참고문서에 없음 → 창작 금지, 공란 유지. HOLES 기록. 국내 한도 안내는 https://www.kdic.or.kr/sp/dpstrprot/ProtSystProtLmts/selectScrn.do (매니페스트 수집분)."
+    },
+    {
+      "intent_id": "payout_target_search",
+      "keywords": ["지급대상 검색", "지급대행점 조회", "보험금 지급 지점", "지급대상 금융회사 조회", "지급기관 찾기"],
+      "message": "지급대상 금융회사·지급대행점은 실시간 조회가 필요한 항목이라 챗봇이 직접 답하지 않습니다. 아래 예금보험공사 조회 페이지에서 확인하세요.",
+      "org": "예금보험공사 (지급대행점 실시간 조회)",
+      "url": "https://www.kdic.or.kr/sp/dpstrprot/selectProtSystBamtGiveInq.do",
+      "source_judgment": "링크만",
+      "note": "02 정의서 업무2 '지급대행점 조회(동적)'. 동적 검색이라 크롤 제외 → 라이브 링크로 안내. 지급대상 금융회사 개요는 https://www.kdic.or.kr/sp/dpstrprot/selectProtSystBamtGiveTrgtFnst.do."
+    },
+    {
+      "intent_id": "credit_recovery",
+      "keywords": ["신용회복", "신용회복위원회", "개인워크아웃", "프리워크아웃", "채무조정 신용회복"],
+      "message": "신용회복(개인워크아웃) 신청·심사는 신용회복위원회 소관으로 예금보험공사가 직접 진행하지 않습니다. 예금보험공사 신용회복 지원 안내에서 관련 정보를 확인하고 담당 기관으로 안내받으실 수 있습니다.",
+      "org": "신용회복위원회",
+      "url": "https://www.kdic.or.kr/rb/lbltajmt/LbltAjmtSprtCredRcvrySprt/selectScrn.do",
+      "source_judgment": "링크만",
+      "note": "url은 02 정의서 업무5의 KDIC 신용회복 지원 안내 페이지(문서 확인분). 신용회복위원회 외부 실제 URL은 xlsx 링크만 판정 부재로 미확보 → HOLES."
+    },
+    {
+      "intent_id": "bankruptcy_discharge",
+      "keywords": ["파산면책", "개인파산", "면책신청", "파산선고", "법원 파산"],
+      "message": "개인파산·면책 신청은 관할 법원 소관으로 예금보험공사가 직접 진행하지 않습니다. 예금보험공사 파산면책 안내에서 관련 정보를 확인하고 관할 법원으로 안내받으실 수 있습니다.",
+      "org": "관할 법원 (개인파산·면책)",
+      "url": "https://www.kdic.or.kr/rb/lbltajmt/LbltAjmtSprtPsnBr/selectScrn.do",
+      "source_judgment": "링크만",
+      "note": "url은 02 정의서 업무5의 KDIC 파산면책 안내 페이지(문서 확인분). 법원 외부 실제 URL은 xlsx 링크만 판정 부재로 미확보 → HOLES."
+    },
+    {
+      "intent_id": "personal_rehabilitation",
+      "keywords": ["개인회생", "회생절차", "법원회생", "개인회생신청", "회생법원"],
+      "message": "개인회생 절차는 관할 법원(회생법원) 소관으로 예금보험공사가 직접 진행하지 않습니다. 예금보험공사 개인회생 안내에서 관련 정보를 확인하고 관할 법원으로 안내받으실 수 있습니다.",
+      "org": "관할 법원 (개인회생·회생법원)",
+      "url": "https://www.kdic.or.kr/rb/lbltajmt/LbltAjmtSprtPsnRg/selectScrn.do",
+      "source_judgment": "링크만",
+      "note": "url은 02 정의서 업무5의 KDIC 개인회생 안내 페이지(문서 확인분). 법원 외부 실제 URL은 xlsx 링크만 판정 부재로 미확보 → HOLES."
+    },
+    {
+      "intent_id": "illegal_act_report",
+      "keywords": ["불법행위신고", "불법사금융 신고", "불법금융 신고", "금융범죄 신고", "불법채권추심 신고"],
+      "message": "불법사금융·불법채권추심 등 불법행위 신고는 금융감독원 불법사금융 신고센터 등 담당 기관에서 접수합니다. 예금보험공사 소관 신고(은닉재산 신고)와는 별개입니다.",
+      "org": "금융감독원 불법사금융 신고센터 (담당기관 확인 필요)",
+      "url": "",
+      "source_judgment": "측정후결정(A/B) — 보류",
+      "note": "ASSIGNMENT_D0 범위 밖(불법행위신고 A/B 측정후결정). 외부기관 URL 문서 없음 → 창작 금지, 공란. 은닉재산 신고(예보 소관)와 혼동 주의. HOLES 기록."
+    }
+  ]
+}
