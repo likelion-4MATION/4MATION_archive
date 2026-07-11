@@ -72,14 +72,26 @@ def robots_status(url: str) -> str:
     rp = _robots_cache.get(base)
     if rp is None:
         rp = urllib.robotparser.RobotFileParser()
-        rp.set_url(base + "/robots.txt")
+        # urllib.robotparser.read()는 기본 Python-urllib UA로 받아 KDIC가 차단
+        # (D0의 unreachable 원인). 세션과 동일한 명시적 UA로 직접 GET해 parse()에 주입.
         try:
-            rp.read()
-            rp._reachable = True  # type: ignore[attr-defined]
-        except Exception:
-            print(f"[robots] {base}/robots.txt 읽기 실패 — 보수적으로 진행(기록)")
-            rp = urllib.robotparser.RobotFileParser()
-            rp.parse("")  # 빈 규칙 = 전체 허용, 단 상태는 unreachable로 기록
+            _polite_wait()
+            r = requests.get(base + "/robots.txt",
+                             headers={"User-Agent": config.USER_AGENT,
+                                      "Accept-Language": "ko"},
+                             timeout=config.TIMEOUT_SEC)
+            if r.status_code == 200 and r.text.strip():
+                r.encoding = r.apparent_encoding or "utf-8"
+                rp.parse(r.text.splitlines())
+                rp._reachable = True  # type: ignore[attr-defined]
+                print(f"[robots] {base}/robots.txt {r.status_code} · {len(r.text)}B 파싱")
+            else:
+                raise ValueError(f"HTTP {r.status_code} / len {len(r.text)}")
+        except Exception as e:
+            # fail-open 금지 — 빈 규칙이되 상태는 unreachable로 기록.
+            # 실제 차단은 POLICY_DISALLOW 오버레이가 담당(절대규칙 1).
+            print(f"[robots] {base}/robots.txt 읽기 실패({e}) — unreachable 기록, 정책 오버레이 의존")
+            rp.parse([])
             rp._reachable = False  # type: ignore[attr-defined]
         _robots_cache[base] = rp
     if not getattr(rp, "_reachable", True):
