@@ -41,10 +41,20 @@ wandb/
 mlruns/
 runs/
 checkpoints/
-data/raw/
-data/processed/
 *.csv.gz
 *.parquet
+
+# ===== crawler/ 데이터 파이프라인 — 재생성 산출물 (README 산출물 표 기준) =====
+# data/chunks.jsonl · data/testset.jsonl · data/eval_report.md · data/crawl_report.json ·
+# crawl_manifest.csv · kdic_필수페이지_URL매핑.csv 는 레포 포함 대상이므로 아래에서 제외되지 않음.
+crawler/data/raw/
+crawler/data/meta/
+crawler/data/parsed/
+crawler/data/index/
+# D0 재현성 검증용 임시 산출 디렉토리 (run_crawl.py --out run1/run2, verify_rerun.py 입력)
+crawler/run1/
+crawler/run2/
+crawler/run_*/
 
 # ===== Node =====
 node_modules/
