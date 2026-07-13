@@ -20,11 +20,11 @@
 
 ## 🧩 프로젝트 구성 (3단계)
 
-| 단계 | 이름 | 내용 |
-|------|------|------|
-| 실전 1 | **데이터 파이프라인** | 크롤링 → 본문 파싱 → 메타데이터 태깅 → 청킹 → 벡터DB 적재 |
-| 실전 2 | **RAG 챗봇** | 6개 업무 질의응답, 출처 표시, 민원 처리 안내 |
-| 종합 | **관리자 기능** | 데이터 CRUD·재수집 트리거, RAG 파라미터(Top-K, Chunk Size) 테스트 UI |
+| 단계 | 이름 | 내용 | 상태 |
+|------|------|------|------|
+| 실전 1 | **데이터 파이프라인** | 크롤링 → 본문 파싱 → 메타데이터 태깅 → 청킹 → 벡터DB 적재 | ✅ v0 완료 — [`crawler/`](./crawler/) |
+| 실전 2 | **RAG 챗봇** | 6개 업무 질의응답, 출처 표시, 민원 처리 안내 | 진행 예정 |
+| 종합 | **관리자 기능** | 데이터 CRUD·재수집 트리거, RAG 파라미터(Top-K, Chunk Size) 테스트 UI | 예정 |
 
 ## 🏗 서비스 아키텍처
 
@@ -66,37 +66,42 @@ flowchart LR
 
 ## 🛠 기술 스택
 
-> ⚙️ 팀 논의 후 확정 — 아래는 후보
+| 분류 | 실전 1 확정 (v0) | 이후 단계 후보 |
+|------|------|------|
+| Language | Python 3.11+ | — |
+| 수집/전처리 | requests · BeautifulSoup(lxml) — 규칙 기반, LLM 미사용 | Playwright (동적 페이지 필요 시) |
+| 임베딩 | `jhgan/ko-sroberta-multitask` (로컬, 768d) | CLOVA 임베딩 (프로덕션) |
+| 검색 | FAISS + BM25(kiwipiepy) 하이브리드, RRF 융합 — 직접 구현 | Reranking (cross-encoder / CLOVA) |
+| LLM | — | **CLOVA Studio 우선** (실전 2) |
+| UI | — | Streamlit (데모) → React (관리자) |
+| Backend | — | FastAPI |
+| Infra / 협업 | GitHub, Notion, Discord | — |
 
-| 분류 | 후보 |
-|------|------|
-| Language | Python 3.11+ |
-| 수집/전처리 | requests / BeautifulSoup / Playwright |
-| RAG | LangChain 또는 LlamaIndex, OpenAI/HuggingFace 임베딩 |
-| Vector DB | Chroma / FAISS / Milvus |
-| Backend | FastAPI |
-| 관리자 UI | Streamlit 또는 React |
-| Infra / 협업 | GitHub, Notion, Discord |
-
-## 📂 프로젝트 구조 (안)
+## 📂 프로젝트 구조
 
 ```text
 4MATION/
-├── pipeline/       # 실전 1: 수집·전처리·적재
-├── chatbot/        # 실전 2: RAG 챗봇 (검색 + 생성)
-├── admin/          # 종합: 관리자 대시보드
-├── eval/           # 평가 테스트셋·성능 리포트
+├── crawler/        # 실전 1: 데이터 파이프라인 (수집→파싱→청킹→인덱스→평가)
+│   ├── README.md   #   실행 순서·산출물 안내
+│   ├── DECISIONS.md · HOLES.md   # 판단 로그 · 이슈/팀 이관
+│   └── data/       #   chunks.jsonl · testset.jsonl · eval_report.md (커밋분)
 ├── docs/           # 기획·회의록·발표자료
-└── .github/        # 이슈·PR 템플릿
+├── 산출물_D1.md     # D1 산출물 총람
+└── CONTRIBUTING.md # 협업 규칙
+
+(예정) chatbot/ — 실전 2 RAG 챗봇 · admin/ — 종합 관리자 대시보드
 ```
 
 ## 🚀 실행 방법
 
-> 스택 확정 후 업데이트
+실전 1 데이터 파이프라인 (상세: [`crawler/README.md`](./crawler/README.md)):
 
 ```bash
 git clone https://github.com/likelion-4MATION/4MATION.git
-cd 4MATION
+cd 4MATION/crawler
+pip install -r requirements.txt
+python pipeline.py --rebuild   # 수집→파싱→청킹→임베딩→인덱스 원커맨드
+python eval.py                 # 검색 평가 리포트
 ```
 
 ## 🤝 협업 규칙
