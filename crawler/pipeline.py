@@ -18,8 +18,10 @@ import json
 import pathlib
 import shutil
 from collections import Counter
+from datetime import datetime, timezone
 
 import chunk as chunk_mod
+import config
 import crawler
 import parser as parser_mod
 import rag
@@ -35,6 +37,7 @@ def recollect(row: dict, store: rag.Store, out_root: pathlib.Path,
     meta_p = out_root / "data/meta" / f"{doc_id}.json"
 
     # ── fetch ────────────────────────────────────────────────
+    fetch_res = {"url": url, "doc_id": doc_id}   # 라이브 시 fetch 상세로 대체(report용)
     if use_cache:
         if not raw_p.exists():
             store.remove(doc_id)
@@ -45,14 +48,15 @@ def recollect(row: dict, store: rag.Store, out_root: pathlib.Path,
         res = crawler.fetch_one(row, out_root)
         if res["status"] != "ok":
             store.remove(doc_id)   # robots_blocked/error → 인덱스에서 제외
-            return {"doc_id": doc_id, "status": res["status"]}
+            return res
+        fetch_res = res
         html = raw_p.read_text(encoding="utf-8", errors="replace")
         meta = json.loads(meta_p.read_text(encoding="utf-8"))
 
     # ── content_hash 스킵 판정 (D0 재현성 지표와 동일: 가시 텍스트) ──
     content_hash = hashlib.sha256(crawler.visible_text(html).encode()).hexdigest()
     if not store.needs_update(doc_id, content_hash):
-        return {"doc_id": doc_id, "status": "skipped"}
+        return {**fetch_res, "status": "skipped"}
 
     # ── parse → chunk → upsert ───────────────────────────────
     parsed = parser_mod.parse_one(doc_id, html, meta)
@@ -62,7 +66,7 @@ def recollect(row: dict, store: rag.Store, out_root: pathlib.Path,
         json.dumps(parsed, ensure_ascii=False, indent=2), encoding="utf-8")
     chunks = chunk_mod.make_chunks(parsed)
     store.upsert(doc_id, chunks, content_hash)
-    return {"doc_id": doc_id, "status": "upserted", "n_chunks": len(chunks)}
+    return {**fetch_res, "status": "upserted", "n_chunks": len(chunks)}
 
 
 def main() -> None:
@@ -99,6 +103,32 @@ def main() -> None:
 
     print(f"\n=== 요약 === {dict(counts)}")
     print(f"저장 청크: {len(store.chunks)} · {built} → {store.dir}/")
+
+    # 라이브 실행이면 crawl_report.json 갱신 — run_crawl.py와 동일 스키마.
+    # skipped/upserted는 fetch 관점에선 ok (recollect가 전 URL을 실제 재수집하므로).
+    if not args.use_cache:
+        as_fetch = {"skipped": "ok", "upserted": "ok"}
+        rep = []
+        for r in results:
+            rr = {k: v for k, v in r.items() if k != "n_chunks"}
+            rr["status"] = as_fetch.get(r["status"], r["status"])
+            rep.append(rr)
+        fetch_counts = Counter(r["status"] for r in rep)
+        report = {
+            "run_at": datetime.now(timezone.utc).isoformat(),
+            "manifest": args.manifest,
+            "total": len(rep),
+            "counts": dict(fetch_counts),
+            "robots_blocked": [r["url"] for r in rep if r["status"] == "robots_blocked"],
+            "error_pages": [r["url"] for r in rep if r["status"] == "error_page"],
+            "failures": [r for r in rep if r["status"] != "ok"],
+            "results": rep,
+        }
+        report_path = out_root / config.REPORT_PATH
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2),
+                               encoding="utf-8")
+        print(f"crawl_report 갱신 → {report_path}")
 
 
 if __name__ == "__main__":

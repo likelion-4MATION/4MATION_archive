@@ -24,6 +24,9 @@ import requests
 from bs4 import BeautifulSoup
 
 import config
+# 브레드크럼은 파서의 D1 정제판(.location 직계 li 첫 링크만)을 단일 소스로 사용 (H8).
+# D0 best-effort판(GNB 드롭다운 ~20개 과다 추출)은 07-13 제거.
+from parser import extract_breadcrumb
 
 # ── 내부 상태 ────────────────────────────────────────────────
 _sessions: dict[str, requests.Session] = {}
@@ -125,25 +128,6 @@ def looks_like_waiting_room(text: str) -> bool:
 # ── 메타 추출 ────────────────────────────────────────────────
 def extract_title(soup: BeautifulSoup) -> str:
     return soup.title.get_text(strip=True) if soup.title else ""
-
-
-def extract_breadcrumb(soup: BeautifulSoup) -> list[str]:
-    """KDIC 계열 브레드크럼 best-effort 추출 (location/breadcrumb 계열 셀렉터)."""
-    for sel in ("[class*=location]", "[id*=location]",
-                "[class*=breadcrumb]", "ol.breadcrumb", "nav[aria-label*=현재]"):
-        node = soup.select_one(sel)
-        if node:
-            parts = [t.get_text(strip=True) for t in node.find_all(["a", "li", "span", "strong"])]
-            parts = [p for p in parts if p and len(p) < 40]
-            # 중복 제거(순서 유지)
-            seen, out = set(), []
-            for p in parts:
-                if p not in seen:
-                    seen.add(p)
-                    out.append(p)
-            if out:
-                return out
-    return []
 
 
 def doc_id_from_url(url: str) -> str:
