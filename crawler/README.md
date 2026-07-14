@@ -16,7 +16,7 @@ pip install -r requirements.txt
 python tests/test_guards.py
 
 # 1) 라이브 재수집 → 파싱 → 청킹 → 임베딩 → 인덱스 (원커맨드)
-#    37건 · 요청당 1.5s+지터 폴라이트 · 최초 실행 시 임베딩 모델 ~440MB 다운로드 ≈ 3~5분
+#    38건 · 요청당 1.5s+지터 폴라이트 · 최초 실행 시 임베딩 모델 ~440MB 다운로드 ≈ 3~5분
 python pipeline.py --rebuild
 
 # 2) 검색 평가 (hit@1 / hit@3 / MRR, dense vs hybrid) → data/eval_report.md
@@ -51,19 +51,16 @@ grep -c "5천만" data/raw/kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn.htm
 python pipeline.py        # 매니페스트 전 URL recollect — content_hash 불변이면 스킵
 ```
 
-`recollect(url) = fetch(polite) → parse → chunk → upsert(by doc_id)`. robots 차단·오류 문서는 인덱스에서 제외된다. 03 결정문서 §4의 원자 함수 프로토타입.
+`recollect(url) = fetch(polite) → parse → chunk → upsert(by doc_id)`. robots 차단·오류 문서는 인덱스에서 제외된다. 라이브 실행은 `data/crawl_report.json`도 갱신한다(07-13). 03 결정문서 §4의 원자 함수 프로토타입.
 
 ## 매니페스트
 
-`crawl_manifest.csv`(필수 37건) **확정본이 커밋돼 있다** — 평시 재생성 불필요.
+`crawl_manifest.csv`(**38건 = 필수 37 + 분석포함 1**) **확정본이 커밋돼 있다** — 평시 재생성 불필요. 분석필요 xlsx는 07-13 복원본 병합 완료(H2 해소 — 부채증명원 1건 편입, 판정 분포는 DECISIONS 07-13).
 
 ```bash
-# 재생성 (원천 CSV 단독 — 현행 확정 방식)
-python build_manifest.py kdic_필수페이지_URL매핑.csv -o crawl_manifest.csv
-
-# 분석필요 xlsx 재확보 시에만 (H2 — 현재 파일 부재, 아래를 그대로 실행하면 FileNotFoundError)
+# 재생성 (멱등 — 07-13 확정 방식: 필수 CSV + 분석필요 xlsx 병합)
 python build_manifest.py kdic_필수페이지_URL매핑.csv 분석필요태깅_포함여부분석.xlsx -o crawl_manifest.csv
-python pipeline.py        # 신규 편입분만 증분 수집·적재
+python pipeline.py        # 신규 편입분만 증분 수집·적재 (기존 건은 content_hash 스킵)
 ```
 
 ## D0 재현성 검증 (선택 — 통과 이력 있음)
@@ -83,11 +80,11 @@ python verify_rerun.py run1 run2
 
 | 구분 | 파일 | 비고 |
 |---|---|---|
-| 레포 포함 | `crawl_manifest.csv` · `kdic_필수페이지_URL매핑.csv` | 필수 37건 |
-| 레포 포함 | `data/chunks.jsonl` | 134청크 × 11필드 — 검색 대상 핵심 |
-| 레포 포함 | `data/testset.jsonl` · `data/eval_report.md` | 평가셋 52건 · 지표 리포트 |
-| 레포 포함 | `data/crawl_report.json` | 상태별 카운트 · robots 차단 목록(32 ok / 5 blocked) |
-| 레포 포함 | `link_registry.json` | 소관 밖 라우팅 6건 (URL 공란 2 — H7, 불법행위신고는 D2 충전) |
+| 레포 포함 | `crawl_manifest.csv` · `kdic_필수페이지_URL매핑.csv` · `분석필요태깅_포함여부분석.xlsx` | 38건 = 필수 37 + 분석포함 1 (xlsx는 판정 원천) |
+| 레포 포함 | `data/chunks.jsonl` | 136청크 × 11필드 — 검색 대상 핵심 |
+| 레포 포함 | `data/testset.jsonl` · `data/eval_report.md` | 평가셋 52건 · 지표 리포트(D1 델타 병기) |
+| 레포 포함 | `data/crawl_report.json` | 상태별 카운트 · robots 차단 목록(33 ok / 5 blocked, 38건) |
+| 레포 포함 | `link_registry.json` | 소관 밖 라우팅 6건 — **전건 url 충전 완료(H7 해소, 07-13)** |
 | 레포 제외 | `data/raw/*.html` · `data/meta/*.json` | .gitignore(`data/raw/`) — 클론 후 라이브 재수집으로 확보 |
 | 레포 제외 | `data/parsed/*.json` · `data/index/*` | 재생성 가능 산출물 |
 
