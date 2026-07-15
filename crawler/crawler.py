@@ -156,6 +156,47 @@ def doc_id_from_url(url: str) -> str:
     return f"kdic-{site}-{slug}"
 
 
+# ── FAQ 게시판 페이지네이션 ──────────────────────────────────
+def _collect_faq_pages(session: requests.Session, url: str,
+                       soup: BeautifulSoup) -> str | None:
+    """FAQ 게시판이 여러 페이지면 2페이지부터 POST로 받아 문답(dl)을 병합.
+
+    KDIC FAQ는 .paging의 chgPagingNo(n)가 srchForm을 POST(curPage=n[0-based],
+    pageSize=10)로 제출해 페이지를 바꾼다(JS). 크롤러는 GET으로 1페이지만 받으므로
+    나머지 페이지의 .accoWrap 문답을 직접 POST해 1페이지 soup에 append.
+    반환: 병합된 전체 HTML(문자열) | 단일 페이지면 None.
+    """
+    paging = soup.select_one("div.paging")
+    if paging is None:
+        return None
+    args = [int(m) for m in re.findall(r"chgPagingNo\((\d+)\)", str(paging))]
+    max_cur = max(args) if args else 0
+    if max_cur < 1:                       # 단일 페이지
+        return None
+    target = soup.select_one("div.accoWrap")
+    if target is None:                    # 문답 컨테이너 없으면 병합 불가
+        return None
+    added = 0
+    for cur in range(1, max_cur + 1):     # curPage 1..max = 2..마지막 페이지
+        _polite_wait()
+        try:
+            r = session.post(url, data={"curPage": str(cur), "pageSize": "10"},
+                             timeout=config.TIMEOUT_SEC)
+            r.encoding = r.apparent_encoding or "utf-8"
+            acc = BeautifulSoup(r.text, "lxml").select_one("div.accoWrap")
+            if acc is None:
+                continue
+            for dl in acc.find_all("dl"):
+                target.append(dl)
+                added += 1
+        except requests.RequestException as e:
+            print(f"[paging] {url} curPage={cur} 실패: {e}")
+    if added:
+        print(f"[paging] {url} · 추가 {max_cur}p 병합 · 문답 +{added}")
+        return str(soup)
+    return None
+
+
 # ── 수집 본체 ────────────────────────────────────────────────
 def fetch_one(row: dict, out_root: pathlib.Path) -> dict:
     """매니페스트 1행 수집. 결과 dict(status 포함) 반환.
@@ -200,6 +241,14 @@ def fetch_one(row: dict, out_root: pathlib.Path) -> dict:
             if r.status_code == 404 or looks_like_error_page(str(r.url), html, title):
                 result.update(status="error_page", http_status=r.status_code, title=title)
                 return result  # 오수집 차단 — raw 저장 안 함
+
+            # FAQ 게시판 다중 페이지 병합 (단일 페이지면 그대로)
+            merged = _collect_faq_pages(s, url, soup)
+            if merged:
+                html = merged
+                raw = html.encode(r.encoding or "utf-8")
+                soup = BeautifulSoup(html, "lxml")
+                text = visible_text(html)
 
             # 저장
             raw_dir = out_root / config.RAW_DIR
