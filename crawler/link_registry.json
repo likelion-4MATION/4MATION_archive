@@ -1,64 +1,183 @@
 {
   "_meta": {
     "purpose": "소관 밖/동적조회 질문을 RAG 답변 대신 링크로 안내하기 위한 라우팅 레지스트리 (D2 가드에서 사용).",
-    "source": "URL·판정은 02_검색범위정의서_초안.md에서 추출. 외부 담당기관 URL은 원래 분석필요태깅_포함여부분석.xlsx의 '링크만' 판정에서 왔으나 xlsx 부재 → 미확보분은 url 공란 + HOLES.md 기록. 문서에 없는 URL은 창작하지 않음.",
-    "generated_for": "ASSIGNMENT_D0 · T3",
-    "url_field_convention": "url = 사용자에게 제시할 링크. 02 정의서에서 확인되는 KDIC 안내/조회 페이지만 채웠고, 외부 담당기관(법원·신용회복위원회 등) 실제 URL은 kdic_reference_url이 아닌 별도 확인 필요 → note 참조."
+    "source": "URL·판정은 02_검색범위정의서_초안.md + 분석필요태깅_포함여부분석.xlsx(07-13 복원본, Sheet1 예비판정/최종판단)에서 추출. 외부 담당기관(법원·신용회복위원회·해외 예금보험기구·금융감독원)의 직링크는 두 문서 모두에 없음 → 창작 금지 원칙에 따라 문서 확인분(KDIC 안내/조회 페이지)만 채움.",
+    "generated_for": "ASSIGNMENT_D0 · T3 (07-13 HOLES 해소 세션에서 H7 완결)",
+    "url_field_convention": "url = 사용자에게 제시할 링크. 6건 전부 충전 완료 — illegal_act_report·overseas_deposit_protection·payout_target_search는 07-13 라이브 검증(HTTP 200·오류페이지 아님·robots allowed), 나머지 3건은 매니페스트 수집 문서(D0 32건 ok)와 동일 URL."
   },
   "entries": [
     {
       "intent_id": "overseas_deposit_protection",
-      "keywords": ["해외 예금자보호한도", "외국 예금보험", "해외 예금보호제도", "미국 FDIC 한도", "일본 예금보험", "해외 은행 예금보호"],
-      "message": "다른 나라의 예금자보호한도·제도는 예금보험공사 소관이 아닙니다. 해당 국가의 예금보험기구(예: 미국 FDIC, 일본 예금보험기구) 또는 국제예금보험협회(IADI)에서 안내받으실 수 있습니다. 국내 예금자보호한도(2025-09-01부터 1억 원)는 예금보험공사 보호한도 안내를 참고하세요.",
+      "keywords": [
+        "해외 예금자보호한도",
+        "외국 예금보험",
+        "해외 예금보호제도",
+        "미국 FDIC 한도",
+        "일본 예금보험",
+        "해외 은행 예금보호"
+      ],
+      "message": "다른 나라의 예금자보호한도·제도는 예금보험공사 소관이 아닙니다. 주요국 보호한도 비교는 예금보험공사 '예금자보호한도(해외)' 페이지에서, 세부 내용은 해당 국가의 예금보험기구(예: 미국 FDIC, 일본 예금보험기구) 또는 국제예금보험협회(IADI)에서 확인하실 수 있습니다. 국내 예금자보호한도(2025-09-01부터 1억 원)는 예금보험공사 보호한도 안내를 참고하세요.",
       "org": "해당 국가 예금보험기구 / 국제예금보험협회(IADI)",
-      "url": "",
-      "source_judgment": "링크만",
-      "note": "외부기관 URL이 02 정의서·참고문서에 없음 → 창작 금지, 공란 유지. HOLES 기록. 국내 한도 안내는 https://www.kdic.or.kr/sp/dpstrprot/ProtSystProtLmts/selectScrn.do (매니페스트 수집분)."
+      "url": "https://www.kdic.or.kr/di/bzpblnt/selectPbcrPblntProtLmtsOvrs.do",
+      "source_judgment": "링크만 (xlsx no.2)",
+      "note": "url은 xlsx no.2 '링크만' 판정 페이지(다음액션: '답변에서 URL만 제시, 청킹 제외') — KDIC 자체 해외 한도 비교표. 07-13 라이브 검증 200(한국 1억원·미국 USD 25만·일본 JPY 1,000만 등, '25.12월 기준). 타국 수치 오염 방지 위해 수집·청킹 제외 유지(매니페스트 미포함). 외부기구(FDIC/IADI) 직링크는 02 정의서·xlsx 모두 없음 → 창작 금지, org 참고용으로만 유지. 국내 한도 안내는 https://www.kdic.or.kr/sp/dpstrprot/ProtSystProtLmts/selectScrn.do (매니페스트 수집분)."
     },
     {
       "intent_id": "payout_target_search",
-      "keywords": ["지급대상 검색", "지급대행점 조회", "보험금 지급 지점", "지급대상 금융회사 조회", "지급기관 찾기"],
+      "keywords": [
+        "지급대상 검색",
+        "지급대행점 조회",
+        "보험금 지급 지점",
+        "지급대상 금융회사 조회",
+        "지급기관 찾기"
+      ],
       "message": "지급대상 금융회사·지급대행점은 실시간 조회가 필요한 항목이라 챗봇이 직접 답하지 않습니다. 아래 예금보험공사 조회 페이지에서 확인하세요.",
       "org": "예금보험공사 (지급대행점 실시간 조회)",
       "url": "https://www.kdic.or.kr/sp/dpstrprot/selectProtSystBamtGiveInq.do",
-      "source_judgment": "링크만",
-      "note": "02 정의서 업무2 '지급대행점 조회(동적)'. 동적 검색이라 크롤 제외 → 라이브 링크로 안내. 지급대상 금융회사 개요는 https://www.kdic.or.kr/sp/dpstrprot/selectProtSystBamtGiveTrgtFnst.do."
+      "source_judgment": "링크만 (02 정의서 · xlsx no.3)",
+      "note": "02 정의서 업무2 '지급대행점 조회(동적)'. 07-13 라이브 검증 200 — 지급구분/은행명/지역 검색 폼(동적) 확인, 라이브 링크 안내 목적에 부합. xlsx no.3 '링크만' 판정(보험금 지급대상 금융회사 검색 — 파산건별 가변 + 데이터 낡음(마지막 2014)으로 RAG 부적합) 교차 확인. 지급대상 금융회사 검색은 https://www.kdic.or.kr/sp/dpstrprot/selectProtSystBamtGiveTrgtFnst.do."
     },
     {
       "intent_id": "credit_recovery",
-      "keywords": ["신용회복", "신용회복위원회", "개인워크아웃", "프리워크아웃", "채무조정 신용회복"],
+      "keywords": [
+        "신용회복",
+        "신용회복위원회",
+        "개인워크아웃",
+        "프리워크아웃",
+        "채무조정 신용회복"
+      ],
       "message": "신용회복(개인워크아웃) 신청·심사는 신용회복위원회 소관으로 예금보험공사가 직접 진행하지 않습니다. 예금보험공사 신용회복 지원 안내에서 관련 정보를 확인하고 담당 기관으로 안내받으실 수 있습니다.",
       "org": "신용회복위원회",
       "url": "https://www.kdic.or.kr/rb/lbltajmt/LbltAjmtSprtCredRcvrySprt/selectScrn.do",
-      "source_judgment": "링크만",
-      "note": "url은 02 정의서 업무5의 KDIC 신용회복 지원 안내 페이지(문서 확인분). 신용회복위원회 외부 실제 URL은 xlsx 링크만 판정 부재로 미확보 → HOLES."
+      "source_judgment": "링크만 (xlsx no.6)",
+      "note": "url은 KDIC 신용회복 지원 안내 페이지(매니페스트 수집분과 동일 URL — 02 정의서 확인분). xlsx no.6 '링크만' 판정·소관(타 기관: 신용회복위원회) 교차 확인(07-13) — org 일치. 외부 직링크는 xlsx에도 없음(다음액션에 'KR&C/신복위 링크' 문구만, URL 미기재) → 창작 금지, KDIC 안내 페이지 유지."
     },
     {
       "intent_id": "bankruptcy_discharge",
-      "keywords": ["파산면책", "개인파산", "면책신청", "파산선고", "법원 파산"],
+      "keywords": [
+        "파산면책",
+        "개인파산",
+        "면책신청",
+        "파산선고",
+        "법원 파산"
+      ],
       "message": "개인파산·면책 신청은 관할 법원 소관으로 예금보험공사가 직접 진행하지 않습니다. 예금보험공사 파산면책 안내에서 관련 정보를 확인하고 관할 법원으로 안내받으실 수 있습니다.",
       "org": "관할 법원 (개인파산·면책)",
       "url": "https://www.kdic.or.kr/rb/lbltajmt/LbltAjmtSprtPsnBr/selectScrn.do",
-      "source_judgment": "링크만",
-      "note": "url은 02 정의서 업무5의 KDIC 파산면책 안내 페이지(문서 확인분). 법원 외부 실제 URL은 xlsx 링크만 판정 부재로 미확보 → HOLES."
+      "source_judgment": "링크만 (xlsx no.7)",
+      "note": "url은 KDIC 파산면책 안내 페이지(매니페스트 수집분과 동일 URL — 02 정의서 확인분). xlsx no.7 '링크만' 판정·소관(타 기관: 법원) 교차 확인(07-13) — org 일치. 법원 직링크는 xlsx에도 없음 → 창작 금지, KDIC 안내 페이지 유지."
     },
     {
       "intent_id": "personal_rehabilitation",
-      "keywords": ["개인회생", "회생절차", "법원회생", "개인회생신청", "회생법원"],
+      "keywords": [
+        "개인회생",
+        "회생절차",
+        "법원회생",
+        "개인회생신청",
+        "회생법원"
+      ],
       "message": "개인회생 절차는 관할 법원(회생법원) 소관으로 예금보험공사가 직접 진행하지 않습니다. 예금보험공사 개인회생 안내에서 관련 정보를 확인하고 관할 법원으로 안내받으실 수 있습니다.",
       "org": "관할 법원 (개인회생·회생법원)",
       "url": "https://www.kdic.or.kr/rb/lbltajmt/LbltAjmtSprtPsnRg/selectScrn.do",
-      "source_judgment": "링크만",
-      "note": "url은 02 정의서 업무5의 KDIC 개인회생 안내 페이지(문서 확인분). 법원 외부 실제 URL은 xlsx 링크만 판정 부재로 미확보 → HOLES."
+      "source_judgment": "링크만 (xlsx no.8)",
+      "note": "url은 KDIC 개인회생 안내 페이지(매니페스트 수집분과 동일 URL — 02 정의서 확인분). xlsx no.8 '링크만' 판정·소관(타 기관: 법원) 교차 확인(07-13) — org 일치. 법원 직링크는 xlsx에도 없음 → 창작 금지, KDIC 안내 페이지 유지."
     },
     {
       "intent_id": "illegal_act_report",
-      "keywords": ["불법행위신고", "불법사금융 신고", "불법금융 신고", "금융범죄 신고", "불법채권추심 신고"],
-      "message": "불법사금융·불법채권추심 등 불법행위 신고는 금융감독원 불법사금융 신고센터 등 담당 기관에서 접수합니다. 예금보험공사 소관 신고(은닉재산 신고)와는 별개입니다.",
-      "org": "금융감독원 불법사금융 신고센터 (담당기관 확인 필요)",
-      "url": "",
-      "source_judgment": "측정후결정(A/B) — 보류",
-      "note": "ASSIGNMENT_D0 범위 밖(불법행위신고 A/B 측정후결정). 외부기관 URL 문서 없음 → 창작 금지, 공란. 은닉재산 신고(예보 소관)와 혼동 주의. HOLES 기록."
+      "keywords": [
+        "불법행위신고",
+        "불법사금융 신고",
+        "불법금융 신고",
+        "금융범죄 신고",
+        "불법채권추심 신고"
+      ],
+      "message": "금융회사 부실관련자의 횡령·배임 등 불법행위 신고는 예금보험공사 불법행위 신고센터에서 접수합니다 — 예금보험공사 소관의 은닉재산 신고와는 별개 제도이니 신고 대상을 먼저 확인하세요. 아래 신고센터 소개 페이지에서 상담전화·우편·팩스·이메일 접수 방법을 확인할 수 있습니다. 불법사금융·불법채권추심 등의 신고는 예금보험공사 소관이 아니므로 금융감독원 불법사금융 신고센터 등 담당 기관에 문의하세요.",
+      "org": "예금보험공사 불법행위 신고센터 (금융부실관련자) / 불법사금융·채권추심은 금융감독원",
+      "url": "https://www.kdic.or.kr/sp/sprtfund/SprtFndIvsfalUnrlIlglDclrGudn/selectScrn.do",
+      "source_judgment": "측정후결정 → 링크만 확정 (xlsx no.11 최종판단: 재확인 후 링크 전달)",
+      "note": "07-13 라이브 검증 200 — 브레드크럼 '지원자금관리 > 부실책임조사 > 금융부실관련자 불법행위신고 > 신고센터 소개', 예보 자체 신고센터(상담전화 02-758-0797 · invest@kdic.or.kr) 확인 → 기존 message의 '금감원 접수' 단정을 실체에 맞게 보정(부실관련자 불법행위=예보 / 불법사금융=금감원 병기). 본문 수집·청킹은 안 함 — xlsx no.11 오염리스크(은닉재산신고와 유사문구 혼입) 대응, '챗봇 재차 확인 후 링크 전달' UX. 금감원 직링크는 문서 미확보 → 창작 금지. D2 함정 ③ 시연용."
     }
-  ]
+  ],
+  "faq_pages": {
+    "_note": "07-15 FAQ 페이지 URL 인벤토리 (www 2 + fins 5). 소관 밖 라우팅용 entries와 별개 — RAG 코퍼스 편입 현황 추적. fins 5건은 HOLES H18에서 robots 허용 확보 후 실제 수집·인덱싱 완료(pipeline.py 07-15 실행, 5건 upserted). entries는 07-13 H7 완결 병합본(link_registry_merged.json) 반영.",
+    "pages": [
+      {
+        "url": "https://www.kdic.or.kr/sp/dpstrprot/ProtSystFaq/selectScrn.do",
+        "doc_id": "kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn",
+        "site": "www",
+        "business_function": "예금자보호제도",
+        "sub_category": "예금자보호제도 FAQ",
+        "robots_prev": "allowed",
+        "robots_now": "allowed",
+        "in_corpus": true,
+        "collect_action": "이미 수집됨"
+      },
+      {
+        "url": "https://www.kdic.or.kr/sp/sprtfund/SprtFndCncmDclrFaq/selectScrn.do",
+        "doc_id": "kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn",
+        "site": "www",
+        "business_function": "은닉재산 신고",
+        "sub_category": "은닉재산신고 FAQ",
+        "robots_prev": "allowed",
+        "robots_now": "allowed",
+        "in_corpus": true,
+        "collect_action": "이미 수집됨"
+      },
+      {
+        "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqNramtAply.do",
+        "doc_id": "kdic-fins-cm-bbs-selectFaqNramtAply",
+        "site": "fins",
+        "business_function": "고객 미수령금 신청",
+        "sub_category": "FAQ — 미수령금통합신청",
+        "robots_prev": "disallowed",
+        "robots_now": "allowed",
+        "in_corpus": true,
+        "collect_action": "07-15 pipeline.py 실행으로 수집 완료(10청크)"
+      },
+      {
+        "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqMsdrGvbkAply.do",
+        "doc_id": "kdic-fins-cm-bbs-selectFaqMsdrGvbkAply",
+        "site": "fins",
+        "business_function": "착오송금 반환 신청",
+        "sub_category": "FAQ — 착오송금 (2페이지, ~15건)",
+        "robots_prev": "disallowed",
+        "robots_now": "allowed",
+        "in_corpus": true,
+        "collect_action": "07-15 pipeline.py 실행으로 수집 완료(10청크)"
+      },
+      {
+        "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqLbltInfoInq.do",
+        "doc_id": "kdic-fins-cm-bbs-selectFaqLbltInfoInq",
+        "site": "fins",
+        "business_function": "채무조정 안내",
+        "sub_category": "FAQ — 채무정보조회",
+        "robots_prev": "disallowed",
+        "robots_now": "allowed",
+        "in_corpus": true,
+        "collect_action": "07-15 pipeline.py 실행으로 수집 완료(7청크)"
+      },
+      {
+        "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqCncmPrptDclr.do",
+        "doc_id": "kdic-fins-cm-bbs-selectFaqCncmPrptDclr",
+        "site": "fins",
+        "business_function": "은닉재산 신고",
+        "sub_category": "FAQ — 은닉재산신고",
+        "robots_prev": "disallowed",
+        "robots_now": "allowed",
+        "in_corpus": true,
+        "collect_action": "07-15 pipeline.py 실행으로 수집 완료(10청크)"
+      },
+      {
+        "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqTop10.do",
+        "doc_id": "kdic-fins-cm-bbs-selectFaqTop10",
+        "site": "fins",
+        "business_function": "공통",
+        "sub_category": "FAQ TOP10 — 테스트셋 v0 시드",
+        "robots_prev": "disallowed",
+        "robots_now": "allowed",
+        "in_corpus": true,
+        "collect_action": "07-15 pipeline.py 실행으로 수집 완료(10청크)"
+      }
+    ]
+  }
 }

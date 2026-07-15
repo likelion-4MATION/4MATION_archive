@@ -35,8 +35,10 @@ ALLOWED_HOST_SUFFIX = ".kdic.or.kr"
 # 두 robots 그룹 모두 'User-agent: Googlebot' 전용이라 우리 UA엔 자동 미적용이고,
 # urllib.robotparser는 KDIC robots.txt 읽기에 실패(기본 UA 차단)한다. 그래서
 # 절대규칙 1 준수를 위해 경로 패턴으로 명시 차단한다 — 수집 안 하고 report에 기록만.
+#
+# 07-15 재해석: fins /cm/bbs/ FAQ 5건 고객사 허용 확보 → 차단 해제(HOLES H18).
 POLICY_DISALLOW = {
-    "fins.kdic.or.kr": [r"^/cm/bbs/"],
+    "fins.kdic.or.kr": [],
     "www.kdic.or.kr": [r"List\.do$", r"Dtl\.do$", r"/srch/"],
 }
 

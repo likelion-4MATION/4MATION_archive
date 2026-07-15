@@ -13,7 +13,7 @@ import json
 
 import rag
 
-TESTSET = "data/testset.jsonl"
+TESTSET = "data/testset_merged.jsonl"
 REPORT = "data/eval_report.md"
 MODES = ["dense", "hybrid"]
 KMAX = 10
