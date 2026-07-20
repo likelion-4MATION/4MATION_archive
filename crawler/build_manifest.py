@@ -28,7 +28,7 @@ COL_HINTS = {
     "url": ("url", "주소", "링크"),
     "business_function": ("business", "업무", "기능"),
     "sub_category": ("sub", "세부", "카테고리", "분류"),
-    "page_type": ("page_type", "유형", "타입"),
+    "page_type": ("page_type", "유형", "타입", "page_name"),
     "coverage": ("coverage", "수집범위", "범위", "안내부"),
     "variant": ("variant", "분기", "판"),
 }
@@ -76,6 +76,8 @@ def read_xlsx(path: str) -> list[dict]:
         mapping = detect(headers)
         inc_col = next((h for h in headers
                         if any(k in h for k in INCLUDE_HINTS)), None)
+        # 판정컬럼('예비판정' 등)이 '판' 힌트로 variant에 오매핑되는 것 방지
+        mapping = {k: v for k, v in mapping.items() if v != inc_col}
         print(f"[xlsx:{ws.title}] 컬럼 매핑: {mapping} · 판정컬럼: {inc_col}")
         for values in data[1:]:
             raw = dict(zip(headers, values))
@@ -86,6 +88,11 @@ def read_xlsx(path: str) -> list[dict]:
             if inc_col and re.search(r"제외|보류|대기|미포함", verdict):
                 continue
             if r := norm_row(raw, mapping, "분석포함"):
+                # xlsx 표기 정규화 — 업무명 번호 프리픽스 제거('5. 채무조정 안내'),
+                # '포함(안내부)' 판정은 coverage로 전파 (내용 창작 아님, 판정 텍스트 유래)
+                r["business_function"] = re.sub(r"^\s*\d+\.\s*", "", r["business_function"])
+                if "안내부" in verdict and not r["coverage"]:
+                    r["coverage"] = "안내부"
                 rows.append(r)
     return rows
 

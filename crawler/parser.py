@@ -38,10 +38,11 @@ NOISE_SELECTORS = [
     "form", "input", "button",
 ]
 
-# 안내부 페이지 (ASSIGNMENT_D1 T1 지정) — 조회/신청 기능부 제거, coverage=안내부.
-# 부채증명원(fins /pr/debtprof)은 분석필요라 필수 매니페스트에 없음 → 여기선 상속인 조회만.
+# 안내부 페이지 — 조회/신청 기능부 제거, coverage=안내부.
+# 상속인 조회는 ASSIGNMENT_D1 T1 지정, 부채증명원은 07-13 xlsx '포함(안내부)' 판정 편입분.
 COVERAGE_ANNAE = {
-    "kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn",  # 상속인 금융거래조회
+    "kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn",      # 상속인 금융거래조회
+    "kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn",   # 부채증명원/금융거래정보신청
 }
 
 ATTACH_RE = re.compile(r"\.(hwp|hwpx|pdf|xlsx?|docx?|pptx?|zip|txt|csv)(\?|$)", re.I)
