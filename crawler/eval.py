@@ -4,16 +4,23 @@
 D1 통과 판정은 대표 6문항 top-3 적중 5+ (representative=True).
 오염체크: 국내 보호한도 질문 top-3에 해외 한도 수치 혼입 0건.
 
+지표 집계 방식:
+- micro: 문항 단순 평균(기존). 문항 수가 많은 업무·문서에 지표가 쏠린다.
+- macro: 그룹(업무/출처)별 평균을 다시 평균. 특정 그룹의 문항 쏠림 영향을 제거한다.
+  정답 쏠림(문서 1개가 정답의 25%)·업무 편차(착오송금 44 vs 채무조정 10) 때문에
+  micro만 보면 소수 그룹 성능이 종합 지표를 왜곡한다 → macro 병기로 편향 진단.
+
 사용: python eval.py   → 콘솔 요약 + data/eval_report.md
 """
 
 from __future__ import annotations
 
+import collections
 import json
 
 import rag
 
-TESTSET = "data/testset.jsonl"
+TESTSET = "data/testset_merged.jsonl"
 REPORT = "data/eval_report.md"
 MODES = ["dense", "hybrid"]
 KMAX = 10
@@ -48,10 +55,36 @@ def eval_mode(searcher: rag.Searcher, testset: list[dict], mode: str) -> dict:
         mrr += (1.0 / rank) if rank else 0.0
         per_q.append({"q": it["question"], "rank": rank, "hit3": hit3,
                       "representative": it["representative"],
-                      "bf": it["business_function"], "top": hits[:3]})
+                      "bf": it["business_function"],
+                      "source": it.get("source", "?"),
+                      "gt0": it["gt_docs"][0] if it["gt_docs"] else "",
+                      "top": hits[:3]})
     n = len(testset)
     return {"mode": mode, "n": n, "hit@1": h1 / n, "hit@3": h3 / n,
             "mrr": mrr / n, "per_q": per_q}
+
+
+def _row(items: list[dict]) -> dict:
+    """문항 리스트 → hit@1·hit@3·MRR (해당 그룹의 micro 지표)."""
+    n = len(items)
+    return {
+        "n": n,
+        "hit@1": sum(p["rank"] == 1 for p in items) / n,
+        "hit@3": sum(1 <= p["rank"] <= 3 for p in items) / n,
+        "mrr": sum((1.0 / p["rank"] if p["rank"] else 0.0) for p in items) / n,
+    }
+
+
+def group_metrics(per_q: list[dict], key: str) -> tuple[dict, dict]:
+    """key별 지표 표 + 그룹 단순평균(macro). 반환: (그룹별 rows, macro dict)."""
+    groups: dict[str, list] = collections.defaultdict(list)
+    for p in per_q:
+        groups[p[key]].append(p)
+    rows = {g: _row(items) for g, items in groups.items()}
+    g = len(rows)
+    macro = {m: sum(r[m] for r in rows.values()) / g for m in ("hit@1", "hit@3", "mrr")}
+    macro["groups"] = g
+    return rows, macro
 
 
 def contamination_check(searcher: rag.Searcher) -> dict:
@@ -69,11 +102,39 @@ def contamination_check(searcher: rag.Searcher) -> dict:
 def write_report(results: dict[str, dict], rep6: dict, contam: dict) -> None:
     L = ["# 검색 평가 리포트 (D1)", "",
          f"- 평가셋: {results['dense']['n']}건 · 임베딩: `{rag.MODEL_NAME}` · 융합: RRF(k=60)",
-         "", "## 전체 지표 (dense vs hybrid)", "",
+         "", "## 전체 지표 (dense vs hybrid) — micro(문항 평균)", "",
          "| mode | hit@1 | hit@3 | MRR |", "|---|---|---|---|"]
     for m in MODES:
         r = results[m]
         L.append(f"| {m} | {r['hit@1']:.3f} | {r['hit@3']:.3f} | {r['mrr']:.3f} |")
+
+    # macro(업무별 평균) — 정답/업무 쏠림 보정 지표
+    L += ["", "## 종합 지표 — micro vs macro(업무별 평균)", "",
+          "> macro는 6개 업무의 지표를 각각 구해 단순평균. 문항 쏠림(착오송금 29%)을 제거한 값.",
+          "", "| mode | hit@3 micro | hit@3 macro | MRR micro | MRR macro |",
+          "|---|---|---|---|---|"]
+    macro_bf = {}
+    for m in MODES:
+        _, mac = group_metrics(results[m]["per_q"], "bf")
+        macro_bf[m] = mac
+        r = results[m]
+        L.append(f"| {m} | {r['hit@3']:.3f} | {mac['hit@3']:.3f} | "
+                 f"{r['mrr']:.3f} | {mac['mrr']:.3f} |")
+
+    # 업무별 세분 (hybrid)
+    L += ["", "## 업무별 세분 지표 (hybrid)", "",
+          "| 업무 | 문항수 | hit@1 | hit@3 | MRR |", "|---|---|---|---|---|"]
+    rows_bf, _ = group_metrics(results["hybrid"]["per_q"], "bf")
+    for bf, r in sorted(rows_bf.items(), key=lambda x: -x[1]["n"]):
+        L.append(f"| {bf} | {r['n']} | {r['hit@1']:.3f} | {r['hit@3']:.3f} | {r['mrr']:.3f} |")
+
+    # 출처별 세분 (hybrid) — 질의 유형(키워드형 vs 자연어) 성능차 진단
+    L += ["", "## 출처별 세분 지표 (hybrid)", "",
+          "| source | 문항수 | hit@1 | hit@3 | MRR |", "|---|---|---|---|---|"]
+    rows_src, macro_src = group_metrics(results["hybrid"]["per_q"], "source")
+    for s, r in sorted(rows_src.items(), key=lambda x: -x[1]["n"]):
+        L.append(f"| {s} | {r['n']} | {r['hit@1']:.3f} | {r['hit@3']:.3f} | {r['mrr']:.3f} |")
+
     L += ["", "## 대표 6문항 top-3 적중 (D1 통과 판정: 5+ / hybrid)", "",
           "| 업무 | 질문 | dense rank | hybrid rank |", "|---|---|---|---|"]
     dmap = {p["q"]: p["rank"] for p in results["dense"]["per_q"]}
@@ -106,6 +167,28 @@ def main() -> None:
     for m in MODES:
         r = results[m]
         print(f"{m:8} {r['hit@1']:>7.3f} {r['hit@3']:>7.3f} {r['mrr']:>7.3f}")
+
+    # micro vs macro (업무별 평균) — 쏠림 보정
+    print(f"\n[micro vs macro(업무별 평균)]")
+    print(f"{'mode':8} {'h3_micro':>9} {'h3_macro':>9} {'mrr_micro':>10} {'mrr_macro':>10}")
+    for m in MODES:
+        _, mac = group_metrics(results[m]["per_q"], "bf")
+        r = results[m]
+        print(f"{m:8} {r['hit@3']:>9.3f} {mac['hit@3']:>9.3f} "
+              f"{r['mrr']:>10.3f} {mac['mrr']:>10.3f}")
+
+    # 업무별 세분 (hybrid)
+    print(f"\n[업무별 hit@3 (hybrid)]")
+    rows_bf, _ = group_metrics(results["hybrid"]["per_q"], "bf")
+    for bf, r in sorted(rows_bf.items(), key=lambda x: -x[1]["n"]):
+        print(f"  {bf:16} n={r['n']:3d}  hit@3={r['hit@3']:.3f}  MRR={r['mrr']:.3f}")
+
+    # 출처별 세분 (hybrid)
+    print(f"\n[출처별 hit@3 (hybrid)]")
+    rows_src, _ = group_metrics(results["hybrid"]["per_q"], "source")
+    for s, r in sorted(rows_src.items(), key=lambda x: -x[1]["n"]):
+        print(f"  {s:14} n={r['n']:3d}  hit@3={r['hit@3']:.3f}  MRR={r['mrr']:.3f}")
+
     print(f"\n대표 6문항 top-3 적중  hybrid={rep6['hybrid']}/6  dense={rep6['dense']}/6"
           f"  → D1 판정 {'통과' if rep6['hybrid']>=5 else '미통과'}")
     print(f"오염체크(국내 보호한도 top-3 해외수치): {len(contam['flagged'])}건 "

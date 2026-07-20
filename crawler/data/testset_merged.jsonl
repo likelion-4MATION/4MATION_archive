@@ -1,0 +1,150 @@
+{"question": "예금자 보호 한도는 얼마인가요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn", "kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "representative", "representative": true}
+{"question": "예금보험금은 어떻게 신청하나요?", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn", "kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "representative", "representative": true}
+{"question": "고객 미수령금은 어떻게 조회하고 신청하나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn", "kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn"], "business_function": "고객 미수령금 신청", "source": "representative", "representative": true}
+{"question": "착오송금 반환은 어떤 경우에 신청할 수 있나요?", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyTrgt-selectScrn", "kdic-www-sp-kmrs-kmrsItrd-selectScrn", "kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn", "kdic-fins-cm-bbs-selectFaqMsdrGvbkAply"], "business_function": "착오송금 반환 신청", "source": "representative", "representative": true}
+{"question": "신용회복 지원은 어떻게 받나요?", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtCredRcvrySprt-selectScrn"], "business_function": "채무조정 안내", "source": "representative", "representative": true}
+{"question": "은닉재산 신고 포상금은 얼마인가요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "representative", "representative": true}
+{"question": "예금보호한도 1억원은 언제부터 적용되었나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "1억원을 보호 받기 위해 별도로 신청을 해야 하나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "어떤 금융회사의 예금이 보호되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn", "kdic-www-sp-dpstrprot-selectProtSystProtSumr"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "어떤 금융상품이 보호되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn", "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "어떤 금융상품이 보호되지 않나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn", "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "외화예금도 보호되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "보험계약은 어떻게 보호되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "금융회사에 어떤 일이 발생했을 때 예금보험공사가 1억원까지 보호하나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "원금뿐만 아니라 이자도 보호되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn", "kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "한 금융회사에 여러 개의 예·적금 계좌를 보유하고 있는 경우, 어떻게 보호되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "서로 다른 금융회사에 각각 예·적금 계좌를 보유하고 있는 경우, 어떻게 보호되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "퇴직연금, 연금저축, 사고보험금에 대한 별도보호한도 1억원은 어떻게 적용되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn", "kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "법인의 예금도 보호되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "예금보호한도 1억원은 세전인가요 아니면 세후인가요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "예금액 중에서 예금보호한도 1억원을 넘는 부분은 전혀 돌려 받지 못하나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn", "kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "부보금융회사가 합병되는 경우 예금보호한도는 어떻게 적용되나요?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn"], "business_function": "예금자보호제도", "source": "faq", "representative": false}
+{"question": "부실관련자란 누구를 말하나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "은닉재산이란 구체적으로 무엇을 말하나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "은닉재산 신고정보의 처리 절차는 어떻게 되나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "은닉재산은 일정금액(재산가치) 이상이 되어야 신고가 가능한가요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "이미 접수한 정보와 동일한 정보를 제3자가 신고하는 경우에 신고 정보의 처리절차는 어떻게 되나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "은닉재산 신고시 신고정보의 취득경위까지도 신고센터에 알려주어야 하나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "재외국민이나 외국인도 신고할 수 있나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "신고자의 신상정보와 신고내용은 비밀이 보장되나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "익명이나 가명으로 신고하는 것도 가능한가요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "신고대상자가 부실관련자인지 여부를 어떻게 알수있나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "은닉재산신고 포상제도는 어떻게 되나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "기타 자세한 사항을 알고싶으면 어떻게 하면 되나요?", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn", "kdic-fins-cm-bbs-selectFaqCncmPrptDclr"], "business_function": "은닉재산 신고", "source": "faq", "representative": false}
+{"question": "표시·설명·확인 제도란", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystProtGudn-selectScrn"], "business_function": "예금자보호제도", "source": "heading", "representative": false}
+{"question": "예금보험금이란?", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "heading", "representative": false}
+{"question": "가지급금이란?", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "heading", "representative": false}
+{"question": "개산지급금이란?", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "heading", "representative": false}
+{"question": "고객 미수령금이란?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn", "kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn"], "business_function": "고객 미수령금 신청", "source": "heading", "representative": false}
+{"question": "상속인 금융거래 조회서비스란?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn"], "business_function": "고객 미수령금 신청", "source": "heading", "representative": false}
+{"question": "파산배당금이란?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn", "kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn"], "business_function": "고객 미수령금 신청", "source": "heading", "representative": false}
+{"question": "개산지급금 정산금이란?", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn", "kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn"], "business_function": "고객 미수령금 신청", "source": "heading", "representative": false}
+{"question": "신청 가능한 착오송금 금액 한도가 있나요?", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyTrgt-selectScrn", "kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn", "kdic-fins-cm-bbs-selectFaqMsdrGvbkAply"], "business_function": "착오송금 반환 신청", "source": "heading", "representative": false}
+{"question": "언제까지 신청하면 되나요?", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyTrgt-selectScrn", "kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn"], "business_function": "착오송금 반환 신청", "source": "heading", "representative": false}
+{"question": "예금보험공사에 신청하기 전에 해야 할 일이 있나요?", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyTrgt-selectScrn", "kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn"], "business_function": "착오송금 반환 신청", "source": "heading", "representative": false}
+{"question": "예금보험공사에서 지원하지 않는 경우도 있나요?", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyTrgt-selectScrn", "kdic-fins-cm-bbs-selectFaqMsdrGvbkAply"], "business_function": "착오송금 반환 신청", "source": "heading", "representative": false}
+{"question": "실수로 잘못 송금한 돈 돌려받을 수 있을까?", "gt_docs": ["kdic-fins-ir-aplygudn-MtrsGvbkSprtProc-selectScrn", "kdic-www-sp-kmrs-kmrsItrd-selectScrn"], "business_function": "착오송금 반환 신청", "source": "heading", "representative": false}
+{"question": "송금하시겠습니까?", "gt_docs": ["kdic-fins-ir-aplygudn-MtrsGvbkSprtProc-selectScrn", "kdic-www-sp-kmrs-kmrsItrd-selectScrn"], "business_function": "착오송금 반환 신청", "source": "heading", "representative": false}
+{"question": "개인회생제도란", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtPsnRg-selectScrn"], "business_function": "채무조정 안내", "source": "heading", "representative": false}
+{"question": "개인파산과 면책이란", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtPsnBr-selectScrn"], "business_function": "채무조정 안내", "source": "heading", "representative": false}
+{"question": "파산이 선고되면 바로 면책되는 것인가요?", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtPsnBr-selectScrn"], "business_function": "채무조정 안내", "source": "heading", "representative": false}
+{"question": "면책불허가 사유는 어떤 것이 있나요?", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtPsnBr-selectScrn"], "business_function": "채무조정 안내", "source": "heading", "representative": false}
+{"question": "고객 미수령금 신청", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn", "kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "예금보험금 안내", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "예금자보호제도", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSyst-selectScrn"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "은닉재산 신고", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "착오송금 반환 신청", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyMthd-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "채무조정 안내", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn"], "business_function": "채무조정 안내", "source": "yesom", "representative": false}
+{"question": "미수령금 신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "미수령금 방문 신청", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "예금보험금 종류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "예금보험금이 지급되는 경우", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "예금보험금 신청", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "보호 대상 금융상품", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "보호 대상 금융회사", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "보호 한도", "gt_docs": ["kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "은닉재산신고 방법", "gt_docs": ["kdic-www-sp-sprtfund-SprtCncmDclrInqGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "신고자 신상정보에 대한 비밀 보장", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "은닉재산신고 처리절차", "gt_docs": ["kdic-www-sp-sprtfund-SprtCncmDclrInqGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "은닉재산신고 정보취득 경위", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "은닉재산신고 포상금", "gt_docs": ["kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "미수령금 인터넷 신청", "gt_docs": ["kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn", "kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "착오송금반환지원 절차", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdProc-selectScrn", "kdic-fins-ir-aplygudn-MtrsGvbkSprtProc-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "착오송금수취인 이의제기", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn", "kdic-fins-ir-addrse-AddrseAttnMttr-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "착오송금수취인 이체수수료 환급신청", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "착오송금인 신청방법", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyMthd-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "채무조정 금액", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn"], "business_function": "채무조정 안내", "source": "yesom", "representative": false}
+{"question": "채무조정 신청 불가 사유", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn"], "business_function": "채무조정 안내", "source": "yesom", "representative": false}
+{"question": "채무조정 신청 서류", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn"], "business_function": "채무조정 안내", "source": "yesom", "representative": false}
+{"question": "채무 확인 방법", "gt_docs": ["kdic-www-rb-lbltajmt-LbltAjmtSprtLbltInfoInqDscsnAply-selectScrn", "kdic-fins-lb-lbltinfo-LbltInfoInqItrdMthdGudn-selectScrn"], "business_function": "채무조정 안내", "source": "yesom", "representative": false}
+{"question": "가지급금", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "개산지급금", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "군인 신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "대리인 신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "미성년자 신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "방문 신청방법", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "착오송금반환 방문 신청", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyMthd-selectScrn", "kdic-fins-ir-aplygudn-MtrsVstRcptGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "법인 및 단체 신청서류", "gt_docs": ["kdic-fins-cm-bbs-selectFaqNramtAply", "kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "예금자 본인 신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "사망 예금자 신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "보험금신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "예금자보호 제도 보호 금융 상품", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "예금자보호 제도 보호 되지 않는 금융 상품", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "국외거주 또는 유학생 신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "방문 신고방법", "gt_docs": ["kdic-www-sp-sprtfund-SprtCncmDclrInqGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "우편 신고방법", "gt_docs": ["kdic-www-sp-sprtfund-SprtCncmDclrInqGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "이메일 신고방법", "gt_docs": ["kdic-www-sp-sprtfund-SprtCncmDclrInqGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "인터넷 신고방법", "gt_docs": ["kdic-www-sp-sprtfund-SprtCncmDclrInqGudn-selectScrn", "kdic-www-sp-sprtfund-SprtFndCncmDclrGudn-selectScrn"], "business_function": "은닉재산 신고", "source": "yesom", "representative": false}
+{"question": "인터넷 신청방법", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "착오송금반환 인터넷 신청", "gt_docs": ["kdic-www-sp-kmrs-kmrsItrdAplyMthd-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "착오송금반환 신청 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn", "kdic-www-sp-kmrs-kmrsItrdAplyMthd-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "착오송금 이의제기 방문 신청", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "착오송금 이의제기 인터넷 신청", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "착오송금수취인 이체수수료환급 방문 신청", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "착오송금수취인 이체수수료환급 인터넷 신청", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "국외거주 또는 유학생 신청서류 (보험금신청서류)", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "국외거주 또는 유학생 신청서류 (착오송금반환 신청 서류)", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "군복무자 신청서류", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "군복무자 신청서류 (착오송금반환 신청 서류)", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "대리인 신청서류 (보험금신청서류)", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "미성년자 신청서류 (보험금신청서류)", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "미성년자 신청서류 (착오송금반환 신청 서류)", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "대리인방문 착오송금반환 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "본인방문 착오송금반환 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "법인 및 단체 신청서류 (보험금신청서류)", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "법인 및 단체 신청서류 (착오송금반환 신청 서류)", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "보호 금융상품 - 보험회사", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "보호 금융상품 - 상호저축은행 및 상호저축은행 중앙회", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "보호 금융상품 - 은행", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "보호 금융상품 - 종합금융회사", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "보호 금융상품 - 투자매매업자 / 투자중개업자", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "예금자 본인 신청서류 (보험금신청서류)", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "상속인 본인 확인 증명 신분증", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "예금자 본인 신청서류 (착오송금반환 신청 서류)", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "비법인단체 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "비보호 금융상품 - 보험회사", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "비보호 금융상품 - 상호저축은행 및 상호저축은행 중앙회", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "비보호 금융상품 - 은행", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "비보호 금융상품 - 종합금융회사", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "비보호 금융상품 - 투자매매업자 / 투자중개업자", "gt_docs": ["kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr"], "business_function": "예금자보호제도", "source": "yesom", "representative": false}
+{"question": "사망 예금자 신청서류 (보험금신청서류)", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "대리인 인터넷 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "본인 인터넷 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "친권자 확인 증명서", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn", "kdic-fins-cm-bbs-selectFaqNramtAply"], "business_function": "고객 미수령금 신청", "source": "yesom", "representative": false}
+{"question": "이체확인증 관련자료", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn", "kdic-www-sp-kmrs-kmrsItrdAplyMthd-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "방문 국외거주 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "방문 군복무 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "방문 미성년자 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "법인 및 단체 대표 방문 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "법인 및 단체 직원 방문 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "비법인단체 대표 방문 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "비법인단체 직원 방문 신청서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "예금자 본인의 자필위임장", "gt_docs": ["kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn"], "business_function": "예금보험금 안내", "source": "yesom", "representative": false}
+{"question": "인터넷 국외거주 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "인터넷 군복무 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "인터넷 미성년자 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "인터넷 법인 대표 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "인터넷 법인 직원 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "인터넷 비법인 대표 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
+{"question": "인터넷 비법인 직원 착오송금 서류", "gt_docs": ["kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn"], "business_function": "착오송금 반환 신청", "source": "yesom", "representative": false}
