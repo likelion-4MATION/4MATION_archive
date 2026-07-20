@@ -1,0 +1,93 @@
+{
+  "_meta": {
+    "purpose": "6대 업무 FAQ 페이지 URL 인벤토리 (www 2 + fins 5). RAG 코퍼스 편입 + 테스트셋 시드 원천.",
+    "source": "crawl_manifest.csv (business_function·sub_category 인용) + crawl_report.json robots 상태.",
+    "note": "fins 5건은 D0/D1 robots 차단(POLICY_DISALLOW)이었고 07-15 허용 확보 → 재수집 대상. www 2건은 기수집(코퍼스 내). 실제 수집 재개는 config.py POLICY_DISALLOW에서 fins '/cm/bbs/' 제거가 트리거.",
+    "counts": {
+      "total": 7,
+      "www": 2,
+      "fins": 5,
+      "in_corpus": 2,
+      "pending_collect": 5
+    }
+  },
+  "faq_pages": [
+    {
+      "url": "https://www.kdic.or.kr/sp/dpstrprot/ProtSystFaq/selectScrn.do",
+      "doc_id": "kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn",
+      "site": "www",
+      "business_function": "예금자보호제도",
+      "sub_category": "예금자보호제도 FAQ",
+      "robots_prev": "allowed",
+      "robots_now": "allowed",
+      "in_corpus": true,
+      "collect_action": "이미 수집됨"
+    },
+    {
+      "url": "https://www.kdic.or.kr/sp/sprtfund/SprtFndCncmDclrFaq/selectScrn.do",
+      "doc_id": "kdic-www-sp-sprtfund-SprtFndCncmDclrFaq-selectScrn",
+      "site": "www",
+      "business_function": "은닉재산 신고",
+      "sub_category": "은닉재산신고 FAQ",
+      "robots_prev": "allowed",
+      "robots_now": "allowed",
+      "in_corpus": true,
+      "collect_action": "이미 수집됨"
+    },
+    {
+      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqNramtAply.do",
+      "doc_id": "kdic-fins-cm-bbs-selectFaqNramtAply",
+      "site": "fins",
+      "business_function": "고객 미수령금 신청",
+      "sub_category": "FAQ — 미수령금통합신청",
+      "robots_prev": "disallowed",
+      "robots_now": "allowed",
+      "in_corpus": false,
+      "collect_action": "POLICY_DISALLOW에서 /cm/bbs/ 제거 후 재수집 필요"
+    },
+    {
+      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqMsdrGvbkAply.do",
+      "doc_id": "kdic-fins-cm-bbs-selectFaqMsdrGvbkAply",
+      "site": "fins",
+      "business_function": "착오송금 반환 신청",
+      "sub_category": "FAQ — 착오송금 (2페이지, ~15건)",
+      "robots_prev": "disallowed",
+      "robots_now": "allowed",
+      "in_corpus": false,
+      "collect_action": "POLICY_DISALLOW에서 /cm/bbs/ 제거 후 재수집 필요"
+    },
+    {
+      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqLbltInfoInq.do",
+      "doc_id": "kdic-fins-cm-bbs-selectFaqLbltInfoInq",
+      "site": "fins",
+      "business_function": "채무조정 안내",
+      "sub_category": "FAQ — 채무정보조회",
+      "robots_prev": "disallowed",
+      "robots_now": "allowed",
+      "in_corpus": false,
+      "collect_action": "POLICY_DISALLOW에서 /cm/bbs/ 제거 후 재수집 필요"
+    },
+    {
+      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqCncmPrptDclr.do",
+      "doc_id": "kdic-fins-cm-bbs-selectFaqCncmPrptDclr",
+      "site": "fins",
+      "business_function": "은닉재산 신고",
+      "sub_category": "FAQ — 은닉재산신고",
+      "robots_prev": "disallowed",
+      "robots_now": "allowed",
+      "in_corpus": false,
+      "collect_action": "POLICY_DISALLOW에서 /cm/bbs/ 제거 후 재수집 필요"
+    },
+    {
+      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqTop10.do",
+      "doc_id": "kdic-fins-cm-bbs-selectFaqTop10",
+      "site": "fins",
+      "business_function": "공통",
+      "sub_category": "FAQ TOP10 — 테스트셋 v0 시드",
+      "robots_prev": "disallowed",
+      "robots_now": "allowed",
+      "in_corpus": false,
+      "collect_action": "POLICY_DISALLOW에서 /cm/bbs/ 제거 후 재수집 필요"
+    }
+  ]
+}
