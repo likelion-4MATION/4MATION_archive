@@ -7,8 +7,21 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
 import crawler  # noqa: E402
 
+# .location 구조는 실물 KDIC DOM 준용 — 직계 li의 첫 링크가 경로, ulSelectBox 안 ul은
+# 드롭다운 형제 메뉴(통합검색 등 노이즈). H8: 형제 메뉴가 breadcrumb에 섞이면 안 됨.
 NORMAL = """<html><head><title>예금자보호제도 | KDIC</title></head><body>
-<div class="location"><a>홈</a><a>예금자보호</a><span>보호한도</span></div>
+<div class="location"><ol>
+<li><a class="btn_home" href="/sp/main.do">홈</a></li>
+<li><div class="ulSelectBox"><a href="/sp/main.do">예금자보호</a>
+<ul><li class="curr"><a href="/sp/main.do">예금자보호</a></li>
+<li><a href="/cm/srch/s.do">통합검색</a></li>
+<li><a href="/cm/imtncal/c.do">예금보호금액 모의계산기</a></li></ul>
+</div></li>
+<li><div class="ulSelectBox"><a href="/sp/dpstrprot/ProtSystProtLmts/selectScrn.do"><strong>보호한도</strong></a>
+<ul><li><a href="/sp/dpstrprot/p.do">보호대상</a></li>
+<li class="curr"><a href="/sp/dpstrprot/ProtSystProtLmts/selectScrn.do">보호한도</a></li></ul>
+</div></li>
+</ol></div>
 <p>2025년 9월부터 예금보호 한도가 1억원으로 상향되었습니다.</p>
 <div style="display:none">이용자수가 많아 서비스 접속 대기</div>
 """ + "<p>정상 본문 문단입니다</p>" * 120 + "</body></html>"
@@ -39,7 +52,8 @@ def run() -> None:
 
     from bs4 import BeautifulSoup
     bc = crawler.extract_breadcrumb(BeautifulSoup(NORMAL, "lxml"))
-    checks.append(("브레드크럼 추출", bc == ["홈", "예금자보호", "보호한도"]))
+    checks.append(("브레드크럼: 직계 첫 링크만, 드롭다운 형제 제외 (H8)",
+                   bc == ["홈", "예금자보호", "보호한도"]))
 
     checks.append(("doc_id: www .do 제거",
                    crawler.doc_id_from_url("https://www.kdic.or.kr/sp/pr/limit.do")
