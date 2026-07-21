@@ -75,3 +75,5 @@ chroma_db/
 *.faiss
 *.index
 corpus/
+# ===== 실전2 챗봇 =====
+.streamlit/secrets.toml
