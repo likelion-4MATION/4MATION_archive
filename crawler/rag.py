@@ -64,6 +64,46 @@ def chunk_embed_text(chunk: dict) -> str:
     return f"{title}\n{chunk['text']}" if title else chunk["text"]
 
 
+# ── 질의 업무 분류 (하드 필터용, 결정론적 키워드) ─────────────────────────
+# chunk.py 문서측 재태깅과 짝을 이루는 질의측 분류. 사용자 구어체 어휘 반영.
+# 점수/마진 미달(불명)이면 None → 필터 미적용(전체 검색)으로 안전 폴백.
+BF_QUERY_KEYWORDS = {
+    "예금자보호제도": [("보호돼", 3), ("보호되", 3), ("보호받", 3), ("보호 되", 3),
+                  ("보호대상", 3), ("보호한도", 3), ("예금자보호", 3), ("예금 보호", 3),
+                  ("얼마까지", 2), ("한도", 2), ("1억", 2), ("5천", 2), ("새마을금고", 3),
+                  ("신협", 3), ("우체국", 2), ("외화", 2), ("펀드", 2),
+                  ("예금보험 가입", 2), ("세전", 2), ("저축은행", 1)],
+    "예금보험금 안내": [("예금보험금", 3), ("가지급금", 3), ("개산지급금", 3), ("보험금", 2),
+                  ("보험사고", 2), ("망하면", 2), ("문 닫으면", 2), ("대신 주는", 2),
+                  ("대신 준다", 2), ("지급", 1), ("창구", 1)],
+    "고객 미수령금 신청": [("미수령", 3), ("못 찾", 3), ("못 받은 돈", 3), ("안 찾아간", 3),
+                   ("찾아가지", 3), ("돌아가신", 2), ("상속인", 2), ("상속", 1), ("통합신청", 2)],
+    "착오송금 반환 신청": [("착오송금", 3), ("잘못 보낸", 3), ("잘못 송금", 3), ("잘못 이체", 3),
+                   ("이체 실수", 3), ("계좌 잘못", 3), ("돈 잘못", 3), ("딴 사람", 2),
+                   ("반환", 2), ("수취인", 2), ("이체수수료", 2), ("이의제기", 2)],
+    "채무조정 안내": [("채무조정", 3), ("개인회생", 3), ("면책", 3), ("신용회복", 3),
+                 ("빚", 3), ("채무", 3), ("감면", 3), ("빚 조정", 3), ("빚 감면", 3),
+                 ("파산", 2), ("연체", 2)],
+    "은닉재산 신고": [("은닉재산", 3), ("숨긴 재산", 3), ("숨겨둔", 3), ("숨긴 돈", 3),
+                 ("제보", 3), ("포상금", 3), ("부실관련자", 3), ("신고센터", 2),
+                 ("은닉", 2), ("신고", 1)],
+}
+QBF_MIN_SCORE = 3
+QBF_MARGIN = 2
+
+
+def classify_query_bf(query: str):
+    """질의 → 6대 업무 중 하나 또는 None(불명). 하드 필터의 대상 업무 결정."""
+    sc = {bf: sum(w * query.count(k) for k, w in kws)
+          for bf, kws in BF_QUERY_KEYWORDS.items()}
+    ranked = sorted(sc.items(), key=lambda x: -x[1])
+    if ranked[0][1] < QBF_MIN_SCORE:
+        return None
+    if len(ranked) > 1 and ranked[0][1] - ranked[1][1] < QBF_MARGIN:
+        return None
+    return ranked[0][0]
+
+
 class Store:
     """청크 + 임베딩 + 인덱스 저장소. doc_id 단위 upsert 지원."""
 
@@ -162,9 +202,15 @@ class Searcher:
         return [(int(i), float(scores[i])) for i in order]
 
     def hybrid(self, query: str, k: int = 10, pool: int = 20,
-               rrf_k: int = 60) -> list[tuple[int, float]]:
-        d = self.dense(query, pool)
-        s = self.sparse(query, pool)
+               rrf_k: int = 60, bf: str | None = None) -> list[tuple[int, float]]:
+        # bf 지정 시(하드 필터): 후보를 해당 업무 청크로 제한. 필터링으로 후보가
+        # 줄므로 pool을 전체로 넓혀 in-bf 청크를 빠짐없이 확보.
+        dpool = pool if bf is None else len(self.chunks)
+        d = self.dense(query, dpool)
+        s = self.sparse(query, dpool)
+        if bf is not None:
+            d = [(i, sc) for i, sc in d if self.chunks[i].get("business_function") == bf]
+            s = [(i, sc) for i, sc in s if self.chunks[i].get("business_function") == bf]
         rrf: dict[int, float] = {}
         for rank, (idx, _) in enumerate(d):
             rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (rrf_k + rank + 1)
@@ -178,6 +224,9 @@ class Searcher:
             hits = self.dense(query, k)
         elif mode == "bm25":
             hits = self.sparse(query, k)
+        elif mode == "hybrid_bf":
+            # 하드 필터: 질의 업무 분류 → 해당 업무 청크로만 검색. 불명이면 전체(=hybrid).
+            hits = self.hybrid(query, k, bf=classify_query_bf(query))
         else:
             hits = self.hybrid(query, k)
         out = []
