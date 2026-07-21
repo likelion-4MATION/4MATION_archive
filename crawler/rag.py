@@ -90,6 +90,7 @@ BF_QUERY_KEYWORDS = {
 }
 QBF_MIN_SCORE = 3
 QBF_MARGIN = 2
+BF_DOC_CAP = 1     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
 
 
 def classify_query_bf(query: str):
@@ -223,14 +224,30 @@ class Searcher:
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return [(idx, score) for idx, score in ranked]
 
+    def _cap_by_doc(self, hits: list[tuple[int, float]], cap: int) -> list[tuple[int, float]]:
+        """parent_doc_id당 cap개까지만 순서 유지하며 남김(문서 단위 다양성 확보)."""
+        if not cap or cap <= 0:
+            return hits
+        seen: dict[str, int] = {}
+        out = []
+        for idx, score in hits:
+            d = self.chunks[idx]["parent_doc_id"]
+            if seen.get(d, 0) < cap:
+                out.append((idx, score))
+                seen[d] = seen.get(d, 0) + 1
+        return out
+
     def search(self, query: str, k: int = 5, mode: str = "hybrid") -> list[dict]:
         if mode == "dense":
             hits = self.dense(query, k)
         elif mode == "bm25":
             hits = self.sparse(query, k)
         elif mode == "hybrid_bf":
-            # 하드 필터: 질의 업무 분류 → 해당 업무 청크로만 검색. 불명이면 전체(=hybrid).
-            hits = self.hybrid(query, k, bf=classify_query_bf(query))
+            # 하드 필터(질의 업무 분류 → 해당 업무 청크만) + doc-count cap.
+            # 깊은 풀을 받아 문서당 BF_DOC_CAP개로 제한 후 top-k → 몬스터 문서 독점 차단.
+            bf = classify_query_bf(query)
+            pool = self.hybrid(query, max(k * 5, 50), bf=bf)
+            hits = self._cap_by_doc(pool, BF_DOC_CAP)[:k]
         else:
             hits = self.hybrid(query, k)
         out = []

@@ -1,6 +1,7 @@
 """검색 평가(원인분석판) — dense / hybrid / hybrid_bf 비교 + 미적중 원인 분석.
 
 eval.py의 업데이트(hybrid_bf 하드필터 모드 + 하드필터 효과 비교)를 이 파일에도 반영.
+※ hybrid_bf = 업무 하드필터 + doc-count cap(rag.BF_DOC_CAP, 문서당 top-k 청크 제한) 결합.
 차이점: 원인 분석(error_analysis)·D1 판정·미적중 리포팅을 **ANALYZE_MODE(기본 hybrid_bf)**
 기준으로 수행 → 실제 배포 모드(필터 적용)에서 무엇이 왜 틀리는지 진단.
 
