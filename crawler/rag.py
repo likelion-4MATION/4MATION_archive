@@ -93,8 +93,12 @@ QBF_MARGIN = 2
 
 
 def classify_query_bf(query: str):
-    """질의 → 6대 업무 중 하나 또는 None(불명). 하드 필터의 대상 업무 결정."""
-    sc = {bf: sum(w * query.count(k) for k, w in kws)
+    """질의 → 6대 업무 중 하나 또는 None(불명). 하드 필터의 대상 업무 결정.
+
+    공백 정규화: 질의·키워드 양쪽 공백 제거 후 매칭 → "보호 한도"가 "보호한도"로 잡힘.
+    """
+    q = query.replace(" ", "")
+    sc = {bf: sum(w * q.count(k.replace(" ", "")) for k, w in kws)
           for bf, kws in BF_QUERY_KEYWORDS.items()}
     ranked = sorted(sc.items(), key=lambda x: -x[1])
     if ranked[0][1] < QBF_MIN_SCORE:
