@@ -20,7 +20,7 @@ import json
 
 import rag
 
-TESTSET = "data/testset_natural_300_v2.jsonl"
+TESTSET = "data/testset_natural_300_v3.jsonl"
 REPORT = "data/eval_report.md"
 MODES = ["dense", "hybrid", "hybrid_bf"]
 KMAX = 10

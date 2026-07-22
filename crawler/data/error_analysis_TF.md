@@ -1,6 +1,6 @@
 # 오류 분석 리포트 — hybrid_bf 기준
 
-- 대상: 전체 300건 중 **미적중 43건** · 미적중률 14.3%
+- 대상: 전체 300건 중 **미적중 39건** · 미적중률 13.0%
 - 미적중 = gt_docs 문서가 hybrid_bf top-3 밖. `rank=0` 은 top-10 내에도 정답 문서 없음.
 - 태그: **✅정답** / **⚠️타업무혼입** / **❌동일업무오답**.
 - 원인(질의 분류): **불명**(필터 미적용) / **오분류**(엉뚱한 업무로 필터) / **정분류**(업무 내부 랭킹·청킹 문제).
@@ -9,7 +9,7 @@
 
 | 원인 | 건수 |
 |---|---|
-| 정분류 | 25 |
+| 정분류 | 21 |
 | 불명 | 16 |
 | 오분류 | 2 |
 
@@ -18,8 +18,8 @@
 | 업무 | 문항 | 미적중 | 미적중률 |
 |---|---|---|---|
 | 착오송금 반환 신청 | 72 | 20 | 27.8% |
-| 고객 미수령금 신청 | 44 | 9 | 20.5% |
 | 예금보험금 안내 | 40 | 6 | 15.0% |
+| 고객 미수령금 신청 | 44 | 5 | 11.4% |
 | 예금자보호제도 | 54 | 5 | 9.3% |
 | 채무조정 안내 | 46 | 3 | 6.5% |
 | 은닉재산 신고 | 44 | 0 | 0.0% |
@@ -38,11 +38,11 @@
 | `kdic-fins-ir-addrse-AddrseAttnMttr-selectScrn` | 7 | 착오송금 반환 신청 |
 | `kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn` | 6 | 착오송금 반환 신청 |
 | `kdic-www-sp-kmrs-kmrsItrd-selectScrn` | 5 | 착오송금 반환 신청 |
-| `kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn` | 4 | 고객 미수령금 신청 |
-| `kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn` | 4 | 고객 미수령금 신청 |
-| `kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn` | 4 | 고객 미수령금 신청 |
 | `kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn` | 4 | 착오송금 반환 신청 |
 | `kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr` | 3 | 예금자보호제도 |
+| `kdic-www-rb-lbltajmt-LbltAjmtSprtPsnRg-selectScrn` | 3 | 채무조정 안내 |
+| `kdic-fins-lb-lbltinfo-LbltInfoInqItrdMthdGudn-selectScrn` | 3 | 채무조정 안내 |
+| `kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn` | 2 | 예금보험금 안내 |
 
 ## 3. 업무 간 혼입 흐름 (top-1이 엉뚱한 업무)
 
@@ -85,24 +85,6 @@
   2. [⚠️타업무혼입] 예금보험금 안내 / 예금보험금이란?  `kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn`
   3. [⚠️타업무혼입] 예금보험금 안내 / 예금보험금 신청절차  `kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn`
 
-### [고객 미수령금 신청 · short] 군인 대신 미수령금 받으려면 서류가 뭐예요?
-- 정답 gt_docs: ['kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn', 'kdic-fins-cm-bbs-selectFaqNramtAply']
-- 질의분류: 고객 미수령금 신청 · **원인: 정분류(업무내 랭킹/청킹)**
-- dense rank: 2 · hybrid_bf rank: 4
-- hybrid_bf top-3:
-  1. [❌동일업무오답] 고객 미수령금 신청 / 상속인 금융거래조회  `kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn`
-  2. [❌동일업무오답] 고객 미수령금 신청 / 안내  `kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn`
-  3. [❌동일업무오답] 고객 미수령금 신청 / 고객미수령금  `kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn`
-
-### [고객 미수령금 신청 · short] 미수령금 대리 신청 서류 알려줘요
-- 정답 gt_docs: ['kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn', 'kdic-fins-cm-bbs-selectFaqNramtAply']
-- 질의분류: 고객 미수령금 신청 · **원인: 정분류(업무내 랭킹/청킹)**
-- dense rank: 미적중 · hybrid_bf rank: 4
-- hybrid_bf top-3:
-  1. [❌동일업무오답] 고객 미수령금 신청 / 상속인 금융거래조회  `kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn`
-  2. [❌동일업무오답] 고객 미수령금 신청 / 안내  `kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn`
-  3. [❌동일업무오답] 고객 미수령금 신청 / 고객미수령금  `kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn`
-
 ### [고객 미수령금 신청 · short] 파산배당금이 뭔가요?
 - 정답 gt_docs: ['kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn', 'kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn']
 - 질의분류: None · **원인: 불명(필터 미적용)**
@@ -112,15 +94,6 @@
   2. [⚠️타업무혼입] 채무조정 안내 / 파산면책  `kdic-www-rb-lbltajmt-LbltAjmtSprtPsnBr-selectScrn`
   3. [⚠️타업무혼입] 예금자보호제도 / 예금자보호제도 FAQ  `kdic-www-sp-dpstrprot-ProtSystFaq-selectScrn`
 
-### [고객 미수령금 신청 · simple] 해외 사는데 한국 미수령금 받을 수 있어요?
-- 정답 gt_docs: ['kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn', 'kdic-fins-cm-bbs-selectFaqNramtAply']
-- 질의분류: 고객 미수령금 신청 · **원인: 정분류(업무내 랭킹/청킹)**
-- dense rank: 2 · hybrid_bf rank: 4
-- hybrid_bf top-3:
-  1. [❌동일업무오답] 고객 미수령금 신청 / 안내  `kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn`
-  2. [❌동일업무오답] 고객 미수령금 신청 / 고객미수령금  `kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn`
-  3. [❌동일업무오답] 고객 미수령금 신청 / 상속인 금융거래조회  `kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn`
-
 ### [고객 미수령금 신청 · yesom] 은행에서 못 받고 넘어간 돈이 있다는데 어디서 어떻게 받는 거예요?
 - 정답 gt_docs: ['kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn', 'kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn']
 - 질의분류: None · **원인: 불명(필터 미적용)**
@@ -129,15 +102,6 @@
   1. [⚠️타업무혼입] 착오송금 반환 신청 / 반환지원절차  `kdic-fins-ir-aplygudn-MtrsGvbkSprtProc-selectScrn`
   2. [⚠️타업무혼입] 착오송금 반환 신청 / 착오송금반환지원 신청대상  `kdic-www-sp-kmrs-kmrsItrdAplyTrgt-selectScrn`
   3. [⚠️타업무혼입] 예금보험금 안내 / 미수령금통합신청  `kdic-fins-cm-bbs-selectFaqNramtAply`
-
-### [고객 미수령금 신청 · yesom] 해외에 사는 사람은 한국에 남은 미수령 돈을 어떻게 받아요? 대리 신청 서류는요?
-- 정답 gt_docs: ['kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn', 'kdic-fins-cm-bbs-selectFaqNramtAply']
-- 질의분류: 고객 미수령금 신청 · **원인: 정분류(업무내 랭킹/청킹)**
-- dense rank: 1 · hybrid_bf rank: 4
-- hybrid_bf top-3:
-  1. [❌동일업무오답] 고객 미수령금 신청 / 안내  `kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn`
-  2. [❌동일업무오답] 고객 미수령금 신청 / 고객미수령금  `kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn`
-  3. [❌동일업무오답] 고객 미수령금 신청 / 상속인 금융거래조회  `kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn`
 
 ### [예금보험금 안내 · short] 보험금 인터넷으로 신청 가능해요?
 - 정답 gt_docs: ['kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn']

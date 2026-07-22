@@ -17,7 +17,7 @@ import json
 
 import rag
 
-TESTSET = "data/testset_natural_300_v2.jsonl"
+TESTSET = "data/testset_natural_300_v3.jsonl"
 MODE = "hybrid_bf"
 CAPS = [None, 1, 2, 3]
 POOL_K = 50   # cap 적용 전 확보할 후보 깊이
