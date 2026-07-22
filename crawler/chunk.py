@@ -88,6 +88,21 @@ def faq_bf_list(parts: list[str], orig: str) -> list[str]:
     return prelim if retag_frac >= FAQ_RETAG_GATE else [orig] * len(parts)
 
 
+# 수동 검증 오버라이드 — 팀 원문 대조로 확정된 청크별 업무(키워드 규칙 오분류 교정).
+# selectFaqNramtAply(미수령금통합신청 FAQ): 본문이 예금보험금 지급/영업정지 Q&A로 채워져
+#   키워드 규칙이 미수령금·예금자보호로 오태깅 → 인덱스 기준 수동 매핑으로 고정.
+#   #00~01 공통(시스템 안내) · #02~05 예금자보호제도 · #06~ 예금보험금 안내.
+def _nramtaply_bf(i: int) -> str:
+    if i <= 1:
+        return "공통"
+    if i <= 5:
+        return "예금자보호제도"
+    return "예금보험금 안내"
+
+
+FAQ_BF_OVERRIDE = {"kdic-fins-cm-bbs-selectFaqNramtAply": _nramtaply_bf}
+
+
 def split_faq(text: str) -> list[str]:
     """'질문' 라인마다 새 Q&A 청크 시작. '열기' 토글 라인 제거."""
     lines = [l for l in text.split("\n") if l.strip() and l.strip() != "열기"]
@@ -167,6 +182,9 @@ def make_chunks(rec: dict) -> list[dict]:
     # FAQ/게시판 문서는 청크별 업무 재태깅(게이트 보호), 그 외는 문서 태그 상속
     bf_list = faq_bf_list(parts, orig_bf) if is_board(rec) else [orig_bf] * len(parts)
     doc_id = rec["doc_id"]
+    ov = FAQ_BF_OVERRIDE.get(doc_id)
+    if ov:
+        bf_list = [ov(i) for i in range(len(parts))]
     out = []
     for i, part in enumerate(parts):
         out.append({

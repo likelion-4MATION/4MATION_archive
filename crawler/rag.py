@@ -17,9 +17,9 @@ import pickle
 import faiss
 import numpy as np
 
-MODEL_NAME = "jhgan/ko-sroberta-multitask"
+MODEL_NAME = "BAAI/bge-m3"
 INDEX_DIR = "data/index"
-EMB_DIM = 768
+EMB_DIM = 1024   # bge-m3 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
 
 _model = None
 _kiwi = None
@@ -94,7 +94,10 @@ BF_DOC_CAP = 1     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
 BF_MODE = "soft"
-BF_BOOST = 0.02
+# bge-m3 재튜닝(2026-07-22): 강한 dense에 맞춰 부스트↓·dense가중↑ (eval_rrf_tune A/B, A안).
+BF_BOOST = 0.005          # 소프트부스트 강도(과보정 방지: 0.02→0.005)
+RRF_ALPHA = 0.6           # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
+RRF_K = 5                 # RRF 상수(낮을수록 상위 랭크 신뢰↑). bge-m3 스윕 최적값(60→5).
 # 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
 # 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
 BF_SHARED_DOCS = {
@@ -168,7 +171,9 @@ class Store:
         n = len(self.chunks)
         embs = self.embs if self.embs is not None else np.zeros((0, EMB_DIM), "float32")
 
-        index = faiss.IndexFlatIP(EMB_DIM)
+        # 인덱스 차원 = 실제 임베딩 차원(모델 교체 대응). 비었으면 EMB_DIM 폴백.
+        dim = int(embs.shape[1]) if embs.shape[0] else EMB_DIM
+        index = faiss.IndexFlatIP(dim)
         if n:
             index.add(embs)
         faiss.write_index(index, str(self.dir / "faiss.index"))
@@ -216,7 +221,7 @@ class Searcher:
         return [(int(i), float(scores[i])) for i in order]
 
     def hybrid(self, query: str, k: int = 10, pool: int = 20,
-               rrf_k: int = 60, bf: str | None = None) -> list[tuple[int, float]]:
+               rrf_k: int = RRF_K, bf: str | None = None) -> list[tuple[int, float]]:
         # bf 지정 시(하드 필터): 후보를 해당 업무 청크로 제한. 필터링으로 후보가
         # 줄므로 pool을 전체로 넓혀 in-bf 청크를 빠짐없이 확보.
         dpool = pool if bf is None else len(self.chunks)
@@ -237,8 +242,9 @@ class Searcher:
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return [(idx, score) for idx, score in ranked]
 
-    def hybrid_soft(self, query: str, k: int = 10, rrf_k: int = 60,
-                    bf: str | None = None, boost: float = 0.0) -> list[tuple[int, float]]:
+    def hybrid_soft(self, query: str, k: int = 10, rrf_k: int = RRF_K,
+                    bf: str | None = None, boost: float = 0.0,
+                    alpha: float = RRF_ALPHA) -> list[tuple[int, float]]:
         """소프트부스트 융합 — 전체 풀 RRF 후 같은 업무 청크에 +boost(제외 없음).
 
         하드필터(hybrid(bf=...))와 달리 타 업무 청크를 남겨두므로, 질의 분류가
@@ -249,9 +255,9 @@ class Searcher:
         s = self.sparse(query, N)
         rrf: dict[int, float] = {}
         for rank, (idx, _) in enumerate(d):
-            rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (rrf_k + rank + 1)
+            rrf[idx] = rrf.get(idx, 0.0) + alpha / (rrf_k + rank + 1)
         for rank, (idx, _) in enumerate(s):
-            rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (rrf_k + rank + 1)
+            rrf[idx] = rrf.get(idx, 0.0) + (1.0 - alpha) / (rrf_k + rank + 1)
         if bf is not None and boost > 0:
             allow = BF_SHARED_DOCS.get(bf, set())
             for idx in rrf:
