@@ -91,6 +91,11 @@ BF_QUERY_KEYWORDS = {
 QBF_MIN_SCORE = 3
 QBF_MARGIN = 2
 BF_DOC_CAP = 1     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
+# 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
+# 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
+BF_SHARED_DOCS = {
+    "고객 미수령금 신청": {"kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn"},
+}
 
 
 def classify_query_bf(query: str):
@@ -214,8 +219,12 @@ class Searcher:
         d = self.dense(query, dpool)
         s = self.sparse(query, dpool)
         if bf is not None:
-            d = [(i, sc) for i, sc in d if self.chunks[i].get("business_function") == bf]
-            s = [(i, sc) for i, sc in s if self.chunks[i].get("business_function") == bf]
+            allow = BF_SHARED_DOCS.get(bf, set())
+            def _keep(i):
+                c = self.chunks[i]
+                return c.get("business_function") == bf or c["parent_doc_id"] in allow
+            d = [(i, sc) for i, sc in d if _keep(i)]
+            s = [(i, sc) for i, sc in s if _keep(i)]
         rrf: dict[int, float] = {}
         for rank, (idx, _) in enumerate(d):
             rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (rrf_k + rank + 1)
