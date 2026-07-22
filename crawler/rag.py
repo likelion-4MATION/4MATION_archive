@@ -98,6 +98,7 @@ BF_MODE = "soft"
 BF_BOOST = 0.005          # 소프트부스트 강도(과보정 방지: 0.02→0.005)
 RRF_ALPHA = 0.6           # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
 RRF_K = 5                 # RRF 상수(낮을수록 상위 랭크 신뢰↑). bge-m3 스윕 최적값(60→5).
+FACET_BOOST = 0.03        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산. eval_facet A/B 채택.
 # 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
 # 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
 BF_SHARED_DOCS = {
@@ -119,6 +120,37 @@ def classify_query_bf(query: str):
     if len(ranked) > 1 and ranked[0][1] - ranked[1][1] < QBF_MARGIN:
         return None
     return ranked[0][0]
+
+
+# ── 서브인텐트 패싯(업무 내부 문서타입) 분류 — hybrid_soft 패싯 부스트용 ──────────
+# 질의 인텐트를 결정론 키워드로 잡아, 매칭되는 sub_category 청크에 소량 가산.
+# 문서 병합/창작 없이 기존 sub_category 패싯만 활용. 리랭킹 대체 경량 레버.
+FACET_RULES = [
+    (["서류", "구비", "준비물", "챙기", "제출", "들고", "가지고"], "구비서류"),
+    (["신청방법", "어떻게 신청", "어떻게 해", "온라인", "인터넷", "접수"], "신청방법"),
+    (["대상", "자격", "누가", "해당", "받을 수 있"], "신청대상"),
+    (["절차", "단계", "처리", "과정", "진행"], "절차"),
+    (["유의", "주의", "조심", "알아둘"], "유의사항"),
+    (["방문", "직접 가", "찾아가", "가서"], "방문접수"),
+    (["법령", "규정", "법적"], "관련법령"),
+]
+DIR_RULES = [
+    (["받은", "들어온", "잘못 들어", "수취인", "받아버린"], "착오송금수취인"),
+    (["보낸", "송금한", "이체한", "내가 보", "잘못 보", "잘못 송금"], "착오송금인"),
+]
+
+
+def query_facets(query: str) -> set:
+    """질의 → sub_category에서 찾을 패싯 토큰 집합(문서 타입/방향)."""
+    qn = query.replace(" ", "")
+    facets = set()
+    for kws, tok in FACET_RULES:
+        if any(k.replace(" ", "") in qn for k in kws):
+            facets.add(tok)
+    for kws, tok in DIR_RULES:
+        if any(k.replace(" ", "") in qn for k in kws):
+            facets.add(tok); break
+    return facets
 
 
 class Store:
@@ -260,10 +292,15 @@ class Searcher:
             rrf[idx] = rrf.get(idx, 0.0) + (1.0 - alpha) / (rrf_k + rank + 1)
         if bf is not None and boost > 0:
             allow = BF_SHARED_DOCS.get(bf, set())
+            facets = query_facets(query) if FACET_BOOST > 0 else set()
             for idx in rrf:
                 c = self.chunks[idx]
                 if c.get("business_function") == bf or c["parent_doc_id"] in allow:
                     rrf[idx] += boost
+                    if facets:
+                        hit = sum(1 for t in facets if t in c.get("sub_category", ""))
+                        if hit:
+                            rrf[idx] += FACET_BOOST * hit
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return ranked
 
