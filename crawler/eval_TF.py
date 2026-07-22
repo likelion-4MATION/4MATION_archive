@@ -24,7 +24,7 @@ import pathlib
 
 import rag
 
-TESTSET = "data/testset_natural_300_v3.jsonl"
+TESTSET = "data/testset_natural_400.jsonl"
 REPORT = "data/eval_report.md"
 ERR_REPORT = "data/error_analysis_TF.md"
 MODES = ["dense", "hybrid", "hybrid_bf"]
