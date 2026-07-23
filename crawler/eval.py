@@ -20,9 +20,9 @@ import json
 
 import rag
 
-TESTSET = "data/testset_merged.jsonl"
+TESTSET = "data/testset_natural_400.jsonl"
 REPORT = "data/eval_report.md"
-MODES = ["dense", "hybrid"]
+MODES = ["dense", "hybrid", "hybrid_bf"]
 KMAX = 10
 
 CONTAM_MARKERS = ["FDIC", "해외 예금", "해외예금", "미국 예금보험", "달러", "US$", "엔화", "위안화"]
@@ -188,6 +188,17 @@ def main() -> None:
     rows_src, _ = group_metrics(results["hybrid"]["per_q"], "source")
     for s, r in sorted(rows_src.items(), key=lambda x: -x[1]["n"]):
         print(f"  {s:14} n={r['n']:3d}  hit@3={r['hit@3']:.3f}  MRR={r['mrr']:.3f}")
+
+    # 하드필터 효과 — 업무별 hit@3: hybrid → hybrid_bf
+    if "hybrid_bf" in results:
+        print(f"\n[하드필터 효과 — 업무별 hit@3: hybrid → hybrid_bf]")
+        rb, _ = group_metrics(results["hybrid"]["per_q"], "bf")
+        rf, _ = group_metrics(results["hybrid_bf"]["per_q"], "bf")
+        for bf in sorted(rb, key=lambda x: -rb[x]["n"]):
+            h, fv = rb[bf]["hit@3"], rf[bf]["hit@3"]
+            print(f"  {bf:16} {h:.3f} -> {fv:.3f}  ({fv-h:+.3f})")
+        oh, of = results["hybrid"]["hit@3"], results["hybrid_bf"]["hit@3"]
+        print(f"  {'전체':16} {oh:.3f} -> {of:.3f}  ({of-oh:+.3f})")
 
     print(f"\n대표 6문항 top-3 적중  hybrid={rep6['hybrid']}/6  dense={rep6['dense']}/6"
           f"  → D1 판정 {'통과' if rep6['hybrid']>=5 else '미통과'}")

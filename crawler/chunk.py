@@ -4,6 +4,7 @@
 - CHUNK_SIZE=800자, OVERLAP=100자 (문단/섹션 경계 우선)
 - 표(연속 "cell | cell" 라인)는 절대 중간분할 금지 → 단독 청크
 - FAQ 페이지(page_type/title에 'FAQ')는 질문-답변 1쌍 = 1청크 (크기 무시), '열기' 토글 제거
+- FAQ/게시판 청크는 청크별 business_function 재태깅 (결정론적 키워드 규칙, 게이트 보호)
 
 청크 스키마(11필드): chunk_id · parent_doc_id · business_function · sub_category ·
   page_type · coverage · variant · source_url · page_title · breadcrumb · text
@@ -31,6 +32,60 @@ SCHEMA_FIELDS = ["chunk_id", "parent_doc_id", "business_function", "sub_category
 def is_faq(rec: dict) -> bool:
     tag = (rec.get("page_type", "") or "") + (rec.get("page_title", "") or "")
     return "FAQ" in tag or "faq" in tag
+
+
+def is_board(rec: dict) -> bool:
+    """FAQ/게시판형 문서(청크별 업무 재태깅 대상). fins 통합 게시판(-cm-bbs-) 포함."""
+    return is_faq(rec) or "-cm-bbs-" in rec.get("doc_id", "")
+
+
+# ── 청크별 business_function 재태깅 (결정론적 키워드 규칙) ───────────────────
+# 배경: fins 통합 게시판 FAQ(예: selectFaqNramtAply)는 여러 업무의 Q&A를 한 페이지에
+# 담는데 URL 규칙상 문서 전체가 업무 1개로 태깅 → 청크 메타 오염 → 검색 혼입.
+# 대책: FAQ/게시판 청크에 한해 청크별로 실제 업무를 재분류. 단 오분류를 막기 위해
+#   (1) 다른 업무가 '원 태그보다' FAQ_MARGIN 이상 우세할 때만 재태깅
+#   (2) 문서의 재태깅 비율이 FAQ_RETAG_GATE 미만이면(=대체로 맞는 문서) 통째로 원 태그 유지
+# LLM 미개입·결정론 원칙 준수. 키워드는 변별력 높은 도메인 어휘.
+FAQ_MARGIN = 2
+FAQ_RETAG_GATE = 0.5
+
+BF_KEYWORDS = {
+    "예금자보호제도": [("예금보호", 2), ("보호한도", 3), ("보호대상", 2), ("후순위채권", 2),
+                  ("부보금융", 2), ("원리금", 1), ("합병등기", 2), ("세전", 2),
+                  ("예금자보호법", 2), ("비보호", 2), ("1인당", 1), ("명의", 1),
+                  ("중도해지", 2), ("이자포함", 1)],
+    "예금보험금 안내": [("예금보험금", 2), ("가지급금", 3), ("개산지급금", 2), ("보험사고", 2),
+                  ("지급대행", 2), ("지급보류", 2), ("계약이전", 2), ("지급시기", 2),
+                  ("지급기한", 1), ("청구", 1), ("위임장", 1)],
+    "고객 미수령금 신청": [("미수령금", 3), ("파산배당금", 3), ("정산금", 2), ("찾아가지", 2),
+                   ("통합신청", 1), ("상속인 금융거래", 3), ("휴면", 2)],
+    "착오송금 반환 신청": [("착오송금", 3), ("잘못 보낸", 2), ("잘못 송금", 2), ("잘못 이체", 2),
+                   ("반환지원", 3), ("수취인", 2), ("반환 신청", 1), ("송금확인", 1)],
+    "채무조정 안내": [("채무조정", 3), ("채무정보", 2), ("개인회생", 3), ("파산면책", 3),
+                 ("신용회복", 3), ("연체대출", 2), ("채무자", 1), ("부채증명", 2)],
+    "은닉재산 신고": [("은닉재산", 3), ("부실관련자", 3), ("신고센터", 2), ("포상금", 3),
+                 ("제보", 2), ("신고자", 2)],
+}
+
+
+def _classify_bf(text: str, orig: str) -> str:
+    """청크 1개의 업무 추정. 원 태그보다 FAQ_MARGIN 이상 우세한 업무만 채택, 아니면 원 태그."""
+    sc = {bf: sum(w * text.count(k) for k, w in kws) for bf, kws in BF_KEYWORDS.items()}
+    top = max(sc, key=sc.get)
+    if sc[top] == 0 or top == orig:
+        return orig
+    if sc[top] - sc.get(orig, 0) >= FAQ_MARGIN:
+        return top
+    return orig
+
+
+def faq_bf_list(parts: list[str], orig: str) -> list[str]:
+    """FAQ/게시판 문서의 청크별 업무 리스트. 재태깅 비율이 게이트 미만이면 통째로 원 태그."""
+    prelim = [_classify_bf(p, orig) for p in parts]
+    if not parts:
+        return prelim
+    retag_frac = sum(1 for b in prelim if b != orig) / len(parts)
+    return prelim if retag_frac >= FAQ_RETAG_GATE else [orig] * len(parts)
 
 
 def split_faq(text: str) -> list[str]:
@@ -106,14 +161,18 @@ def make_chunks(rec: dict) -> list[dict]:
     text = rec.get("text", "")
     if not text.strip():
         return []
-    parts = split_faq(text) if is_faq(rec) else split_generic(text)
+    faq = is_faq(rec)
+    parts = split_faq(text) if faq else split_generic(text)
+    orig_bf = rec.get("business_function", "")
+    # FAQ/게시판 문서는 청크별 업무 재태깅(게이트 보호), 그 외는 문서 태그 상속
+    bf_list = faq_bf_list(parts, orig_bf) if is_board(rec) else [orig_bf] * len(parts)
     doc_id = rec["doc_id"]
     out = []
     for i, part in enumerate(parts):
         out.append({
             "chunk_id": f"{doc_id}#{i:02d}",
             "parent_doc_id": doc_id,
-            "business_function": rec.get("business_function", ""),
+            "business_function": bf_list[i],
             "sub_category": rec.get("sub_category", ""),
             "page_type": rec.get("page_type", ""),
             "coverage": rec.get("coverage", ""),
@@ -156,6 +215,17 @@ def main() -> None:
         print(f"  본문 비어 스킵: {skipped}")
     faqn = sum(1 for c in all_chunks if is_faq(c))
     print(f"  FAQ 청크: {faqn} · 일반 청크: {len(all_chunks)-faqn}")
+    # 재태깅 요약 (parent 문서 태그와 청크 태그가 다른 청크 수)
+    import collections
+    doc_orig = {}
+    for p in parsed:
+        r = json.loads(pathlib.Path(p).read_text(encoding="utf-8"))
+        doc_orig[r["doc_id"]] = r.get("business_function", "")
+    retagged = [c for c in all_chunks
+                if c["business_function"] != doc_orig.get(c["parent_doc_id"], "")]
+    print(f"  청크별 재태깅: {len(retagged)}건")
+    for d, cnt in collections.Counter(c["parent_doc_id"] for c in retagged).most_common():
+        print(f"    {cnt:2d}  {d} ({doc_orig[d]} → 청크별)")
     lens = [len(c["text"]) for c in all_chunks]
     print(f"  청크 길이 min/avg/max: {min(lens)}/{sum(lens)//len(lens)}/{max(lens)}")
     print("  스키마 검증:", "전건 유효" if not bad else f"위반 {len(bad)}건: {bad[:5]}")
