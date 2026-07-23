@@ -14,10 +14,13 @@ pip install -r requirements.txt
 
 # 0) 가드 로직 검증 (네트워크 불필요)
 python tests/test_guards.py
+# ① 크롤+첨부+데이터셋
+python build_dataset.py --crawl
 
 # 1) 라이브 재수집 → 파싱 → 청킹 → 임베딩 → 인덱스 (원커맨드)
-#    38건 · 요청당 1.5s+지터 폴라이트 · 최초 실행 시 임베딩 모델 ~440MB 다운로드 ≈ 3~5분
-python pipeline.py --rebuild
+#    38건 · 요청당 1.5s+지터 폴라이트 · 최초 실행 시 임베딩 모델 ~440MB 다운로드 ≈ 3~5분   
+# ② 검색 인덱스(캐시 재사용)
+python pipeline.py --manifest crawl_manifest.csv --use-cache --rebuild
 
 # 2) 검색 평가 (hit@1 / hit@3 / MRR, dense vs hybrid) → data/eval_report.md
 python eval.py
