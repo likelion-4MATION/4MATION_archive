@@ -1,7 +1,9 @@
 """chain.py — answer() 4필드 + LLM 질문 분류 라우팅 (07-22 route 세션).
 
 계약(임시 동결, DECISIONS.md 07-22): answer(query) -> {text, sources, confidence, route}
-  - 4필드 축소 금지 · 부가(checks/_meta)만 추가 가능. route 내부 구현만 교체 가능.
+  - 4필드 축소 금지 · 부가(checks/_meta/attachments)만 추가 가능. route 내부 구현만 교체 가능.
+  - attachments(부가): 근거 문서 첨부 목록(청크 태깅 우선 + 문서 폴백, attachments.collect).
+    검색 hits만 소비 → HCX 추가 콜 0. reject 경로는 []. 스키마는 attachments.py._fmt 참조.
   - 새 흐름: **분류(1콜) → [소관밖] 고정 거절 문구 즉시 반환(검색·생성·검증 생략)
     / [정상·모호] 검색 → 생성(1콜) → 검증**. 분류 라벨·사유는 _meta에 기록.
   - confidence: 표시용 dense 코사인 top1("관련 문서 유사도" — 정책 분기 금지, Q12).
@@ -39,6 +41,7 @@ sys.path.insert(0, str(ROOT / "chatbot"))
 load_dotenv(ROOT / ".env")  # 키 값은 어떤 로그·에러에도 싣지 않는다
 
 import answer_checks
+import attachments  # 근거 문서 첨부 조회(청크 태깅 우선 + 문서 폴백) — 순수 로컬, 계약 부가 필드
 
 API_KEY = os.environ["CLOVA_API_KEY"]
 API_URL = os.environ["CLOVA_API_URL"]
@@ -177,6 +180,7 @@ def _reject_result(label: str, reason: str, cls_meta: dict, k: int) -> dict:
         "confidence": 0.0,
         "route": "reject",
         "checks": {"ok": True, "flags": [], "skipped": "고정 거절 문구"},  # 모델 생성물 아님 — 검증 비대상
+        "attachments": [],  # 소관 밖 — 반환 첨부 없음(계약 부가 필드)
         "_meta": {"model": MODEL_NAME, "cls_label": label, "cls_reason": reason, **cls_meta,
                   "latency_ms": cls_meta.get("cls_latency_ms"), "k": k},
     }
@@ -189,7 +193,7 @@ def answer(query: str, k: int = 3) -> dict:
     if route == "reject":
         return _reject_result(label, reason, cls_meta, k)
 
-    hits = get_searcher().search(query, k=k, mode="hybrid")
+    hits = get_searcher().search(query, k=k, mode="hybrid_bf")
     context = "\n\n".join(f"[출처{i}] {h['page_title']}\n{h['text']}" for i, h in enumerate(hits, 1))
     messages = [{"role": "system", "content": SYS_PROMPT_V2},
                 {"role": "user", "content": f"[참고문서]\n{context}\n\n[질문]\n{query}"}]
@@ -203,12 +207,15 @@ def answer(query: str, k: int = 3) -> dict:
 
     checks = (answer_checks.run_all(text, hits, allow_context_urls=False)  # 확정(사람 결정): sources 밖 URL은 본문 유래여도 플래그
               if text is not None else {"ok": False, "flags": ["생성 실패 — 검증 생략"], "results": {}})
+    # 근거 문서 첨부 조회 — 청크 태깅 우선, 없으면 문서 단위 폴백. 검색 hits만 사용(추가 콜 0).
+    attach = attachments.collect(hits)
     return {
         "text": text,
         "sources": sources,
         "confidence": _confidence(query),
         "route": route,
         "checks": checks,           # 부가 필드(계약 외 추가 — 축소 아님)
+        "attachments": attach,      # 부가 필드 — 근거 문서 첨부(다운로드용). 없으면 []
         "_meta": {"model": MODEL_NAME, "cls_label": label, "cls_reason": reason, **cls_meta, **meta, "k": k},
     }
 
