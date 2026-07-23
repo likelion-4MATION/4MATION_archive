@@ -6,8 +6,15 @@
 - FAQ 페이지(page_type/title에 'FAQ')는 질문-답변 1쌍 = 1청크 (크기 무시), '열기' 토글 제거
 - FAQ/게시판 청크는 청크별 business_function 재태깅 (결정론적 키워드 규칙, 게이트 보호)
 
-청크 스키마(11필드): chunk_id · parent_doc_id · business_function · sub_category ·
-  page_type · coverage · variant · source_url · page_title · breadcrumb · text
+청크 스키마(14필드): chunk_id · parent_doc_id · business_function · sub_category ·
+  page_type · coverage · variant · source_url · page_title · breadcrumb · text ·
+  attachments · has_attachments · attachment_count
+
+[doc-agg] 첨부는 두 입도(granularity)로 다룬다:
+- 청크 단위: 첨부 anchor_text가 그 청크 본문에 등장하면 해당 청크에만 부착(정밀).
+- 문서 단위: 페이지 전체 첨부 집합을 data/doc_attachments.json에 doc_id로 보존.
+  Parent-Child 생성이 parent_doc_id로 조회 → 청크 매칭 실패 시에도 서식 누락 방지(안전망).
+business_function 청크별 재태깅은 기존 로직 그대로 유지(첨부 처리와 직교).
 """
 
 from __future__ import annotations
@@ -19,6 +26,7 @@ import sys
 
 PARSED_DIR = "data/parsed"
 OUT_PATH = "data/chunks.jsonl"
+DOC_ATT_PATH = "data/doc_attachments.json"   # [doc-agg] 문서 단위 첨부 집합
 
 CHUNK_SIZE = 800
 OVERLAP = 100
@@ -26,7 +34,8 @@ MIN_CHUNK = 60   # 표 사이 낀 짧은 헤딩/라인 파편 병합 임계
 
 SCHEMA_FIELDS = ["chunk_id", "parent_doc_id", "business_function", "sub_category",
                  "page_type", "coverage", "variant", "source_url",
-                 "page_title", "breadcrumb", "text"]
+                 "page_title", "breadcrumb", "text",
+                 "attachments", "has_attachments", "attachment_count"]
 
 
 def is_faq(rec: dict) -> bool:
@@ -172,6 +181,24 @@ def _merge_small(chunks: list[str], min_len: int = MIN_CHUNK) -> list[str]:
     return out
 
 
+def match_attachments(chunk_text: str, page_attachments: list[dict]) -> list[dict]:
+    """[doc-agg] 페이지 첨부 후보 중 이 청크 본문에 실제 등장하는 것만 반환.
+
+    anchor_text(없으면 name 폴백)가 청크 텍스트에 부분 문자열로 포함되는지로 판단.
+    onclick_dynamic 버튼은 parser.serialize_text 단계에서 제거되어 버튼 자체 텍스트가
+    본문에 안 남으므로, parser._anchor_text가 만든 '감싼 문맥 문구'를 앵커로 쓴다.
+    한계: 앵커가 '다운로드'처럼 일반 문구면 오매칭 가능 → main()에서 미매칭 경고로 확인.
+    """
+    if not page_attachments:
+        return []
+    out = []
+    for att in page_attachments:
+        anchor = att.get("anchor_text") or att.get("name")
+        if anchor and anchor in chunk_text:
+            out.append(att)
+    return out
+
+
 def make_chunks(rec: dict) -> list[dict]:
     text = rec.get("text", "")
     if not text.strip():
@@ -185,8 +212,10 @@ def make_chunks(rec: dict) -> list[dict]:
     ov = FAQ_BF_OVERRIDE.get(doc_id)
     if ov:
         bf_list = [ov(i) for i in range(len(parts))]
+    page_attachments = rec.get("attachments", [])          # [doc-agg] 페이지 첨부 후보
     out = []
     for i, part in enumerate(parts):
+        chunk_atts = match_attachments(part, page_attachments)   # [doc-agg] 청크 단위 부착
         out.append({
             "chunk_id": f"{doc_id}#{i:02d}",
             "parent_doc_id": doc_id,
@@ -199,6 +228,9 @@ def make_chunks(rec: dict) -> list[dict]:
             "page_title": rec.get("page_title", ""),
             "breadcrumb": rec.get("breadcrumb", []),
             "text": part,
+            "attachments": chunk_atts,
+            "has_attachments": bool(chunk_atts),
+            "attachment_count": len(chunk_atts),
         })
     return out
 
@@ -207,17 +239,37 @@ def main() -> None:
     parsed = sorted(glob.glob(f"{PARSED_DIR}/*.json"))
     if not parsed:
         sys.exit(f"파싱 결과 없음: {PARSED_DIR}")
-    all_chunks, skipped = [], []
+    all_chunks, skipped, attach_warn = [], [], []
+    doc_attachments = {}   # [doc-agg] doc_id → 페이지 전체 첨부 집합 (문서 단위 안전망)
+
+    def _att_key(a: dict) -> tuple:
+        return (a.get("name"), a.get("url"), a.get("anchor_text"))
+
     for p in parsed:
         rec = json.loads(pathlib.Path(p).read_text(encoding="utf-8"))
+        page_atts = rec.get("attachments", [])
+        if page_atts:
+            doc_attachments[rec["doc_id"]] = page_atts
         cs = make_chunks(rec)
         if not cs:
             skipped.append(rec["doc_id"])
+        else:
+            # [doc-agg] 페이지 첨부 중 어떤 청크에도 안 붙은 게 있으면 경고
+            matched = {_att_key(a) for c in cs for a in c.get("attachments", [])}
+            unmatched = [a for a in page_atts if _att_key(a) not in matched]
+            if unmatched:
+                attach_warn.append(
+                    f"{rec['doc_id']}: 첨부 {len(unmatched)}건 청크 매칭 실패 — "
+                    f"{[a['name'] for a in unmatched]}")
         all_chunks.extend(cs)
 
     with open(OUT_PATH, "w", encoding="utf-8") as f:
         for c in all_chunks:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
+
+    # [doc-agg] 문서 단위 첨부 집합 저장 (Parent-Child 생성이 parent_doc_id로 조회)
+    pathlib.Path(DOC_ATT_PATH).write_text(
+        json.dumps(doc_attachments, ensure_ascii=False, indent=2), encoding="utf-8")
 
     # 스키마 검증
     bad = []
@@ -233,6 +285,8 @@ def main() -> None:
         print(f"  본문 비어 스킵: {skipped}")
     faqn = sum(1 for c in all_chunks if is_faq(c))
     print(f"  FAQ 청크: {faqn} · 일반 청크: {len(all_chunks)-faqn}")
+    attn = sum(1 for c in all_chunks if c.get("has_attachments"))
+    print(f"  첨부 보유 청크: {attn}건 · 문서단위 첨부 집합: {len(doc_attachments)}문서 → {DOC_ATT_PATH}")
     # 재태깅 요약 (parent 문서 태그와 청크 태그가 다른 청크 수)
     import collections
     doc_orig = {}
@@ -247,6 +301,10 @@ def main() -> None:
     lens = [len(c["text"]) for c in all_chunks]
     print(f"  청크 길이 min/avg/max: {min(lens)}/{sum(lens)//len(lens)}/{max(lens)}")
     print("  스키마 검증:", "전건 유효" if not bad else f"위반 {len(bad)}건: {bad[:5]}")
+    if attach_warn:
+        print("  첨부 매칭 경고:")
+        for w in attach_warn:
+            print("   -", w)
     if bad:
         sys.exit(1)
 

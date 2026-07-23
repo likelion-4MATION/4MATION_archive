@@ -26,7 +26,8 @@ from bs4 import BeautifulSoup
 import config
 # 브레드크럼은 파서의 D1 정제판(.location 직계 li 첫 링크만)을 단일 소스로 사용 (H8).
 # D0 best-effort판(GNB 드롭다운 ~20개 과다 추출)은 07-13 제거.
-from parser import extract_breadcrumb
+# parse_html: lxml→html.parser 폴백 (fins malformed 이중 body 대응, parser.py 참고)
+from parser import extract_breadcrumb, parse_html
 
 # ── 내부 상태 ────────────────────────────────────────────────
 _sessions: dict[str, requests.Session] = {}
@@ -104,7 +105,7 @@ def robots_status(url: str) -> str:
 
 # ── 가드 ─────────────────────────────────────────────────────
 def visible_text(html: str) -> str:
-    soup = BeautifulSoup(html, "lxml")
+    soup = parse_html(html)
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     return re.sub(r"\s+", " ", soup.get_text(" ")).strip()
@@ -167,7 +168,7 @@ def _collect_faq_pages(session: requests.Session, url: str,
             r = session.post(url, data={"curPage": str(cur), "pageSize": "10"},
                              timeout=config.TIMEOUT_SEC)
             r.encoding = r.apparent_encoding or "utf-8"
-            acc = BeautifulSoup(r.text, "lxml").select_one("div.accoWrap")
+            acc = parse_html(r.text, "div.accoWrap").select_one("div.accoWrap")
             if acc is None:
                 continue
             for dl in acc.find_all("dl"):
@@ -214,7 +215,7 @@ def fetch_one(row: dict, out_root: pathlib.Path) -> dict:
             raw: bytes = r.content  # 원본 바이트 보존
             r.encoding = r.apparent_encoding or "utf-8"
             html = r.text
-            soup = BeautifulSoup(html, "lxml")
+            soup = parse_html(html)
             title = extract_title(soup)
             text = visible_text(html)
 
@@ -231,7 +232,7 @@ def fetch_one(row: dict, out_root: pathlib.Path) -> dict:
             if merged:
                 html = merged
                 raw = html.encode(r.encoding or "utf-8")
-                soup = BeautifulSoup(html, "lxml")
+                soup = parse_html(html)
                 text = visible_text(html)
 
             # 저장
