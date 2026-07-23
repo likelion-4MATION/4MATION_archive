@@ -1,0 +1,3 @@
+0780a38d542595c8d43171a858c0609166242405ad9edf37e73578afa454bcd8  data/chunks.jsonl
+d45d13b08bffb1ed885e56c36054d8e47c7f2a6bcec0bff403b875d937b1c3f6  data/testset_natural_400.jsonl
+# HEAD 71f48f1  corpus=215 emb=bge-m3 rrf_k=5 natural400: bf_h3=.945 hybrid_h3=.865 dense_h3=.850 (ys 로컬과 전 지표 일치)
