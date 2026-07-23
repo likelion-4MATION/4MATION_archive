@@ -17,9 +17,9 @@ import pickle
 import faiss
 import numpy as np
 
-MODEL_NAME = "jhgan/ko-sroberta-multitask"
+MODEL_NAME = "BAAI/bge-m3"
 INDEX_DIR = "data/index"
-EMB_DIM = 768
+EMB_DIM = 1024   # bge-m3 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
 
 _model = None
 _kiwi = None
@@ -94,7 +94,11 @@ BF_DOC_CAP = 1     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
 BF_MODE = "soft"
-BF_BOOST = 0.02
+# bge-m3 재튜닝(2026-07-22): 강한 dense에 맞춰 부스트↓·dense가중↑ (eval_rrf_tune A/B, A안).
+BF_BOOST = 0.005          # 소프트부스트 강도(과보정 방지: 0.02→0.005)
+RRF_ALPHA = 0.6           # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
+RRF_K = 5                 # RRF 상수(낮을수록 상위 랭크 신뢰↑). bge-m3 스윕 최적값(60→5).
+FACET_BOOST = 0.03        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산. eval_facet A/B 채택.
 # 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
 # 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
 BF_SHARED_DOCS = {
@@ -116,6 +120,37 @@ def classify_query_bf(query: str):
     if len(ranked) > 1 and ranked[0][1] - ranked[1][1] < QBF_MARGIN:
         return None
     return ranked[0][0]
+
+
+# ── 서브인텐트 패싯(업무 내부 문서타입) 분류 — hybrid_soft 패싯 부스트용 ──────────
+# 질의 인텐트를 결정론 키워드로 잡아, 매칭되는 sub_category 청크에 소량 가산.
+# 문서 병합/창작 없이 기존 sub_category 패싯만 활용. 리랭킹 대체 경량 레버.
+FACET_RULES = [
+    (["서류", "구비", "준비물", "챙기", "제출", "들고", "가지고"], "구비서류"),
+    (["신청방법", "어떻게 신청", "어떻게 해", "온라인", "인터넷", "접수"], "신청방법"),
+    (["대상", "자격", "누가", "해당", "받을 수 있"], "신청대상"),
+    (["절차", "단계", "처리", "과정", "진행"], "절차"),
+    (["유의", "주의", "조심", "알아둘"], "유의사항"),
+    (["방문", "직접 가", "찾아가", "가서"], "방문접수"),
+    (["법령", "규정", "법적"], "관련법령"),
+]
+DIR_RULES = [
+    (["받은", "들어온", "잘못 들어", "수취인", "받아버린"], "착오송금수취인"),
+    (["보낸", "송금한", "이체한", "내가 보", "잘못 보", "잘못 송금"], "착오송금인"),
+]
+
+
+def query_facets(query: str) -> set:
+    """질의 → sub_category에서 찾을 패싯 토큰 집합(문서 타입/방향)."""
+    qn = query.replace(" ", "")
+    facets = set()
+    for kws, tok in FACET_RULES:
+        if any(k.replace(" ", "") in qn for k in kws):
+            facets.add(tok)
+    for kws, tok in DIR_RULES:
+        if any(k.replace(" ", "") in qn for k in kws):
+            facets.add(tok); break
+    return facets
 
 
 class Store:
@@ -168,7 +203,9 @@ class Store:
         n = len(self.chunks)
         embs = self.embs if self.embs is not None else np.zeros((0, EMB_DIM), "float32")
 
-        index = faiss.IndexFlatIP(EMB_DIM)
+        # 인덱스 차원 = 실제 임베딩 차원(모델 교체 대응). 비었으면 EMB_DIM 폴백.
+        dim = int(embs.shape[1]) if embs.shape[0] else EMB_DIM
+        index = faiss.IndexFlatIP(dim)
         if n:
             index.add(embs)
         faiss.write_index(index, str(self.dir / "faiss.index"))
@@ -216,7 +253,7 @@ class Searcher:
         return [(int(i), float(scores[i])) for i in order]
 
     def hybrid(self, query: str, k: int = 10, pool: int = 20,
-               rrf_k: int = 60, bf: str | None = None) -> list[tuple[int, float]]:
+               rrf_k: int = RRF_K, bf: str | None = None) -> list[tuple[int, float]]:
         # bf 지정 시(하드 필터): 후보를 해당 업무 청크로 제한. 필터링으로 후보가
         # 줄므로 pool을 전체로 넓혀 in-bf 청크를 빠짐없이 확보.
         dpool = pool if bf is None else len(self.chunks)
@@ -237,8 +274,9 @@ class Searcher:
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return [(idx, score) for idx, score in ranked]
 
-    def hybrid_soft(self, query: str, k: int = 10, rrf_k: int = 60,
-                    bf: str | None = None, boost: float = 0.0) -> list[tuple[int, float]]:
+    def hybrid_soft(self, query: str, k: int = 10, rrf_k: int = RRF_K,
+                    bf: str | None = None, boost: float = 0.0,
+                    alpha: float = RRF_ALPHA) -> list[tuple[int, float]]:
         """소프트부스트 융합 — 전체 풀 RRF 후 같은 업무 청크에 +boost(제외 없음).
 
         하드필터(hybrid(bf=...))와 달리 타 업무 청크를 남겨두므로, 질의 분류가
@@ -249,15 +287,20 @@ class Searcher:
         s = self.sparse(query, N)
         rrf: dict[int, float] = {}
         for rank, (idx, _) in enumerate(d):
-            rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (rrf_k + rank + 1)
+            rrf[idx] = rrf.get(idx, 0.0) + alpha / (rrf_k + rank + 1)
         for rank, (idx, _) in enumerate(s):
-            rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (rrf_k + rank + 1)
+            rrf[idx] = rrf.get(idx, 0.0) + (1.0 - alpha) / (rrf_k + rank + 1)
         if bf is not None and boost > 0:
             allow = BF_SHARED_DOCS.get(bf, set())
+            facets = query_facets(query) if FACET_BOOST > 0 else set()
             for idx in rrf:
                 c = self.chunks[idx]
                 if c.get("business_function") == bf or c["parent_doc_id"] in allow:
                     rrf[idx] += boost
+                    if facets:
+                        hit = sum(1 for t in facets if t in c.get("sub_category", ""))
+                        if hit:
+                            rrf[idx] += FACET_BOOST * hit
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return ranked
 

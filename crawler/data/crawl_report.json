@@ -1,5 +1,5 @@
 {
-  "run_at": "2026-07-22T02:45:10.923820+00:00",
+  "run_at": "2026-07-22T05:49:25.184539+00:00",
   "manifest": "crawl_manifest.csv",
   "total": 38,
   "counts": {
@@ -25,7 +25,7 @@
       "status": "ok",
       "title": "제도·정책\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\t예금자보호제도\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\t보호한도",
       "http_status": 200,
-      "text_len": 9653
+      "text_len": 9654
     },
     {
       "url": "https://www.kdic.or.kr/sp/dpstrprot/selectProtSystProtSumr.do",

@@ -101,7 +101,7 @@ def contamination_check(searcher: rag.Searcher) -> dict:
 
 def write_report(results: dict[str, dict], rep6: dict, contam: dict) -> None:
     L = ["# 검색 평가 리포트 (D1)", "",
-         f"- 평가셋: {results['dense']['n']}건 · 임베딩: `{rag.MODEL_NAME}` · 융합: RRF(k=60)",
+         f"- 평가셋: {results['dense']['n']}건 · 임베딩: `{rag.MODEL_NAME}` · 융합: RRF(k={rag.RRF_K})",
          "", "## 전체 지표 (dense vs hybrid) — micro(문항 평균)", "",
          "| mode | hit@1 | hit@3 | MRR |", "|---|---|---|---|"]
     for m in MODES:
@@ -162,7 +162,7 @@ def main() -> None:
     contam = contamination_check(searcher)
     write_report(results, rep6, contam)
 
-    print(f"평가셋 {len(testset)}건 · 임베딩 {rag.MODEL_NAME} · RRF(k=60)\n")
+    print(f"평가셋 {len(testset)}건 · 임베딩 {rag.MODEL_NAME} · RRF(k={rag.RRF_K})\n")
     print(f"{'mode':8} {'hit@1':>7} {'hit@3':>7} {'MRR':>7}")
     for m in MODES:
         r = results[m]
