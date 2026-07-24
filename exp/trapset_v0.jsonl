@@ -1,0 +1,20 @@
+{"query": "미국 FDIC의 예금 보호한도는 얼마인가요?", "trap_type": "해외 보호한도", "expected_route": "reject", "근거": "타국 제도 질문 — 코퍼스 무수록, KDIC 소관 밖", "draft": true}
+{"query": "일본에서는 은행이 파산하면 예금을 얼마까지 보호해주나요?", "trap_type": "해외 보호한도", "expected_route": "reject", "근거": "타국 제도 질문 — 소관 밖", "draft": true}
+{"query": "해외 은행에 예치한 달러 예금도 예금보험공사가 보호해주나요?", "trap_type": "해외 보호한도", "expected_route": "reject", "근거": "국내 부보금융회사 아님 — 단 '외화예금은 보호'(제도FAQ)와 경계 혼동 유발 의도", "draft": true}
+{"query": "유럽 은행이 파산하면 예금자 보호는 어떻게 되나요?", "trap_type": "해외 보호한도", "expected_route": "reject", "근거": "타국 제도 질문 — 소관 밖", "draft": true}
+{"query": "국내 은행의 해외지점에 맡긴 예금도 1억원까지 보호되나요?", "trap_type": "해외 보호한도", "expected_route": "reject", "근거": "부보 범위 경계(국외지점) — 코퍼스 근거 불명, 무근거 답변 위험 프로브", "draft": true}
+{"query": "국세 환급금은 어디에서 조회하고 신청하나요?", "trap_type": "타기관 소관", "expected_route": "reject", "근거": "국세청(홈택스) 소관 — '환급금' 어휘가 미수령금과 유사", "draft": true}
+{"query": "보이스피싱 피해금 환급은 예금보험공사에 신청하면 되나요?", "trap_type": "타기관 소관", "expected_route": "reject", "근거": "통신사기피해환급법(금감원·경찰) 소관 — 착오송금 반환지원과 혼동 유발", "draft": true}
+{"query": "주식 투자로 손실을 봤는데 보상받을 수 있나요?", "trap_type": "타기관 소관", "expected_route": "reject", "근거": "투자 손실은 보호 대상 아님 — 예탁금 보호와 경계 혼동 유발", "draft": true}
+{"query": "전세보증금 반환보증은 어떻게 가입하나요?", "trap_type": "타기관 소관", "expected_route": "reject", "근거": "HUG·HF 소관 — '보증/보호' 어휘 중첩", "draft": true}
+{"query": "휴면예금 찾아주기는 예금보험공사에서 하는 건가요?", "trap_type": "타기관 소관", "expected_route": "reject", "근거": "휴면예금은 서민금융진흥원 소관 — 미수령금과 최다 혼동 페어", "draft": true}
+{"query": "착오로 잘못 보낸 돈도 예금자보호 한도 1억원 안에서 보호되나요?", "trap_type": "업무 혼동", "expected_route": "rag+정정", "근거": "착오송금 반환지원 ≠ 예금보험 — 두 제도 구분 설명 기대", "draft": true}
+{"query": "미수령금과 예금보험금은 같은 건가요?", "trap_type": "업무 혼동", "expected_route": "rag+정정", "근거": "미수령금의 종류에 예금보험금 포함 — 포함관계 정정 기대(코퍼스 수록)", "draft": true}
+{"query": "파산한 저축은행에 대출금이 남아 있으면 보험금에서 알아서 상계해주나요?", "trap_type": "업무 혼동", "expected_route": "rag+정정", "근거": "예금-대출 상계 규정 코퍼스 수록(제도FAQ) — 근거 기반 설명 기대", "draft": true}
+{"query": "예금보험공사에서 저금리 신용대출도 해주나요?", "trap_type": "업무 혼동", "expected_route": "reject", "근거": "예보는 대출기관 아님 — 채무조정 안내 업무와 혼동 유발", "draft": true}
+{"query": "은닉재산을 신고하면 미수령금처럼 제 돈을 돌려받는 건가요?", "trap_type": "업무 혼동", "expected_route": "rag+정정", "근거": "포상금 제도 vs 본인 채권 회수 구분 정정 기대", "draft": true}
+{"query": "예금자 보호 한도가 5천만원 맞죠?", "trap_type": "구정보 확인형", "expected_route": "rag+정정", "근거": "현행 1억(2025-09~) — 전야 롤렛 문항의 확인형 변형", "draft": true}
+{"query": "착오송금은 1천만원 이하만 반환 지원되는 거죠?", "trap_type": "구정보 확인형", "expected_route": "rag+정정", "근거": "현행 5만~1억(코퍼스 3문서 일관) — 전야 맨몸 stale 실측 기반", "draft": true}
+{"query": "은닉재산 신고 포상금은 최대 20억원까지라던데 맞나요?", "trap_type": "구정보 확인형", "expected_route": "rag+정정", "근거": "코퍼스 구간표와 불일치 수치 — 전야 맨몸 오답 실측 기반", "draft": true}
+{"query": "퇴직연금은 5천만원까지만 별도로 보호되는 거 맞나요?", "trap_type": "구정보 확인형", "expected_route": "rag+정정", "근거": "별도한도도 1억(제도FAQ #11) — 구한도 확인형", "draft": true}
+{"query": "부실 저축은행 가지급금은 2천만원까지 나오는 게 맞나요?", "trap_type": "구정보 확인형", "expected_route": "rag+정정", "근거": "미수령금FAQ #37 '과거에는 2천만원' 서술 확인형 — 전야 롤렛 원인 청크 직격 프로브", "draft": true}

@@ -51,6 +51,9 @@ crawler/data/raw/
 crawler/data/meta/
 crawler/data/parsed/
 crawler/data/index/
+# [doc-agg] 첨부 실파일 스토리지 — fetch_attachments.py 재생성 산출물이므로 ignore.
+#   data/doc_attachments.json(문서 단위 첨부 메타)은 레포 포함 대상이라 제외 안 함.
+crawler/data/files/
 # D0 재현성 검증용 임시 산출 디렉토리 (run_crawl.py --out run1/run2, verify_rerun.py 입력)
 crawler/run1/
 crawler/run2/

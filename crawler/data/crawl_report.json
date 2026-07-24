@@ -1,51 +1,13 @@
 {
-  "run_at": "2026-07-13T08:10:35.108328+00:00",
+  "run_at": "2026-07-22T05:49:25.184539+00:00",
   "manifest": "crawl_manifest.csv",
   "total": 38,
   "counts": {
-    "ok": 33,
-    "robots_blocked": 5
+    "ok": 38
   },
-  "robots_blocked": [
-    "https://fins.kdic.or.kr/cm/bbs/selectFaqNramtAply.do",
-    "https://fins.kdic.or.kr/cm/bbs/selectFaqMsdrGvbkAply.do",
-    "https://fins.kdic.or.kr/cm/bbs/selectFaqLbltInfoInq.do",
-    "https://fins.kdic.or.kr/cm/bbs/selectFaqCncmPrptDclr.do",
-    "https://fins.kdic.or.kr/cm/bbs/selectFaqTop10.do"
-  ],
+  "robots_blocked": [],
   "error_pages": [],
-  "failures": [
-    {
-      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqNramtAply.do",
-      "doc_id": "kdic-fins-cm-bbs-selectFaqNramtAply",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
-    },
-    {
-      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqMsdrGvbkAply.do",
-      "doc_id": "kdic-fins-cm-bbs-selectFaqMsdrGvbkAply",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
-    },
-    {
-      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqLbltInfoInq.do",
-      "doc_id": "kdic-fins-cm-bbs-selectFaqLbltInfoInq",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
-    },
-    {
-      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqCncmPrptDclr.do",
-      "doc_id": "kdic-fins-cm-bbs-selectFaqCncmPrptDclr",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
-    },
-    {
-      "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqTop10.do",
-      "doc_id": "kdic-fins-cm-bbs-selectFaqTop10",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
-    }
-  ],
+  "failures": [],
   "results": [
     {
       "url": "https://www.kdic.or.kr/sp/dpstrprot/ProtSyst/selectScrn.do",
@@ -63,7 +25,7 @@
       "status": "ok",
       "title": "제도·정책\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\t예금자보호제도\n\t\t\t\t\t\n\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\n\t\t\t\t\t\t보호한도",
       "http_status": 200,
-      "text_len": 9653
+      "text_len": 9654
     },
     {
       "url": "https://www.kdic.or.kr/sp/dpstrprot/selectProtSystProtSumr.do",
@@ -158,8 +120,11 @@
     {
       "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqNramtAply.do",
       "doc_id": "kdic-fins-cm-bbs-selectFaqNramtAply",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
+      "robots_status": "allowed",
+      "status": "ok",
+      "title": "금융안심포털",
+      "http_status": 200,
+      "text_len": 15241
     },
     {
       "url": "https://www.kdic.or.kr/sp/kmrs/kmrsItrd/selectScrn.do",
@@ -263,8 +228,11 @@
     {
       "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqMsdrGvbkAply.do",
       "doc_id": "kdic-fins-cm-bbs-selectFaqMsdrGvbkAply",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
+      "robots_status": "allowed",
+      "status": "ok",
+      "title": "금융안심포털",
+      "http_status": 200,
+      "text_len": 4682
     },
     {
       "url": "https://www.kdic.or.kr/rb/lbltajmt/LbltAjmtSprtLbltAjmtSyst/selectScrn.do",
@@ -323,8 +291,11 @@
     {
       "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqLbltInfoInq.do",
       "doc_id": "kdic-fins-cm-bbs-selectFaqLbltInfoInq",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
+      "robots_status": "allowed",
+      "status": "ok",
+      "title": "금융안심포털",
+      "http_status": 200,
+      "text_len": 3419
     },
     {
       "url": "https://www.kdic.or.kr/sp/sprtfund/SprtFndCncmDclrGudn/selectScrn.do",
@@ -356,14 +327,20 @@
     {
       "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqCncmPrptDclr.do",
       "doc_id": "kdic-fins-cm-bbs-selectFaqCncmPrptDclr",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
+      "robots_status": "allowed",
+      "status": "ok",
+      "title": "금융안심포털",
+      "http_status": 200,
+      "text_len": 5099
     },
     {
       "url": "https://fins.kdic.or.kr/cm/bbs/selectFaqTop10.do",
       "doc_id": "kdic-fins-cm-bbs-selectFaqTop10",
-      "robots_status": "disallowed",
-      "status": "robots_blocked"
+      "robots_status": "allowed",
+      "status": "ok",
+      "title": "금융안심포털",
+      "http_status": 200,
+      "text_len": 4177
     },
     {
       "url": "https://www.kdic.or.kr/sp/sprtfund/SprtFndDebtDlngAplyGudn/selectScrn.do",
