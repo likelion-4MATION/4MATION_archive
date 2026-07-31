@@ -334,7 +334,7 @@ def serialize_text(container) -> str:
 
 
 def parse_html(html: str, selector: str = CONTENT_SELECTOR) -> BeautifulSoup:
-    """lxml 우선 파싱, selector 미탐지 시 html.parser로 재시도.
+    """html.parser로 파싱 (lxml 미사용).
 
     일부 fins.kdic.or.kr 응답은 본인인증 위젯 스니펫이 <html>/<body>째로
     중복 포함돼 온다(malformed). HTML5 스펙(WHATWG §13.2.6.4.7 "in body")은
@@ -343,13 +343,9 @@ def parse_html(html: str, selector: str = CONTENT_SELECTOR) -> BeautifulSoup:
     복구를 못 하고 두 번째(진짜) body를 통째로 버린다 — libxml2 2.14+
     (macOS/manylinux 휠 기본값)부터 HTML5 준수 토크나이저로 정상 복구됨.
     html.parser(표준 라이브러리)는 OS/휠 버전과 무관하게 이 복구를 해낸다.
+    lxml 우선 시도 자체가 유실을 낳으므로 처음부터 html.parser만 쓴다.
     """
-    soup = BeautifulSoup(html, "lxml")
-    if soup.select_one(selector) is None:
-        alt = BeautifulSoup(html, "html.parser")
-        if alt.select_one(selector) is not None:
-            return alt
-    return soup
+    return BeautifulSoup(html, "html.parser")
 
 
 def parse_one(doc_id: str, html: str, meta: dict) -> dict:
