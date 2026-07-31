@@ -17,9 +17,9 @@ import pickle
 import faiss
 import numpy as np
 
-MODEL_NAME = "BAAI/bge-m3"
+MODEL_NAME = "dragonkue/BGE-m3-ko"
 INDEX_DIR = "data/index"
-EMB_DIM = 1024   # bge-m3 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
+EMB_DIM = 1024   # bge-m3-ko 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
 
 _model = None
 _kiwi = None
