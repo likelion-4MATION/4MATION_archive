@@ -1,6 +1,6 @@
 """RAG 검색 공용 모듈 — 임베딩 · dense(FAISS) · BM25(kiwi) · 하이브리드(RRF).
 
-- 임베딩: sentence-transformers `jhgan/ko-sroberta-multitask` (로컬 한국어 SBERT, 768d).
+- 임베딩: sentence-transformers `dragonkue/BGE-m3-ko` (bge-m3 한국어 파인튜닝, 1024d).
 - dense: FAISS IndexFlatIP + 정규화 임베딩(= 코사인).
 - sparse: rank_bm25 BM25Okapi, kiwipiepy 형태소 토큰.
 - 융합: RRF(k=60). 리랭킹·파라미터 튜닝은 D1 범위 밖(D2 판단).
@@ -17,7 +17,7 @@ import pickle
 import faiss
 import numpy as np
 
-MODEL_NAME = "BAAI/bge-m3"
+MODEL_NAME = "dragonkue/BGE-m3-ko"
 INDEX_DIR = "data/index"
 EMB_DIM = 1024   # bge-m3 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
 
