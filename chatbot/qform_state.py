@@ -225,5 +225,38 @@ if __name__ == "__main__":
     print(f"  착오송금 {ms_total}건 중: {fire_ms}건 발동 ({fire_ms/ms_total*100:.1f}%)")
     print(f"  (sub_task=None·타업무는 발동 안 함 → 발동은 '반환신청+미상세'에 국한)")
 
-    print("\n" + ("전체 통과 ✅" if (ok1 and ac2 and ac3) else "실패 — 기대치와 불일치 ⛔"))
-    sys.exit(0 if (ok1 and ac2 and ac3) else 1)
+    # ── AC5. extract() 경유 멀티턴 — 회귀 방지 ──────────────────────────────
+    # AC1 은 sub_task 를 직접 주입하므로 추출기를 안 거친다. 그래서 "qualification 을
+    # 답하면 subject 까지 같이 박혀 2번째 턴이 죽는" 버그(백필)를 못 잡았다.
+    # 여기서는 실제 대화처럼 extract() 를 태워서 2턴이 살아있는지 본다.
+    print("\n── AC5. extract() 경유 멀티턴 (2번째 턴 생존 확인) ──")
+    Q = "착오송금 반환 신청 서류가 뭐예요?"
+    scripted = [
+        # (되묻기 응답, 기대 되묻기 슬롯 순서, 기대 최종 생존 행수)
+        ("대리인이 신청해요", ["qualification", "subject"], 6),
+        ("본인이요", ["qualification"], 1),
+    ]
+    ac5 = True
+    for reply, want_slots, want_surv in scripted:
+        slots = {f: v for f, v in extract(Q).items() if f in SLOT_FIELDS}
+        asked, turns = [], 0
+        while turns < 2:
+            nq = next_question(slots)
+            if not nq:
+                break
+            asked.append(nq["slot"])
+            merged = extract(f"{Q} {reply}", business_function="착오송금 반환 신청")
+            for f in SLOT_FIELDS:                      # 기존 값 보존, 빈 칸만 채움
+                if not slots.get(f) and merged.get(f):
+                    slots[f] = merged[f]
+            turns += 1
+        n = len(survivors(slots))
+        hit = asked == want_slots and n == want_surv
+        ac5 &= hit
+        print(f"  '{reply}' → 되물음 {asked} · 생존 {n}행 "
+              f"(기대 {want_slots} · {want_surv}행)  {'OK' if hit else 'DIFF'}")
+    print("  ※ subject 를 qualification 으로 백필하면 이 AC 가 깨진다 (qform_extract §3 주석)")
+
+    allok = ok1 and ac2 and ac3 and ac5
+    print("\n" + ("전체 통과 ✅" if allok else "실패 — 기대치와 불일치 ⛔"))
+    sys.exit(0 if allok else 1)

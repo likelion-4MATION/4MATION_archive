@@ -164,10 +164,13 @@ def extract(query: str, business_function: str | None = None) -> dict:
         out["qualification"] = "본인"
         hits["qualification"] = self_
 
-    # subject 가 엔티티가 아니면 qualification 으로 채움(본인/대리인)
-    if out["subject"] is None and out["qualification"] in {"본인", "대리인"}:
-        out["subject"] = out["qualification"]
-        hits.setdefault("subject", [f"⟵qualification:{out['qualification']}"])
+    # subject 는 qualification 으로 백필하지 않는다.
+    #   백필하면 "대리인이요" 한 마디에 subject=대리인 이 박혀 조합이 C03(일반 대리)로
+    #   즉시 확정되고, **피대리인 유형(법인·비법인단체·미성년자·군복무자·국외거주)을
+    #   되묻는 2번째 턴이 영영 발동하지 않는다.** 법인 대리인이 사업자등록증 안내를
+    #   못 받는 실패가 여기서 난다 — 큐폼이 잡으려던 바로 그 실패다.
+    #   subject=None 이면 survivors 가 C03~C08 6행으로 남아 T3 가 되묻는다.
+    #   되묻지 못하고 종료돼도 첨부는 6→7건으로 **넓어질 뿐** 좁아지지 않아 안전하다.
 
     # 4) party. sub_task 정의상 확정 → 없으면 방향 어휘.
     if out["sub_task"] in _SUBTASK_PARTY:
