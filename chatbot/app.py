@@ -3,10 +3,14 @@
 동결 계약 answer() -> {text, sources, confidence, route, checks, _meta}만 소비한다.
 confidence 표기는 07-22 결정대로 "관련 문서 유사도"(정답 확신도 아님).
 
-큐폼 배선 (Qform_ver1):
-    질의 → extract(결정론, 콜 0) → next_question?
+큐폼 배선 (Qform_ver2):
+    질의 → classify_query_bf(질의) **1회** → extract(결정론, 콜 0) → next_question?
          ├ 있으면 되묻기(최대 2턴). **되묻기 턴에는 answer()를 부르지 않는다** → HCX 콜 0
          └ 없으면 answer(query, qform=slots) → 첨부 후단 필터
+
+업무 판정(bf)은 **app 층에서 1회 계산해 extract 에 주입한다**(E3). 이 주입점이 나중에
+MoAI 라우터가 꽂힐 자리다. 주입하면 extract 내부 폴백이 돌지 않아 판정이 한 곳에서만
+난다 — 부스트 ON 으로 검색 쿼리가 바뀌어도 슬롯 필터가 보는 업무는 그대로다.
 
 쿼리 부스트(serialize)는 **기본 OFF**. 검색 동작을 바꾸므로 450셋 회귀 수치가 나오기
 전에는 켜지 않는다(§1-4 no numbers, no merge). 사이드바 토글로 시연 중 비교만 가능.
@@ -26,6 +30,7 @@ sys.path.insert(0, str(ROOT / "crawler"))
 import chain
 import qform_state
 from qform_extract import IN_SCOPE_BF, extract
+from rag import classify_query_bf
 
 ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "reject": "소관 밖"}
 MAX_ASK_TURNS = 2                       # D2: 되묻기 상한
@@ -231,5 +236,8 @@ if q:
                 slots[f] = merged[f]
         _step(pending["q"], slots, pending["turns"])
     else:
-        _step(q, extract(q), 0)
+        # 업무 판정 1회 (E3) — 이 자리가 MoAI 라우터 주입점. bf 를 넘기면 extract 내부
+        # 폴백이 돌지 않는다. bf=None(불명 확정)도 그대로 주입해야 재계산이 안 생긴다.
+        bf = classify_query_bf(q)
+        _step(q, extract(q, business_function=bf), 0)
     st.rerun()

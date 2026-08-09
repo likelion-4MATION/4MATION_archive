@@ -10,8 +10,10 @@
 - `sub_task` 우선. 값별 어휘가 좁고 뚜렷하다. 특히 4개 숨은 분기
   (신청철회·매입계약해제·수령계좌변경·대리인변경)는 어휘가 배타적이라 고정밀.
 - 값 표기는 조합 테이블/유상 태깅과 **정확히 일치**해야 조인된다.
-- `business_function`은 MOAI 라우터가 프리필한다. None이면 classify_query_bf() 폴백(결정론).
-  이번 스프린트는 착오송금 전용 — 타 업무로 분류되면 슬롯을 채우지 않는다(스코프 게이트).
+- `business_function`은 MOAI 라우터가 프리필한다. **미지정(인자 생략)이면** classify_query_bf()
+  폴백(결정론). 이번 스프린트는 착오송금 전용 — 타 업무로 분류되면 슬롯을 채우지 않는다(스코프 게이트).
+- **`business_function=None` 을 명시로 넘기면 "이미 계산했고 결과가 불명"** 이라는 뜻이라
+  재계산하지 않는다(호출자 1회 계산 → 주입, E3). 인자 생략(`_UNSET`)과 구별된다.
 
 반환:
     {"party":…, "sub_task":…, "qualification":…, "subject":…, "method":…,
@@ -31,6 +33,16 @@ ALLOWED = {
                 "국외거주 또는 유학생", "법인", "비법인단체"},
     "method": {"온라인", "방문", "우편", "이메일", "팩스"},
 }
+
+
+# 착오송금 도메인 어휘 — 업무 판정이 불명(bf=None)일 때 2차 게이트로만 쓴다.
+# 라우터가 업무를 정해주면 이 목록은 관여하지 않는다.
+_DOMAIN_KW = [
+    "착오송금", "착오 송금", "잘못 송금", "잘못송금", "잘못 보낸", "잘못보낸",
+    "잘못 이체", "잘못이체", "잘못 입금", "잘못입금", "잘못 들어온", "잘못들어온",
+    "오송금", "실수로 송금", "실수로 보낸", "반환지원", "반환 지원",
+    "송금인", "수취인", "엉뚱한 계좌", "다른 사람 계좌",
+]
 
 
 def _nsp(s: str) -> str:
@@ -108,20 +120,30 @@ _METHOD_RULES = {
 }
 
 
-def extract(query: str, business_function: str | None = None) -> dict:
-    """자연어 → 슬롯 dict. LLM 호출 0. 못 잡으면 해당 키 None."""
+# 인자 생략 표식. `business_function=None`(= 계산했으나 불명)과 구별하기 위해 존재한다.
+#   생략      → 여기서 classify_query_bf() 폴백 계산 (기존 동작 보존)
+#   None 명시 → 호출자가 이미 계산했고 '불명' 이었다 → **재계산하지 않는다**
+# 이 구별이 없으면 bf 불명 질의에서 호출자 1회 + 폴백 1회 = 2콜이 되어 E3(1회 계산·주입)이 깨진다.
+_UNSET = object()
+
+
+def extract(query: str, business_function=_UNSET) -> dict:
+    """자연어 → 슬롯 dict. LLM 호출 0. 못 잡으면 해당 키 None.
+
+    business_function: 업무 판정값(str) · 불명 확정(None) · 미지정(생략 → 폴백 계산).
+    """
     hits: dict[str, list[str]] = {}
     out = {"party": None, "sub_task": None, "qualification": None,
            "subject": None, "method": None, "_hits": hits}
 
     # 0) 업무 스코프 게이트 — 착오송금이 아니면 슬롯 채우지 않음
     bf = business_function
-    if bf is None:
+    if bf is _UNSET:
         try:
-            from crawler.rag import classify_query_bf  # 결정론 폴백 (지연 임포트)
+            from rag import classify_query_bf  # 결정론 폴백 (지연 임포트)
             bf = classify_query_bf(query)
         except Exception:
-            bf = None
+            bf = None  # rag 로드 실패 → 아래 도메인 어휘 게이트가 대신 막는다
     out["_bf"] = bf
     if bf is not None and bf != IN_SCOPE_BF:
         out["_scope"] = "out"
@@ -189,6 +211,19 @@ def extract(query: str, business_function: str | None = None) -> dict:
     if chans:
         out["method"] = ";".join(chans)
         hits["method"] = [k for c in chans for k in _hits_any(qn, _METHOD_RULES[c])]
+
+    # 6) 2차 스코프 게이트 — 업무 판정이 '불명'일 때만 발동.
+    #    라우터/폴백이 업무를 못 정한 상태(bf=None)에서는 위 게이트가 통과된다.
+    #    이때 '제도안내'는 어휘가 넓어("얼마","언제까지","뭔가요") 타 업무 질의까지
+    #    빨아들인다 — 예: "예금보호한도가 얼마인가요?" → 제도안내. 그러면 첨부
+    #    후단 필터가 착오송금 조합으로 조인해 **타 업무 서식을 전부 탈락**시킨다.
+    #    그래서 bf 불명이면 착오송금 도메인 어휘를 요구한다.
+    #    나머지 7개 sub_task 는 어휘가 배타적이라 그 자체로 도메인 신호로 본다.
+    if bf is None and not _hits_any(qn, _DOMAIN_KW) and out["sub_task"] in (None, "제도안내"):
+        out["_scope"] = "out"
+        out["_hits"] = {}
+        for f in ("party", "sub_task", "qualification", "subject", "method"):
+            out[f] = None
 
     return out
 
@@ -289,5 +324,27 @@ if __name__ == "__main__":
             viol += 1
             print(f"  ✗ 20 위반 {bad} @ {q[:30]}")
     print(f"  허용값 위반: {viol}건 (기대 0)  {'OK' if viol == 0 else 'DIFF'}")
+
+    # ── AC: 앱 경로(business_function 미지정) 스코프 게이트 — 회귀 방지 ──────
+    # 위 450셋 AC 는 bf 를 **명시로 넘긴다**. 실제 앱(app.py)은 bf 없이 extract(q) 만
+    # 부르므로 폴백 경로를 탄다. 폴백이 죽어 있으면(임포트 실패 등) 게이트가 열려
+    # 타 업무 질의에 착오송금 슬롯이 박히고, 첨부 후단 필터가 타 업무 서식을
+    # 전부 탈락시킨다. 그래서 bf 미지정 경로를 따로 검사한다.
+    print("\n── AC: 앱 경로(bf 미지정) 스코프 게이트 ──")
+    OUT_Q = ["예금보호한도가 얼마인가요?", "채무조정 신청하려면 어떻게 해요?",
+             "은닉재산 신고하면 포상금 얼마나 받나요?", "예금보험금은 어떻게 신청하나요?",
+             "예금보험공사가 뭐하는 곳인가요?", "가지급금이 뭔가요?"]
+    IN_Q = ["착오송금 반환지원 제도가 뭔가요?", "착오송금 한도가 얼마까지예요?",
+            "잘못 보낸 돈 돌려받을 수 있나요?", "착오송금 반환 신청을 철회하고 싶어요",
+            "이체수수료 환급받을 수 있나요?", "반환금 받을 계좌를 바꾸고 싶어요"]
+    SL = ("party", "sub_task", "qualification", "subject", "method")
+    leak = [q for q in OUT_Q if any(extract(q).get(f) for f in SL)]
+    dead = [q for q in IN_Q if not any(extract(q).get(f) for f in SL)]
+    print(f"  타업무 {len(OUT_Q)}건 중 슬롯 누출: {len(leak)}건 (기대 0)  {'OK' if not leak else 'DIFF'}")
+    for q in leak:
+        print(f"    ✗ 누출 @ {q}")
+    print(f"  착오송금 {len(IN_Q)}건 중 슬롯 소실: {len(dead)}건 (기대 0)  {'OK' if not dead else 'DIFF'}")
+    for q in dead:
+        print(f"    ✗ 소실 @ {q}")
 
     print("\n(LLM 호출 0 — 순수 키워드 매핑. 외부 네트워크·모델 호출 없음)")
