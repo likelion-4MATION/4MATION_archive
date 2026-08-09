@@ -8,15 +8,19 @@ confidence 표기는 07-22 결정대로 "관련 문서 유사도"(정답 확신�
          ├ 있으면 되묻기(최대 2턴). **되묻기 턴에는 answer()를 부르지 않는다** → HCX 콜 0
          └ 없으면 answer(query, qform=slots) → 첨부 후단 필터
 
-업무 판정(bf)은 **app 층에서 1회 계산해 extract 에 주입한다**(E3). 이 주입점이 나중에
-MoAI 라우터가 꽂힐 자리다. 주입하면 extract 내부 폴백이 돌지 않아 판정이 한 곳에서만
-난다 — 부스트 ON 으로 검색 쿼리가 바뀌어도 슬롯 필터가 보는 업무는 그대로다.
+상태 전이는 `qform_flow` 가 전담한다. 이 파일은 **렌더와 토글만** 맡는다 —
+갈라둬야 UI 없이 전이 규칙을 실측할 수 있다(`verify_qform_e2e.py`).
+
+업무 판정(bf)은 app 층에서 1회 계산해 extract 에 주입한다(E3). 이 주입점이 나중에
+MoAI 라우터가 꽂힐 자리다. 부스트 ON 으로 검색 쿼리가 바뀌어도 슬롯 필터가 보는
+업무는 그대로다.
 
 쿼리 부스트(serialize)는 **기본 OFF**. 검색 동작을 바꾸므로 450셋 회귀 수치가 나오기
 전에는 켜지 않는다(§1-4 no numbers, no merge). 사이드바 토글로 시연 중 비교만 가능.
+되묻기 문구 모드도 **기본 ⓐ 템플릿(콜 0)**. ⓑ는 비교용이다.
 
 실행: streamlit run chatbot/app.py
-주의: chain.CALL_BUDGET(10콜, 재시도 포함)을 공유 — 소진 시 앱 재시작으로 리셋.
+주의: chain.CALL_BUDGET(70콜, 재시도 포함)을 공유 — 소진 시 앱 재시작으로 리셋.
 """
 import pathlib
 import sys
@@ -28,35 +32,46 @@ sys.path.insert(0, str(ROOT / "chatbot"))
 sys.path.insert(0, str(ROOT / "crawler"))
 
 import chain
+import qform_flow
 import qform_state
-from qform_extract import IN_SCOPE_BF, extract
-from rag import classify_query_bf
 
 ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "reject": "소관 밖"}
-MAX_ASK_TURNS = 2                       # D2: 되묻기 상한
 SLOT_LABEL = {"party": "역할", "sub_task": "세부주제", "qualification": "자격",
               "subject": "주체", "method": "접수수단"}
+ASK_MODES = {"ⓐ 템플릿 (콜 0)": "template", "ⓑ LLM 생성 (턴당 1콜)": "llm"}
 
 st.set_page_config(page_title="KDIC 안내 챗봇 PoC", page_icon="💬")
 st.title("💬 KDIC 안내 챗봇 — PoC")
 st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
 
+st.session_state.setdefault("history", [])
+st.session_state.setdefault("flow", qform_flow.new_state())
+
 with st.sidebar:
     st.subheader("세션 상태")
     st.metric("HCX 콜 (재시도 포함)", f"{chain._calls} / {chain.CALL_BUDGET}")
-    st.caption("되묻기 턴은 콜을 쓰지 않습니다. 예산 소진 시 앱 재시작으로 리셋됩니다.")
+    st.caption("되묻기 턴은 ⓐ 모드에서 콜을 쓰지 않습니다. 예산 소진 시 앱 재시작으로 리셋됩니다.")
     st.divider()
 
     st.subheader("큐폼")
+    st.radio(
+        "되묻기 문구", list(ASK_MODES), index=0, key="ask_mode_label",
+        help="ⓐ는 조합 테이블 값을 CSV 문구에 끼워 넣습니다(LLM 콜 0). "
+             "ⓑ는 같은 판정 결과를 LLM이 한 문장으로 다듬습니다. 값 고정 가드를 어기면 "
+             "ⓐ로 폴백하고 사유를 남깁니다 — 어느 쪽이 나은지는 비교해 보고 정합니다.",
+    )
     st.checkbox(
         "쿼리 부스트 (실험)", value=False, key="boost",
         help="슬롯 값을 검색 쿼리에 덧붙입니다. 검색 동작이 바뀌므로 450셋 회귀 수치가 "
              "나오기 전까지는 기본 OFF입니다. 첨부 후단 필터는 토글과 무관하게 항상 동작합니다.",
     )
+    st.checkbox("트레이스 패널", value=True, key="show_trace",
+                help="질의 1건이 어느 층에서 어떻게 갈렸는지 보여줍니다.")
     st.caption("첨부 후단 필터는 항상 켜져 있습니다 (슬롯이 비면 자동으로 기존 동작).")
+
     if st.button("대화 초기화"):
         st.session_state.history = []
-        st.session_state.pending = None
+        st.session_state.flow = qform_flow.new_state()
         st.rerun()
 
     st.divider()
@@ -64,6 +79,9 @@ with st.sidebar:
         "표시되는 유사도는 질문-문서 관련도이며 정답 확신도가 아닙니다. "
         "검증 플래그는 참고용이며 답변을 차단하지 않습니다."
     )
+
+ASK_MODE = ASK_MODES[st.session_state.get("ask_mode_label", "ⓐ 템플릿 (콜 0)")]
+BOOST = bool(st.session_state.get("boost"))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -75,14 +93,10 @@ def _fmt_size(n) -> str:
     return f" · {n / 1024:.0f}KB" if n < 1024 * 1024 else f" · {n / 1024 / 1024:.1f}MB"
 
 
-def _clean(slots: dict) -> dict:
-    """추출기 부가키(_hits/_bf/_scope) 제거 — answer()·survivors()에 넘길 순수 슬롯."""
-    return {f: slots.get(f) for f in qform_state.SLOT_FIELDS}
-
-
 def render_slots(slots: dict) -> None:
     """채워진 슬롯 노출 — 기획서 §7 '조용히 반영 금지'. 사용자가 보고 고칠 수 있어야 한다."""
-    filled = [(SLOT_LABEL.get(f, f), v) for f, v in _clean(slots).items() if v]
+    filled = [(SLOT_LABEL.get(f, f), v) for f, v in slots.items()
+              if f in qform_state.SLOT_FIELDS and v]
     if not filled:
         return
     st.caption("🎯 " + " · ".join(f"{lab} **{v}**" for lab, v in filled))
@@ -154,90 +168,65 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
                 st.markdown(f"- {f}")
 
 
-# ══════════════════════════════════════════════════════════════════════════
-# 큐폼 상태 전이
-# ══════════════════════════════════════════════════════════════════════════
-def _finalize(base_q: str, slots: dict) -> None:
-    """되묻기 종료 → 검색·생성. 부스트 ON이면 슬롯을 쿼리에 직렬화해 덧붙인다."""
-    slots = _clean(slots)
-    search_q, shown = base_q, None
-    if st.session_state.get("boost"):
-        extra = qform_state.serialize(slots)
-        if extra:
-            search_q = f"{base_q} {extra}"
-            shown = search_q
-    with st.spinner("문서 검색·답변 생성 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
-        r = chain.answer(search_q, qform=slots)
-    st.session_state.history.append(
-        {"role": "answer", "r": r, "slots": slots, "search_q": shown}
-    )
-    st.session_state.pending = None
+def render_ask(turn: dict) -> None:
+    """되묻기 턴 — 문구 + 남은 후보. ⓐ/ⓑ 구별과 폴백 사유를 캡션에 남긴다."""
+    st.markdown(turn["prompt"])
+    tag = "ⓐ 템플릿" if turn["mode"] == "template" else f"ⓑ LLM · 콜 {turn['calls']}"
+    if turn.get("fallback"):
+        tag += f" → ⓐ 폴백 ({turn['fallback']})"
+    st.caption(f"남은 후보 {turn['remaining']}개 · 건너뛰어도 답변합니다 · {tag}")
 
 
-def _ask(base_q: str, slots: dict, nq: dict, turns: int) -> None:
-    st.session_state.pending = {
-        "q": base_q, "slots": _clean(slots), "turns": turns,
-        "prompt": nq["prompt"], "remaining": nq["remaining"],
-    }
-    st.session_state.history.append(
-        {"role": "ask", "prompt": nq["prompt"], "remaining": nq["remaining"]}
-    )
-
-
-def _step(base_q: str, slots: dict, turns: int) -> None:
-    """되묻기 판정 후 분기. turns 상한 도달 시 강제 종료."""
-    nq = qform_state.next_question(_clean(slots)) if turns < MAX_ASK_TURNS else None
-    if nq:
-        _ask(base_q, slots, nq, turns + 1)
+def record(ev: dict) -> None:
+    """전이 이벤트를 히스토리에 적재 — 렌더가 읽을 형태로만 옮긴다."""
+    if ev["kind"] == "ask":
+        a = ev["ask"]
+        st.session_state.history.append(
+            {"role": "ask", "prompt": ev["prompt"], "remaining": ev["remaining"],
+             "mode": a["mode"], "calls": a["calls"], "fallback": a["fallback_reason"]}
+        )
     else:
-        _finalize(base_q, slots)
+        st.session_state.history.append(
+            {"role": "answer", "r": ev["result"], "slots": ev["slots"],
+             "search_q": ev["boosted"]}
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # 본문
 # ══════════════════════════════════════════════════════════════════════════
-st.session_state.setdefault("history", [])
-st.session_state.setdefault("pending", None)
-
 for ti, turn in enumerate(st.session_state.history):
     if turn["role"] == "user":
         with st.chat_message("user"):
             st.markdown(turn["text"])
     elif turn["role"] == "ask":
         with st.chat_message("assistant"):
-            st.markdown(turn["prompt"])
-            st.caption(f"남은 후보 {turn['remaining']}개 · 건너뛰어도 답변합니다")
+            render_ask(turn)
     else:
         with st.chat_message("assistant"):
             render_answer(turn["r"], key_prefix=f"h{ti}",
                           slots=turn.get("slots"), search_q=turn.get("search_q"))
 
-pending = st.session_state.pending
+flow = st.session_state.flow
+pending = flow["pending_slot"]
+
 skip = False
 if pending:
     # 탈출구 상시 노출 — 기획서 §4. 미선택(null)은 결함이 아니라 정상 입력이다.
-    skip = st.button("잘 모르겠어요 — 이대로 답변받기", key=f"skip-{pending['turns']}")
+    skip = st.button("잘 모르겠어요 — 이대로 답변받기", key=f"skip-{flow['ask_turn']}")
 
 q = st.chat_input("예: 착오송금 반환 신청 서류가 뭐예요?")
 
 if skip and pending:
-    _finalize(pending["q"], pending["slots"])
+    with st.spinner("문서 검색·답변 생성 중…"):
+        record(qform_flow.skip(flow, boost=BOOST))
     st.rerun()
 
 if q:
     st.session_state.history.append({"role": "user", "text": q})
-    if pending:
-        # 되묻기 응답 — 후속 답변만으로는 스코프 게이트에 막히므로 원질의와 합쳐
-        # business_function 을 명시로 넘긴다.
-        merged = extract(f"{pending['q']} {q}", business_function=IN_SCOPE_BF)
-        slots = {**pending["slots"]}
-        for f in qform_state.SLOT_FIELDS:          # 기존 값 보존, 빈 칸만 채움
-            if not slots.get(f) and merged.get(f):
-                slots[f] = merged[f]
-        _step(pending["q"], slots, pending["turns"])
-    else:
-        # 업무 판정 1회 (E3) — 이 자리가 MoAI 라우터 주입점. bf 를 넘기면 extract 내부
-        # 폴백이 돌지 않는다. bf=None(불명 확정)도 그대로 주입해야 재계산이 안 생긴다.
-        bf = classify_query_bf(q)
-        _step(q, extract(q, business_function=bf), 0)
+    # 되묻기 턴이면 즉시 끝나고, 답변 턴이면 검색·생성이 돈다. 어느 쪽인지는 전이가 정한다.
+    with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
+        step = qform_flow.reply if pending else qform_flow.start
+        ev = step(flow, q, ask_mode=ASK_MODE, boost=BOOST)
+    record(ev)
     st.rerun()
