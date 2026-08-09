@@ -34,6 +34,7 @@ sys.path.insert(0, str(ROOT / "crawler"))
 import chain
 import qform_flow
 import qform_state
+import qform_trace
 
 ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "reject": "소관 밖"}
 SLOT_LABEL = {"party": "역할", "sub_task": "세부주제", "qualification": "자격",
@@ -177,18 +178,38 @@ def render_ask(turn: dict) -> None:
     st.caption(f"남은 후보 {turn['remaining']}개 · 건너뛰어도 답변합니다 · {tag}")
 
 
-def record(ev: dict) -> None:
+def build_trace(ev: dict, hcx_calls: int) -> dict | None:
+    """트레이스 조립 — **app 층에서만** 한다(E2). 파이프라인에는 계측이 없다.
+
+    끄면 이 함수가 아예 안 불린다. 켜도 `answer()` 는 이미 끝난 뒤라 답변·첨부·콜수에
+    개입할 지점이 없다. 필요한 값은 반환값 읽기 또는 결정론 재호출로 얻는다.
+    """
+    if not st.session_state.get("show_trace"):
+        return None
+    flow = st.session_state.flow
+    try:
+        return qform_trace.collect(
+            flow["base_q"], qform_trace.bf_debug(flow["base_q"]), flow["slots_raw"],
+            ev.get("survivors"), ev.get("ask"), ev.get("result"), BOOST,
+            search_q=ev.get("search_q"), hcx_calls=hcx_calls, ask_turn=flow["ask_turn"],
+        )
+    except Exception as e:  # noqa: BLE001  트레이스가 대화를 죽이면 안 된다
+        return {"error": f"{type(e).__name__}: {e}", "layers": {}}
+
+
+def record(ev: dict, trace: dict | None = None) -> None:
     """전이 이벤트를 히스토리에 적재 — 렌더가 읽을 형태로만 옮긴다."""
     if ev["kind"] == "ask":
         a = ev["ask"]
         st.session_state.history.append(
             {"role": "ask", "prompt": ev["prompt"], "remaining": ev["remaining"],
-             "mode": a["mode"], "calls": a["calls"], "fallback": a["fallback_reason"]}
+             "mode": a["mode"], "calls": a["calls"], "fallback": a["fallback_reason"],
+             "trace": trace}
         )
     else:
         st.session_state.history.append(
             {"role": "answer", "r": ev["result"], "slots": ev["slots"],
-             "search_q": ev["boosted"]}
+             "search_q": ev["boosted"], "trace": trace}
         )
 
 
@@ -219,14 +240,18 @@ q = st.chat_input("예: 착오송금 반환 신청 서류가 뭐예요?")
 
 if skip and pending:
     with st.spinner("문서 검색·답변 생성 중…"):
-        record(qform_flow.skip(flow, boost=BOOST))
+        c0 = chain._calls
+        ev = qform_flow.skip(flow, boost=BOOST)
+        record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
 if q:
     st.session_state.history.append({"role": "user", "text": q})
     # 되묻기 턴이면 즉시 끝나고, 답변 턴이면 검색·생성이 돈다. 어느 쪽인지는 전이가 정한다.
     with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
+        c0 = chain._calls
         step = qform_flow.reply if pending else qform_flow.start
         ev = step(flow, q, ask_mode=ASK_MODE, boost=BOOST)
-    record(ev)
+        # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
+        record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()

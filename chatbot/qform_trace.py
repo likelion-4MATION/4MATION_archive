@@ -114,7 +114,198 @@ def bf_debug(query: str) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 검증 하니스 (python3 chatbot/qform_trace.py) — T1 AC 실측 출력
+# T5 — 층별 트레이스 수집
+# ══════════════════════════════════════════════════════════════════════════
+# 층 순서는 **T6 패널 카드 · T7 §1 다이어그램과 1:1 대응**한다. 여기서 바꾸면 셋 다 바꾼다.
+LAYER_ORDER = ("gate", "bf", "slots", "combos", "ask",
+               "search", "generate", "attachments", "checks")
+LAYER_LABEL = {"gate": "소관 게이트", "bf": "업무 신호", "slots": "슬롯 추출",
+               "combos": "조합 생존", "ask": "되묻기", "search": "검색",
+               "generate": "생성", "attachments": "첨부", "checks": "검증"}
+# 결정론 구간(LLM 콜 0) — 패널의 "콜 0" 배지 대상
+DETERMINISTIC = ("bf", "slots", "combos", "search", "attachments", "checks")
+
+SKIP_PENDING = "생략 (되묻기 턴 — 미실행)"
+SKIP_REJECT = "생략 (소관 밖)"
+
+
+def bf_debug_of(query: str) -> dict:
+    """`bf_debug` 의 별칭 — `collect()` 안에서 동명 파라미터에 가려지는 것을 피한다."""
+    return bf_debug(query)
+
+
+def _default_search(query: str, k: int = 3):
+    """검색 hits 조달 — `answer()` 가 hits 를 돌려주지 않아 **결정론 재호출**로 얻는다.
+
+    같은 쿼리·같은 k·같은 mode 라 `answer()` 내부 결과와 동일하다. LLM 콜 0
+    (`rag.py` 무수정 원칙에서 허용하는 순수 함수 재호출 — CLAUDE.md §2-1).
+    """
+    import chain
+    return chain.get_searcher().search(query, k=k, mode="hybrid_bf")
+
+
+def _forms(atts: list) -> set:
+    """확장자를 접은 canonical 서식 집합 (hwp/pdf 중복 접기 — verify_qform_integration 동일)."""
+    return {pathlib.Path(a["orig_filename"]).stem for a in atts if a.get("orig_filename")}
+
+
+def _no_ask_reason(slots: dict, surv: list, turn: int | None) -> str:
+    """되묻지 **않은** 사유를 결정론으로 되짚는다 — 패널에서 '왜 안 물었나'가 보여야 한다."""
+    import qform_state
+    if not slots.get("sub_task"):
+        return "sub_task 미상 → 되묻지 않음 (D2 · 단문 오발동 방지)"
+    if len(surv) <= 1:
+        return f"생존 {len(surv)}행 — 더 좁힐 것이 없음"
+    if turn is not None and turn >= 2:
+        return "되묻기 상한 2턴 도달 → 미채움이어도 진행"
+    if qform_state.next_question(slots) is None:
+        return "되물을 수 있는 슬롯 없음 (조건부 게이트 미통과)"
+    return "탈출구 — 사용자가 건너뜀"
+
+
+def collect(query: str, bf_debug: dict, slots: dict, surv: list | None,
+            ask: dict | None, result: dict | None, boost_on: bool, *,
+            search_q: str | None = None, hits: list | None = None,
+            search_fn=None, hcx_calls: int | None = None,
+            ask_turn: int | None = None) -> dict:
+    """질의 1건의 층별 트레이스를 조립한다. **LLM 콜 0.**
+
+    파이프라인에 계측을 심지 않는다(E2). 값은 셋 중 하나로만 얻는다 —
+    ① `answer()` 반환에서 읽기 ② `extract()` 반환에서 읽기 ③ 결정론 함수 재호출.
+
+    result=None  되묻기 턴 (아직 `answer()` 를 부르지 않았다) → 검색 이후 층은 "생략"
+    route=reject 소관 밖 → 검색·생성·첨부 층은 "생략"
+    """
+    import attachments as _att
+    import qform_state
+
+    meta = (result or {}).get("_meta") or {}
+    route = (result or {}).get("route")
+    pending = result is None
+    rejected = route == "reject"
+    search_q = search_q or query
+    raw = slots or {}
+    clean = {f: raw.get(f) for f in qform_state.SLOT_FIELDS}
+    surv = qform_state.survivors(clean) if surv is None else surv
+
+    L: dict[str, dict] = {}
+
+    # ── 소관 게이트 — `_meta` 읽기 ──────────────────────────────────────────
+    L["gate"] = {
+        "status": SKIP_PENDING if pending else "수집",
+        "label": meta.get("cls_label"), "reason": meta.get("cls_reason"),
+        "route": route, "parse_fail": meta.get("cls_parse_fail") or 0,
+        "latency_ms": meta.get("cls_latency_ms"),
+        "calls": meta.get("cls_calls") or 0,
+    }
+
+    # ── 업무 신호 — rag 상수로 재계산 (T1) ─────────────────────────────────
+    L["bf"] = {"status": "수집", "calls": 0, **(bf_debug or bf_debug_of(query))}
+
+    # ── 슬롯 추출 — `extract()` 반환 읽기 ──────────────────────────────────
+    L["slots"] = {
+        "status": "수집", "calls": 0, "slots": clean,
+        "triggers": raw.get("_hits") or {}, "scope": raw.get("_scope"),
+        "bf_used": raw.get("_bf"), "filled": sum(1 for v in clean.values() if v),
+    }
+
+    # ── 조합 생존 — `survivors()` 재호출로 추이 재구성 ──────────────────────
+    trail, acc = [("전체", len(qform_state._COMBOS))], {}
+    for f in qform_state.SLOT_FIELDS:
+        if clean.get(f):
+            acc[f] = clean[f]
+            trail.append((f"{f}={clean[f]}", len(qform_state.survivors(acc))))
+    L["combos"] = {
+        "status": "수집", "calls": 0, "total": len(qform_state._COMBOS),
+        "trail": trail, "remaining": len(surv),
+        "combo_ids": [c["combo_id"] for c in surv],
+    }
+
+    # ── 되묻기 — T3·T4 반환 읽기 ───────────────────────────────────────────
+    if ask:
+        L["ask"] = {
+            "status": "수집", "fired": True, "slot": ask.get("slot"),
+            "turn": ask_turn, "remaining": ask.get("remaining"),
+            "reason": f"생존 {ask.get('remaining')}행 · {ask.get('slot')} 미상 → 되물음",
+            "mode": ask.get("mode"), "calls": ask.get("calls") or 0,
+            "fallback_reason": ask.get("fallback_reason"),
+            "values": ask.get("values"), "prompt": ask.get("text"),
+        }
+    else:
+        L["ask"] = {
+            "status": "수집", "fired": False, "slot": None, "turn": ask_turn,
+            "remaining": len(surv), "reason": _no_ask_reason(clean, surv, ask_turn),
+            "mode": None, "calls": 0, "fallback_reason": None,
+            "values": [], "prompt": None,
+        }
+
+    # ── 검색 — 결정론 재호출 (LLM 콜 0) ───────────────────────────────────
+    if pending or rejected:
+        L["search"] = {"status": SKIP_PENDING if pending else SKIP_REJECT, "calls": 0,
+                       "docs": [], "k": meta.get("k"), "boost_applied": bool(boost_on),
+                       "search_q": search_q, "search_bf": None, "bf_drift": False}
+        hits = hits or []
+    else:
+        if hits is None:
+            hits = (search_fn or _default_search)(search_q, meta.get("k") or 3)
+        # 부스트 ON 이면 검색측은 **바뀐 쿼리**로 업무를 다시 분류한다(rag.search 내부).
+        # app 이 쓴 bf 와 갈릴 수 있어 두 값을 나란히 남긴다 — 패널이 거짓말하지 않도록.
+        s_bf = bf_debug_of(search_q)["bf"]
+        L["search"] = {
+            "status": "수집", "calls": 0, "k": meta.get("k") or 3,
+            "boost_applied": bool(boost_on), "search_q": search_q,
+            "search_bf": s_bf, "bf_drift": s_bf != (bf_debug or {}).get("bf"),
+            "docs": [{"title": h.get("page_title"), "doc_id": h.get("parent_doc_id"),
+                      "score": h.get("_score"), "business_function": h.get("business_function"),
+                      "sub_category": h.get("sub_category")} for h in hits],
+        }
+
+    # ── 생성 — `_meta` 읽기 + app 층 콜 회계 ───────────────────────────────
+    gate_c, ask_c = L["gate"]["calls"], L["ask"]["calls"]
+    gen_c = None if hcx_calls is None else max(0, hcx_calls - gate_c - ask_c)
+    text = (result or {}).get("text")
+    L["generate"] = {
+        "status": SKIP_PENDING if pending else (SKIP_REJECT if rejected else "수집"),
+        "calls": 0 if rejected else gen_c, "latency_ms": meta.get("latency_ms"),
+        "hcx_status": meta.get("hcx_status"), "error": meta.get("error"),
+        "chars": len(text) if isinstance(text, str) else None,
+    }
+
+    # ── 첨부 — `collect(hits, qform=None)` 재호출로 필터 전/후 대비 ─────────
+    if pending or rejected:
+        L["attachments"] = {"status": SKIP_PENDING if pending else SKIP_REJECT, "calls": 0,
+                            "before_forms": None, "before_files": None,
+                            "after_forms": None, "after_files": None, "final": []}
+    else:
+        before = _att.collect(hits, qform=None)
+        after = result.get("attachments") or []
+        L["attachments"] = {
+            "status": "수집", "calls": 0,
+            "before_forms": len(_forms(before)), "before_files": len(before),
+            "after_forms": len(_forms(after)), "after_files": len(after),
+            "final": [{"doc_title": a.get("doc_title"), "label": a.get("label"),
+                       "file": a.get("orig_filename")} for a in after],
+        }
+
+    # ── 검증 — `checks` 읽기 ───────────────────────────────────────────────
+    checks = (result or {}).get("checks") or {}
+    L["checks"] = {
+        "status": SKIP_PENDING if pending else "수집", "calls": 0,
+        "ok": checks.get("ok"), "flags": checks.get("flags") or [],
+        "skipped": checks.get("skipped"),
+    }
+
+    return {
+        "query": query, "search_q": search_q, "boost_on": bool(boost_on),
+        "pending": pending, "rejected": rejected,
+        "calls": {"total": hcx_calls, "gate": gate_c, "ask": ask_c, "generate": gen_c,
+                  "deterministic": list(DETERMINISTIC)},
+        "layers": {k: L[k] for k in LAYER_ORDER},
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 검증 하니스 (python3 chatbot/qform_trace.py) — T1·T5 AC 실측 출력
 # ══════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     import hashlib
@@ -297,12 +488,213 @@ if __name__ == "__main__":
             print(f"      {d['scores'][bf]:>2}점  {bf:12} ← {trig}")
 
     # ── 판정 ────────────────────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════
+    # T5 — 트레이스 수집기
+    # ══════════════════════════════════════════════════════════════════════
+    print("\n" + "═" * 68)
+    print("T5 — 층별 트레이스 수집")
+    print("═" * 68)
+
+    import ast
+
+    import attachments as _att
+    import qform_ask
+    import qform_flow
+
+    # 고정 hits — 착오송금 첨부 보유 3문서의 실제 청크 (verify_qform_integration 동일 기준)
+    MS_DOCS = {"kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn",
+               "kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn",
+               "kdic-fins-ir-aplygudn-MtrsVstRcptGudn-selectScrn"}
+    FIXED_HITS = [json.loads(l) for l in
+                  (_BASE / "crawler" / "data" / "chunks.jsonl").open(encoding="utf-8")
+                  if json.loads(l)["parent_doc_id"] in MS_DOCS]
+
+    search_calls = [0]
+
+    def stub_search(q, k=3):
+        # 실앱에서는 트레이스의 재호출과 answer() 내부 검색이 **같은 hits** 를 낸다
+        # (같은 쿼리·k·mode·결정론). 스텁도 stub_answer 와 같은 집합을 써야 필터 전/후가
+        # 같은 기준으로 비교된다 — 어긋나면 "필터 후가 더 많다" 같은 거짓 대비가 나온다.
+        search_calls[0] += 1
+        return FIXED_HITS
+
+    ANSWER_CALLS: list[tuple] = []
+
+    def stub_answer(q, qform):
+        ANSWER_CALLS.append((q, dict(qform)))
+        return {"text": "(스텁 답변)", "sources": [], "confidence": 0.5, "route": "rag",
+                "checks": {"ok": True, "flags": []},
+                "attachments": _att.collect(FIXED_HITS, qform=qform),
+                "_meta": {"cls_label": "정상", "cls_reason": "소관 업무", "cls_calls": 1,
+                          "cls_parse_fail": 0, "cls_latency_ms": 300, "hcx_status": 200,
+                          "latency_ms": 1200, "error": None, "k": 3, "qform": qform}}
+
+    def trace_of(state, ev, *, boost=False, hcx_calls=2):
+        """app 층이 할 조립을 그대로 재현 — 전이 이벤트 + 상태에서 트레이스를 만든다."""
+        return collect(
+            state["base_q"], bf_debug(state["base_q"]), state["slots_raw"],
+            ev.get("survivors"), ev.get("ask"), ev.get("result"), boost,
+            search_q=ev.get("search_q"), search_fn=stub_search,
+            hcx_calls=hcx_calls, ask_turn=state["ask_turn"])
+
+    # ── AC1. 트레이스 수집이 HCX 콜을 늘리지 않음 ───────────────────────────
+    print("\n── AC1. 트레이스 수집 = LLM 콜 0 ──")
+    tsrc = ast.parse((_BASE / "chatbot" / "qform_trace.py").read_text(encoding="utf-8"))
+    main_ids = set()
+    for n in tsrc.body:
+        if isinstance(n, ast.If) and isinstance(n.test, ast.Compare) \
+                and getattr(n.test.left, "id", None) == "__name__":
+            main_ids.update(id(x) for x in ast.walk(n))
+    banned_calls = []
+    for n in ast.walk(tsrc):
+        if isinstance(n, ast.Call) and id(n) not in main_ids:
+            f = n.func
+            nm = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
+            if nm in ("_hcx", "answer", "classify", "post"):
+                banned_calls.append((nm, n.lineno))
+    ANSWER_CALLS.clear()
+    st_a = qform_flow.new_state()
+    ev_a = qform_flow.start(st_a, "착오송금 반환 신청 서류가 뭐예요?",
+                            classify_fn=rag.classify_query_bf, answer_fn=stub_answer)
+    before_ans = len(ANSWER_CALLS)
+    tr_a = trace_of(st_a, ev_a)
+    ac1t = not banned_calls and len(ANSWER_CALLS) == before_ans
+    print(f"  런타임 코드 내 LLM 호출({', '.join(('_hcx', 'answer', 'classify'))}) : "
+          f"{len(banned_calls)}곳 (기대 0)")
+    print(f"  collect() 실행 중 answer() 추가 호출: {len(ANSWER_CALLS) - before_ans}회 (기대 0)")
+    print(f"  검색 재호출 {search_calls[0]}회 — 결정론(rag 순수 함수), LLM 콜 아님"
+          f"  → {'OK' if ac1t else 'DIFF ⛔'}")
+    if not ac1t:
+        fails.append(("T5-AC1", "LLM 콜 0", f"{banned_calls}"))
+
+    # ── AC2. rag.py · chain.py 무변경 ──────────────────────────────────────
+    print("\n── AC2. rag.py · chain.py 무변경 ──")
+    for rel in ("crawler/rag.py", "chatbot/chain.py"):
+        b = (_BASE / rel).read_bytes()
+        print(f"  {rel:18} sha256 {hashlib.sha256(b).hexdigest()[:16]} · {len(b)}bytes")
+    print("  이 모듈은 chain 에서 get_searcher() 만 **읽기 호출**한다 (계측 심기·리턴값 추가 없음)")
+    print("  → 사람 확인: `git diff crawler/rag.py chatbot/chain.py` 가 비어 있을 것")
+
+    # ── AC3. 트레이스 ON/OFF 시 답변·첨부·콜수 동일 ────────────────────────
+    print("\n── AC3. 트레이스 ON/OFF — 답변·첨부·콜수 동일 ──")
+    SCRIPT = ["착오송금 반환 신청하려는데 필요한 서류 알려주세요", "대리인이 신청해요", "법인이요"]
+
+    def replay(trace_on: bool):
+        ANSWER_CALLS.clear()
+        s, evs, trs = qform_flow.new_state(), [], []
+        ev = qform_flow.start(s, SCRIPT[0], classify_fn=rag.classify_query_bf,
+                              answer_fn=stub_answer)
+        evs.append(ev)
+        if trace_on:
+            trs.append(trace_of(s, ev))
+        for rep in SCRIPT[1:]:
+            if ev["kind"] != "ask":
+                break
+            ev = qform_flow.reply(s, rep, answer_fn=stub_answer)
+            evs.append(ev)
+            if trace_on:
+                trs.append(trace_of(s, ev))
+        last = evs[-1]
+        return (list(ANSWER_CALLS), last["result"]["text"],
+                sorted((a["doc_id"], a["orig_filename"]) for a in last["result"]["attachments"]),
+                trs)
+
+    off_calls, off_text, off_att, _ = replay(False)
+    on_calls, on_text, on_att, traces = replay(True)
+    ac3 = off_calls == on_calls and off_text == on_text and off_att == on_att
+    print(f"  answer() 호출 인자 동일: {off_calls == on_calls} · 답변 동일: {off_text == on_text}")
+    print(f"  첨부 동일: {off_att == on_att} ({len(on_att)}건) · answer 콜수 {len(off_calls)}={len(on_calls)}"
+          f"  → {'OK' if ac3 else 'DIFF ⛔'}")
+    print("  (트레이스는 answer() **이후**에 반환값으로 조립된다 — 파이프라인에 개입 지점이 없다)")
+    if not ac3:
+        fails.append(("T5-AC3", "ON/OFF 동일", "상이"))
+
+    # ── AC4. reject 경로 부분 트레이스 ─────────────────────────────────────
+    print("\n── AC4. reject 경로 — 크래시 없이 부분 트레이스 ──")
+    reject_result = {"text": "죄송합니다…", "sources": [], "confidence": 0.0, "route": "reject",
+                     "checks": {"ok": True, "flags": [], "skipped": "고정 거절 문구"},
+                     "attachments": [],
+                     "_meta": {"cls_label": "소관밖", "cls_reason": "타기관 소관",
+                               "cls_calls": 1, "cls_parse_fail": 0, "cls_latency_ms": 280,
+                               "latency_ms": 280, "k": 3}}
+    QR = "미국 은행에 넣은 예금도 보호되나요?"
+    tr_r = collect(QR, bf_debug(QR), extract(QR, business_function=rag.classify_query_bf(QR)),
+                   None, None, reject_result, False, search_fn=stub_search, hcx_calls=1)
+    skipped = [k for k in ("search", "generate", "attachments")
+               if tr_r["layers"][k]["status"].startswith("생략")]
+    ac4t = skipped == ["search", "generate", "attachments"] and tr_r["layers"]["gate"]["label"] == "소관밖"
+    print(f"  {'층':12} 상태")
+    for k in LAYER_ORDER:
+        print(f"  {LAYER_LABEL[k]:12} {tr_r['layers'][k]['status']}")
+    print(f"  → {'OK' if ac4t else 'DIFF ⛔'}  (검색·생성·첨부 3층 생략 표기)")
+
+    # 되묻기 턴(답변 전) 부분 트레이스도 크래시 없어야 한다
+    st_p = qform_flow.new_state()
+    ev_p = qform_flow.start(st_p, "착오송금 반환 신청 서류가 뭐예요?",
+                            classify_fn=rag.classify_query_bf, answer_fn=stub_answer)
+    tr_p = trace_of(st_p, ev_p, hcx_calls=0)
+    ac4p = (ev_p["kind"] == "ask" and tr_p["pending"]
+            and tr_p["layers"]["ask"]["fired"] and tr_p["layers"]["combos"]["remaining"] == 7)
+    print(f"  [되묻기 턴] pending={tr_p['pending']} · 되묻기 발동={tr_p['layers']['ask']['fired']} · "
+          f"생존 {tr_p['layers']['combos']['remaining']}행 · 검색층 \"{tr_p['layers']['search']['status']}\""
+          f"  → {'OK' if ac4p else 'DIFF ⛔'}")
+    if not (ac4t and ac4p):
+        fails.append(("T5-AC4", "생략 표기·무크래시", f"{skipped}"))
+
+    # ── AC5. 첨부 필터 전/후 재현 (11서식 / 24파일 기준값) ──────────────────
+    print("\n── AC5. 첨부 필터 전/후 재현 ──")
+    tr_full = collect("착오송금 반환 신청 서류가 뭐예요?",
+                      bf_debug("착오송금 반환 신청 서류가 뭐예요?"),
+                      {**{f: None for f in qform_state.SLOT_FIELDS},
+                       "party": "송금인", "sub_task": "반환신청",
+                       "qualification": "대리인", "subject": "법인"},
+                      None, None,
+                      stub_answer("착오송금 반환 신청 서류가 뭐예요?",
+                                  {"party": "송금인", "sub_task": "반환신청",
+                                   "qualification": "대리인", "subject": "법인", "method": None}),
+                      False, hits=FIXED_HITS, hcx_calls=2)
+    A = tr_full["layers"]["attachments"]
+    ac5t = A["before_forms"] == 11 and A["before_files"] == 24
+    print(f"  필터 전 {A['before_forms']}서식 / {A['before_files']}파일  (기준 11서식 / 24파일)")
+    print(f"  필터 후 {A['after_forms']}서식 / {A['after_files']}파일  (조합 C04 · 법인 대리)")
+    print(f"  → {'OK' if ac5t else 'DIFF ⛔'}")
+    if not ac5t:
+        fails.append(("T5-AC5", "11서식/24파일", f"{A['before_forms']}서식/{A['before_files']}파일"))
+
+    # ── 층 구성 · 콜 회계 (T6 패널 · T7 §1 과 1:1) ─────────────────────────
+    print("\n── 층 구성과 콜 회계 (T6 패널 카드 순서) ──")
+    tr = traces[-1]
+    print(f"  {'#':>2} {'층':12} {'콜':>3}  요약")
+    for i, k in enumerate(LAYER_ORDER, 1):
+        lay = tr["layers"][k]
+        c = lay.get("calls")
+        summary = {
+            "gate": lambda: f"{lay['label']} — {lay['reason']}",
+            "bf": lambda: f"{lay['bf']} [{lay['verdict']}] 마진 {lay['margin']}",
+            "slots": lambda: f"{lay['filled']}/5 채움 · scope={lay['scope']}",
+            "combos": lambda: " → ".join(f"{n}" for _, n in lay["trail"]) +
+                              f"  ({', '.join(lay['combo_ids'])})",
+            "ask": lambda: (f"{lay['slot']} 물음 ({lay['mode']})" if lay["fired"]
+                            else lay["reason"]),
+            "search": lambda: f"top-{lay['k']} · 부스트 {lay['boost_applied']}"
+                              + (" · bf 갈림 ⚠" if lay["bf_drift"] else ""),
+            "generate": lambda: f"{lay['latency_ms']}ms · {lay['chars']}자",
+            "attachments": lambda: f"{lay['before_forms']}서식/{lay['before_files']}파일 "
+                                   f"→ {lay['after_forms']}서식/{lay['after_files']}파일",
+            "checks": lambda: f"ok={lay['ok']} · 플래그 {len(lay['flags'])}건",
+        }[k]()
+        badge = "콜0" if k in DETERMINISTIC else (str(c) if c is not None else "?")
+        print(f"  {i:>2} {LAYER_LABEL[k]:12} {badge:>3}  {summary}")
+    print(f"  총 HCX {tr['calls']['total']}콜 = 게이트 {tr['calls']['gate']} + "
+          f"되묻기 {tr['calls']['ask']} + 생성 {tr['calls']['generate']}")
+    print(f"  결정론 구간 {len(DETERMINISTIC)}층은 전부 콜 0 (재계산·반환값 읽기)")
+
     print()
     if fails:
         print("어긋난 AC ⛔")
-        print(f"  {'AC':6} {'기대':22} 실측")
+        print(f"  {'AC':8} {'기대':22} 실측")
         for ac, want, got in fails:
-            print(f"  {ac:6} {want:22} {got}")
+            print(f"  {ac:8} {want:22} {got}")
         sys.exit(1)
     print("전체 통과 ✅  (LLM 호출 0 — 결정론 재계산만)")
     sys.exit(0)
