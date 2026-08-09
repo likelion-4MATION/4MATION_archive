@@ -33,6 +33,7 @@ sys.path.insert(0, str(ROOT / "crawler"))
 
 import chain
 import qform_flow
+import qform_panel
 import qform_state
 import qform_trace
 
@@ -41,7 +42,7 @@ SLOT_LABEL = {"party": "역할", "sub_task": "세부주제", "qualification": "�
               "subject": "주체", "method": "접수수단"}
 ASK_MODES = {"ⓐ 템플릿 (콜 0)": "template", "ⓑ LLM 생성 (턴당 1콜)": "llm"}
 
-st.set_page_config(page_title="KDIC 안내 챗봇 PoC", page_icon="💬")
+st.set_page_config(page_title="KDIC 안내 챗봇 PoC", page_icon="💬", layout="wide")
 st.title("💬 KDIC 안내 챗봇 — PoC")
 st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
 
@@ -214,27 +215,35 @@ def record(ev: dict, trace: dict | None = None) -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 본문
+# 본문 — 좌측 대화 / 우측 트레이스 (st.chat_input은 컬럼 안에 못 들어가므로 최상위)
 # ══════════════════════════════════════════════════════════════════════════
-for ti, turn in enumerate(st.session_state.history):
-    if turn["role"] == "user":
-        with st.chat_message("user"):
-            st.markdown(turn["text"])
-    elif turn["role"] == "ask":
-        with st.chat_message("assistant"):
-            render_ask(turn)
-    else:
-        with st.chat_message("assistant"):
-            render_answer(turn["r"], key_prefix=f"h{ti}",
-                          slots=turn.get("slots"), search_q=turn.get("search_q"))
-
 flow = st.session_state.flow
 pending = flow["pending_slot"]
+SHOW_TRACE = bool(st.session_state.get("show_trace"))
 
-skip = False
-if pending:
-    # 탈출구 상시 노출 — 기획서 §4. 미선택(null)은 결함이 아니라 정상 입력이다.
-    skip = st.button("잘 모르겠어요 — 이대로 답변받기", key=f"skip-{flow['ask_turn']}")
+left, right = st.columns([3, 2]) if SHOW_TRACE else (st.container(), None)
+
+with left:
+    for ti, turn in enumerate(st.session_state.history):
+        if turn["role"] == "user":
+            with st.chat_message("user"):
+                st.markdown(turn["text"])
+        elif turn["role"] == "ask":
+            with st.chat_message("assistant"):
+                render_ask(turn)
+        else:
+            with st.chat_message("assistant"):
+                render_answer(turn["r"], key_prefix=f"h{ti}",
+                              slots=turn.get("slots"), search_q=turn.get("search_q"))
+
+    skip = False
+    if pending:
+        # 탈출구 상시 노출 — 기획서 §4. 미선택(null)은 결함이 아니라 정상 입력이다.
+        skip = st.button("잘 모르겠어요 — 이대로 답변받기", key=f"skip-{flow['ask_turn']}")
+
+if right is not None:
+    with right:
+        qform_panel.render([t["trace"] for t in st.session_state.history if t.get("trace")])
 
 q = st.chat_input("예: 착오송금 반환 신청 서류가 뭐예요?")
 
