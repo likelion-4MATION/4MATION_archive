@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""큐폼 되묻기 문구 생성 — T2(템플릿 ⓐ).
+"""큐폼 되묻기 문구 생성 — T2(템플릿 ⓐ) · T3(LLM ⓑ + 값 고정 가드).
 
 **판정과 문구를 분리한다.** 어느 슬롯을 물을지는 `qform_state.next_question()` 이
 결정론으로 정하고(조합 테이블), 이 파일은 **그 판정을 문장으로 바꾸기만** 한다.
@@ -23,6 +23,19 @@ CSV 컬럼:
 - 부연 표현은 코퍼스 실재분만. v1 의 `"비법인단체(동호회 등)"` 는 "동호회" 가
   코퍼스 0청크(창작)라 제거했고, 원문 표현 `"~를 대리하는 경우"` 로 대체했다.
 - LLM 호출 0 (템플릿 모드).
+
+LLM 모드 ⓑ (T3):
+    **LLM 은 문장을 다듬을 뿐 선택지를 만들지 않는다.** 템플릿 결과를 **항상 먼저** 만들고
+    그것을 참고 문장으로 넘긴 뒤, 생성 결과가 가드를 통과할 때만 교체한다. 그래서
+    되묻기 **판정**(어느 슬롯·어떤 값)은 두 모드에서 구조적으로 동일하다(AC6).
+
+    가드(생성 직후) — 하나라도 어기면 템플릿으로 폴백하고 사유를 남긴다. 조용히 통과 없음:
+        · 전달한 조합 테이블 값이 전부 등장하는가       → missing_value
+        · 전달하지 않은 그 슬롯의 값이 등장하는가        → unlisted_value
+        · 한 문장인가 / 개행 없는가 / 길이 상한          → multi_sentence · multi_line · too_long
+        · 콜 실패 · 예산 소진                          → call_failed · budget_exhausted
+
+    콜 회계는 `chain._hcx` 를 재사용해 `chain.CALL_BUDGET` 을 공유한다(별도 예산 금지).
 """
 from __future__ import annotations
 
@@ -71,17 +84,33 @@ def survivor_values(slot: str, survivors: list[dict]) -> set[str]:
 
 
 def build_question(slot: str, slots: dict, survivors: list[dict],
-                   mode: str = "template") -> dict:
+                   mode: str = "template", llm_call=None) -> dict:
     """되묻기 문구 1건 생성. **선택지는 생존 행에서만 나온다.**
 
-    반환: {"slot", "text", "values", "phrases", "mode", "uncovered"}
-        values     문구에 오른 조합 테이블 값 (표시 문구의 원본)
-        phrases    실제 노출 문구
-        uncovered  CSV 에 표시 문구가 없어 값 그대로 쓴 항목 (기대 0)
-    """
-    if mode != "template":
-        raise ValueError(f"지원하지 않는 모드: {mode!r} (T2 는 'template' 만)")
+    mode      "template"(ⓐ, 콜 0) | "llm"(ⓑ, 턴당 1콜)
+    llm_call  `(messages) -> (text|None, meta)`. 미지정이면 `chain._hcx` 사용.
+              검증 하니스가 콜 0으로 가드를 전수 시험하기 위한 주입점이다.
 
+    반환: {"slot", "text", "values", "phrases", "mode", "uncovered",
+           "calls", "fallback_reason"}
+        values           문구에 오른 조합 테이블 값 (표시 문구의 원본)
+        phrases          템플릿 표시 문구
+        mode             **요청한** 모드 (폴백해도 바뀌지 않는다)
+        calls            이 호출이 쓴 LLM 콜 수 (ⓐ 는 항상 0)
+        fallback_reason  None 이면 요청 모드대로 성공. 값이 있으면 템플릿으로 폴백된 사유
+        uncovered        CSV 에 표시 문구가 없어 값 그대로 쓴 항목 (기대 0)
+    """
+    if mode not in ("template", "llm"):
+        raise ValueError(f"지원하지 않는 모드: {mode!r} ('template' | 'llm')")
+
+    ask = _template_question(slot, slots, survivors)
+    if mode == "template":
+        return ask
+    return _llm_question(ask, slot, slots, llm_call)
+
+
+def _template_question(slot: str, slots: dict, survivors: list[dict]) -> dict:
+    """템플릿 모드 ⓐ — CSV 조회 + 생존 값 치환. LLM 콜 0. ⓑ 의 폴백 기준이기도 하다."""
     vals = survivor_values(slot, survivors)
     rows = rows_for(slot, slots.get("sub_task"))
 
@@ -100,7 +129,108 @@ def build_question(slot: str, slots: dict, survivors: list[dict],
     text = f"{head} (예: {', '.join(phrases)})" if phrases else head
 
     return {"slot": slot, "text": text, "values": values, "phrases": phrases,
-            "mode": "template", "uncovered": uncovered}
+            "mode": "template", "uncovered": uncovered, "remaining": len(survivors),
+            "calls": 0, "fallback_reason": None}
+
+
+# ── LLM 모드 ⓑ — 표현 층에만 개입 ───────────────────────────────────────────
+ASK_PARAMS = {"temperature": 0.3, "topP": 0.8, "maxTokens": 128}
+MAX_LEN = 140                 # 가드 상한. 프롬프트에는 120자로 지시해 여유를 둔다.
+
+ASK_SYS_PROMPT = (
+    "너는 예금보험공사(KDIC) 안내 챗봇이 사용자에게 되물을 문장을 다듬는 역할이다.\n"
+    "규칙:\n"
+    "1. [보기]에 적힌 값만 쓴다. 새 보기를 만들거나 [보기]에 없는 유형을 덧붙이지 마라.\n"
+    "2. [보기]의 값은 글자 그대로 문장에 전부 포함한다. 줄이거나 바꿔 쓰지 마라.\n"
+    "3. 한 문장으로 쓴다. 줄바꿈·목록·머리말·설명을 붙이지 마라.\n"
+    "4. 공공기관 안내 톤의 존댓말. 120자 이내.\n"
+    "5. 되묻는 질문 문장만 출력한다."
+)
+
+
+def _default_llm(messages: list[dict]):
+    """기본 호출 경로 — `chain._hcx` 재사용. 예산(`chain.CALL_BUDGET`)을 공유한다."""
+    import chain                                  # 지연 임포트: ⓐ 모드는 chain 없이도 돈다
+    c0 = chain._calls
+    text, meta = chain._hcx(messages, req_id="qform-ask", params=ASK_PARAMS)
+    return text, {**meta, "calls": chain._calls - c0}
+
+
+def _slot_values(slot: str) -> set[str]:
+    """그 슬롯이 가질 수 있는 조합 테이블 값 전체 (CSV 유래 = 테이블 부분집합, AC4 검증)."""
+    return {r["value"] for r in _ROWS if r["slot"] == slot}
+
+
+def _filled_values(slots: dict) -> set[str]:
+    """이미 확정된 슬롯 값 — 대화 맥락상 기정사실이라 '새 선택지'로 보지 않는다."""
+    out: set[str] = set()
+    for v in slots.values():
+        if isinstance(v, str):
+            out |= _toks(v)
+    return out
+
+
+def guard(text: str | None, slot: str, values: list[str], slots: dict) -> str | None:
+    """생성 문구 검증. 통과면 None, 위반이면 **사유 문자열**을 돌려준다.
+
+    값 고정의 핵심은 두 검사다 — 전달한 값이 다 있는가(선택지 삭제 방지),
+    전달하지 않은 그 슬롯의 값이 튀어나왔는가(선택지 창작 방지).
+    """
+    if not text or not text.strip():
+        return "empty_response"
+    if "\n" in text.strip():
+        return "multi_line"
+    t = text.strip()
+    if len(t) > MAX_LEN:
+        return f"too_long:{len(t)}자>{MAX_LEN}"
+    if sum(t.count(c) for c in "?!.") > 1:
+        return "multi_sentence"
+
+    missing = [v for v in values if v not in t]
+    if missing:
+        return "missing_value:" + ",".join(missing)
+
+    rest = t
+    for v in sorted(values, key=len, reverse=True):   # 긴 값부터 지워야 부분일치 오탐이 없다
+        rest = rest.replace(v, "")
+    banned = _slot_values(slot) - set(values) - _filled_values(slots)
+    hit = sorted(b for b in banned if b in rest)
+    if hit:
+        return "unlisted_value:" + ",".join(hit)
+    return None
+
+
+def _llm_question(ask: dict, slot: str, slots: dict, llm_call=None) -> dict:
+    """ⓑ — 템플릿 결과를 참고 문장으로 넘겨 **문장만** 다듬는다. 위반이면 ⓐ 로 폴백."""
+    out = {**ask, "mode": "llm"}
+    known = " · ".join(f"{k}={v}" for k, v in slots.items()
+                       if isinstance(v, str) and v and k != slot) or "없음"
+    user = (f"[묻는 항목] {slot}\n"
+            f"[이미 확인된 것] {known}\n"
+            f"[남은 후보] {ask.get('remaining', len(ask['values']))}가지\n"
+            f"[보기] {' / '.join(ask['values'])}\n"
+            f"[참고 문장] {ask['text']}")
+    messages = [{"role": "system", "content": ASK_SYS_PROMPT},
+                {"role": "user", "content": user}]
+
+    text, meta = (llm_call or _default_llm)(messages)
+    out["calls"] = int(meta.get("calls", 1) if meta else 1)
+
+    if meta and meta.get("error") == "call_budget_exhausted":
+        out["fallback_reason"] = "budget_exhausted"
+        return out
+    if text is None:
+        out["fallback_reason"] = "call_failed"
+        return out
+
+    reason = guard(text, slot, ask["values"], slots)
+    if reason:
+        out["fallback_reason"] = reason      # 위반 문구는 버린다 — 사용자에게 노출 금지
+        return out
+
+    out["text"] = text.strip()
+    out["fallback_reason"] = None
+    return out
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -297,12 +427,191 @@ if __name__ == "__main__":
         demo[nq["slot"]] = "대리인" if nq["slot"] == "qualification" else "법인"
     print(f"  → 최종 생존 {len(qform_state.survivors(demo))}행")
 
+    # ══════════════════════════════════════════════════════════════════════
+    # T3 — LLM 모드 ⓑ + 값 고정 가드 (기본 실행은 **콜 0**. 실콜은 --live)
+    # ══════════════════════════════════════════════════════════════════════
+    print("\n" + "═" * 68)
+    print("T3 — 되묻기 LLM 모드 ⓑ · 값 고정 가드")
+    print("═" * 68)
+
+    # 되묻기가 실제로 걸리는 상태 2종 (1턴·2턴)
+    S1 = {f: None for f in SLOT_FIELDS}
+    S1.update({k: v for k, v in extract("착오송금 반환 신청 서류가 뭐예요?",
+                                        "착오송금 반환 신청").items() if k in SLOT_FIELDS})
+    S2 = {**S1, "qualification": "대리인"}
+    SCENES = [("1턴 qualification", S1), ("2턴 subject", S2)]
+
+    calls_seen = [0]
+
+    def stub(reply=None, *, error=None, calls=1):
+        """주입용 가짜 LLM. 실제 콜 0으로 가드 전 분기를 시험한다."""
+        def _call(messages):
+            calls_seen[0] += 1
+            return reply, {"error": error, "calls": calls}
+        return _call
+
+    # ── AC1. ⓐ 모드는 LLM 콜 0 ──────────────────────────────────────────────
+    print("\n── AC1. ⓐ 템플릿 모드 LLM 콜 0 ──")
+    calls_seen[0] = 0
+    tmpl_calls = 0
+    for name, s in SCENES:
+        nq = qform_state.next_question(s)
+        a = build_question(nq["slot"], s, qform_state.survivors(s),
+                           mode="template", llm_call=stub("호출되면 안 된다"))
+        tmpl_calls += a["calls"]
+    # next_question() 경로도 확인 — 판정 함수가 LLM 을 부르면 안 된다
+    for _, s in SCENES:
+        qform_state.next_question(s)
+    ac1b = calls_seen[0] == 0 and tmpl_calls == 0
+    print(f"  llm_call 실제 호출 {calls_seen[0]}회 · 보고된 calls 합 {tmpl_calls} (기대 0/0)"
+          f"  → {'OK' if ac1b else 'DIFF ⛔'}")
+    if not ac1b:
+        fails.append(("T3-AC1", "ⓐ 콜 0", f"{calls_seen[0]}회"))
+
+    # ── AC2. ⓑ 모드 되묻기 턴당 콜 1 ────────────────────────────────────────
+    print("\n── AC2. ⓑ 모드 턴당 콜 정확히 1 ──")
+    calls_seen[0] = 0
+    good = {"qualification": "반환신청은 본인이 하시나요, 아니면 대리인이 하시나요?",
+            "subject": "법인, 비법인단체, 미성년자 중 누구를 대리해 신청하시는지 알려주시겠어요?"}
+    per_turn, ac2_ok = [], True
+    for name, s in SCENES:
+        nq = qform_state.next_question(s)
+        r = build_question(nq["slot"], s, qform_state.survivors(s),
+                           mode="llm", llm_call=stub(good[nq["slot"]]))
+        per_turn.append((name, r["calls"], r["fallback_reason"]))
+        ac2_ok &= (r["calls"] == 1 and r["fallback_reason"] is None)
+        print(f"  {name:18} 콜 {r['calls']} · 폴백 {r['fallback_reason']} · \"{r['text'][:44]}…\"")
+    print(f"  총 {calls_seen[0]}콜 / 되묻기 2턴  → {'OK' if ac2_ok else 'DIFF ⛔'}")
+    if not ac2_ok:
+        fails.append(("T3-AC2", "턴당 콜 1·폴백 없음", str(per_turn)))
+
+    # ── AC3. 가드 위반 → 100% 템플릿 폴백 ───────────────────────────────────
+    print("\n── AC3. 가드 위반 시 템플릿 폴백 (위반 문구 미노출) ──")
+    s = S2                                   # subject 되묻기 (보기 = 법인·비법인단체·미성년자)
+    nq = qform_state.next_question(s)
+    surv = qform_state.survivors(s)
+    tmpl = build_question(nq["slot"], s, surv, mode="template")["text"]
+    CASES = [
+        ("값 누락", "법인, 비법인단체 중 누구를 대리해 신청하시나요?", "missing_value"),
+        ("목록 밖 값 창작", "법인, 비법인단체, 미성년자, 군복무자 중 누구를 대리하시나요?", "unlisted_value"),
+        ("두 문장", "법인, 비법인단체, 미성년자 중 하나를 고르세요. 어느 쪽인가요?", "multi_sentence"),
+        ("개행·목록", "누구를 대리하시나요?\n- 법인\n- 비법인단체\n- 미성년자", "multi_line"),
+        ("길이 초과", "법인, 비법인단체, 미성년자 " + "안내해 드리겠습니다 " * 25 + "?", "too_long"),
+        ("빈 응답", "   ", "empty_response"),
+        ("콜 실패", None, "call_failed"),
+    ]
+    ac3 = True
+    print(f"  {'위반 유형':16} {'기대 사유':16} {'실측 사유':22} 노출 문구")
+    for label, reply, want in CASES:
+        r = build_question(nq["slot"], s, surv, mode="llm", llm_call=stub(reply))
+        got = r["fallback_reason"] or "—"
+        hit = got.split(":")[0] == want and r["text"] == tmpl
+        ac3 &= hit
+        print(f"  {label:16} {want:16} {got[:22]:22} {'템플릿✅' if r['text'] == tmpl else '위반문구✗'}")
+    # 예산 소진
+    r = build_question(nq["slot"], s, surv, mode="llm",
+                       llm_call=stub(None, error="call_budget_exhausted", calls=0))
+    bud = r["fallback_reason"] == "budget_exhausted" and r["text"] == tmpl
+    ac3 &= bud
+    print(f"  {'예산 소진':16} {'budget_exhausted':16} {r['fallback_reason'][:22]:22} "
+          f"{'템플릿✅' if r['text'] == tmpl else '위반문구✗'}")
+    print(f"  → {'OK' if ac3 else 'DIFF ⛔'}  (폴백 {len(CASES) + 1}종 전부 템플릿 복귀)")
+    if not ac3:
+        fails.append(("T3-AC3", "위반 전건 폴백", "일부 미폴백"))
+
+    # 가드가 정상 문장을 물지 않는지 (과탐지 회귀) — 템플릿 문구 자기 검사
+    print("\n  [가드 과탐지 확인] 템플릿 문구 자신이 가드를 통과하는가")
+    over = []
+    for name, sc in SCENES:
+        q = qform_state.next_question(sc)
+        a = build_question(q["slot"], sc, qform_state.survivors(sc), mode="template")
+        v = guard(a["text"], q["slot"], a["values"], sc)
+        over.append((name, v))
+        print(f"    {name:18} {'통과 ✅' if v is None else '오탐 ✗ ' + v}")
+    ac3b = all(v is None for _, v in over)
+    if not ac3b:
+        fails.append(("T3-AC3b", "템플릿 문구 가드 통과", str(over)))
+
+    # ── AC4. 폴백 사유가 트레이스에 실릴 형태로 남는가 ───────────────────────
+    print("\n── AC4. 폴백 사유 기록 (트레이스 필드) ──")
+    r_ok = build_question(nq["slot"], s, surv, mode="llm", llm_call=stub(good["subject"]))
+    r_fb = build_question(nq["slot"], s, surv, mode="llm", llm_call=stub("법인만 알려주세요?"))
+    ac4b = (r_ok["mode"] == "llm" and r_ok["fallback_reason"] is None
+            and r_fb["mode"] == "llm" and r_fb["fallback_reason"].startswith("missing_value")
+            and all(k in r_fb for k in ("mode", "calls", "fallback_reason")))
+    print(f"  성공: ask_mode={r_ok['mode']} · ask_calls={r_ok['calls']} · fallback={r_ok['fallback_reason']}")
+    print(f"  폴백: ask_mode={r_fb['mode']} · ask_calls={r_fb['calls']} · fallback={r_fb['fallback_reason']}")
+    print(f"  (요청 모드는 폴백해도 'llm' 로 남는다 — 패널에서 ⓐ/ⓑ 구별 가능)  → {'OK' if ac4b else 'DIFF ⛔'}")
+    if not ac4b:
+        fails.append(("T3-AC4", "사유 기록", str(r_fb.get("fallback_reason"))))
+
+    # ── AC5. 모드 전환이 대화 상태를 깨지 않음 ──────────────────────────────
+    print("\n── AC5. 모드 전환 시 슬롯·생존 행 불변 ──")
+    import copy
+    ac5 = True
+    for name, sc in SCENES:
+        before_s, before_v = copy.deepcopy(sc), copy.deepcopy(qform_state.survivors(sc))
+        q = qform_state.next_question(sc)
+        for m, cb in (("template", None), ("llm", stub(good[q["slot"]])), ("llm", stub("깨진 응답"))):
+            build_question(q["slot"], sc, qform_state.survivors(sc), mode=m, llm_call=cb)
+        same = sc == before_s and qform_state.survivors(sc) == before_v
+        ac5 &= same
+        print(f"  {name:18} 3회 전환 후 슬롯·생존 행 불변: {'OK' if same else 'DIFF ⛔'}")
+    if not ac5:
+        fails.append(("T3-AC5", "상태 불변", "슬롯/생존 변형"))
+
+    # ── AC6. 판정은 두 모드에서 동일 — 문구만 다름 ──────────────────────────
+    print("\n── AC6. 판정 동일 (14행 전수 · 슬롯·값·생존 수) ──")
+    diff = []
+    for c in COMBOS:
+        st = {**{f: None for f in SLOT_FIELDS}, "sub_task": c["sub_task"]}
+        for _ in range(2):
+            q = qform_state.next_question(st)
+            if q is None:
+                break
+            sv = qform_state.survivors(st)
+            a = build_question(q["slot"], st, sv, mode="template")
+            b = build_question(q["slot"], st, sv, mode="llm",
+                               llm_call=stub(good.get(q["slot"], "법인, 비법인단체, 미성년자 중 누구를 대리하시나요?")))
+            if (a["slot"], a["values"], a["remaining"]) != (b["slot"], b["values"], b["remaining"]):
+                diff.append((c["combo_id"], q["slot"]))
+            vs = sorted(survivor_values(q["slot"], sv))
+            st[q["slot"]] = vs[0] if vs else None
+            if st[q["slot"]] is None:
+                break
+    ac6 = not diff
+    print(f"  14행 전수 · 판정(slot·values·remaining) 불일치 {len(diff)}건 (기대 0)"
+          f"  → {'OK' if ac6 else 'DIFF ⛔'}")
+    print("  (LLM 은 text 만 바꾼다 — 어느 슬롯을 어떤 값으로 물을지는 조합 테이블이 정한다)")
+    if not ac6:
+        fails.append(("T3-AC6", "판정 불일치 0", f"{len(diff)}건"))
+
+    print(f"\n  이 구간 실제 LLM 콜: 0 (전부 주입 스텁) · chain 미임포트")
+
+    # ── --live: 실제 HCX 스모크 (되묻기 2턴 = 2콜) ──────────────────────────
+    if "--live" in sys.argv:
+        print("\n── [--live] 실제 HCX 되묻기 생성 (2콜 예정) ──")
+        import chain
+        c0 = chain._calls
+        for name, sc in SCENES:
+            q = qform_state.next_question(sc)
+            r = build_question(q["slot"], sc, qform_state.survivors(sc), mode="llm")
+            print(f"  {name:18} 콜 {r['calls']} · 폴백 {r['fallback_reason']}")
+            print(f"    ⓐ {build_question(q['slot'], sc, qform_state.survivors(sc))['text']}")
+            print(f"    ⓑ {r['text']}")
+        print(f"  누적 HCX 콜 {chain._calls} / 예산 {chain.CALL_BUDGET} (이번 구간 +{chain._calls - c0})")
+        if chain._calls >= chain.CALL_BUDGET:
+            print("  ⛔ 예산 소진 — 즉시 중단하고 보고할 것")
+    else:
+        print("\n  실제 HCX 스모크는 생략됨. 환경이 준비된 곳에서:")
+        print("    python3 chatbot/qform_ask.py --live      # 되묻기 2턴 = HCX 2콜")
+
     print()
     if fails:
         print("어긋난 AC ⛔")
-        print(f"  {'AC':6} {'기대':22} 실측")
+        print(f"  {'AC':8} {'기대':22} 실측")
         for ac, want, got in fails:
-            print(f"  {ac:6} {want:22} {got}")
+            print(f"  {ac:8} {want:22} {got}")
         sys.exit(1)
-    print("전체 통과 ✅  (되묻기 문구 LLM 호출 0 — 템플릿 모드 ⓐ)")
+    print("전체 통과 ✅  (ⓐ 콜 0 · ⓑ 턴당 1콜 · 가드 8종 전부 템플릿 폴백)")
     sys.exit(0)
