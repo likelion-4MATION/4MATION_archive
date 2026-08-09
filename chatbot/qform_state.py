@@ -17,14 +17,23 @@
 
 통합(§3-1, 확정 B안): survivors() 는 attachments.collect() **후단 필터**로 쓴다.
 슬롯이 비면 survivors=전체라 기존 동작으로 자연 복귀(graceful degradation).
+
+**문구는 이 파일이 만들지 않는다(T2·E6).** 이 파일은 "어느 슬롯을 물을지"만 정하고,
+문장·표시 문구·정렬은 `qform_ask` + `crawler/data/qform_prompts.csv` 가 소유한다.
+판정과 표현을 갈라둬야 LLM 모드(ⓑ)를 붙여도 결정론 주장이 유지된다(T3 AC6).
 """
 from __future__ import annotations
 
 import csv
 import pathlib
+import sys
 
 _BASE = pathlib.Path(__file__).resolve().parent.parent
 _COMBOS_CSV = _BASE / "crawler" / "data" / "qform_combos_msdr.csv"
+
+if str(_BASE / "chatbot") not in sys.path:
+    sys.path.insert(0, str(_BASE / "chatbot"))
+import qform_ask  # noqa: E402  (문구 생성 위임 — 이 파일은 판정만 한다)
 
 SLOT_FIELDS = ("party", "sub_task", "qualification", "subject", "method")
 
@@ -33,20 +42,6 @@ _ASK_GATES = [
     ("qualification", lambda s: s.get("sub_task") == "반환신청"),
     ("subject", lambda s: s.get("qualification") == "대리인"),
 ]
-
-# 되묻기 예시 문구 (예시 제시형 — 선택지 나열 아님)
-_EXAMPLE_PHRASE = {
-    "qualification": {"본인": "본인이 직접 신청", "대리인": "대리인이 대신 신청"},
-    "subject": {
-        "본인": "본인", "대리인": "대리인", "법인": "법인",
-        "비법인단체": "비법인단체(동호회 등)", "미성년자": "미성년자",
-        "군복무자": "군복무자", "국외거주 또는 유학생": "국외거주·유학생",
-    },
-}
-_ASK_PROMPT = {
-    "qualification": "누가 신청하시나요?",
-    "subject": "어떤 경우이신가요?",
-}
 
 
 def _load_combos() -> list[dict]:
@@ -99,8 +94,16 @@ def _partition_max(rows: list[dict], field: str) -> int:
 
 
 def next_question(slots: dict) -> dict | None:
-    """되묻기 판정. None 이면 되묻지 않고 바로 검색.
-    반환: {"slot", "examples", "remaining", "prompt"}."""
+    """되묻기 **판정**. None 이면 되묻지 않고 바로 검색.
+
+    슬롯 선택까지가 이 함수의 책임이고, 문구는 `qform_ask.build_question()` 이 만든다.
+    여기서 붙는 문구는 **템플릿(ⓐ, 콜 0)** 뿐이다 — LLM 모드(ⓑ)는 호출자가
+    `build_question(mode="llm")` 을 따로 부른다. 판정 함수가 LLM 을 부르면 안 된다.
+    반환: {"slot", "values", "examples", "remaining", "prompt"}
+        values    문구에 오른 조합 테이블 값 (표시 문구의 원본)
+        examples  표시 문구 (CSV `phrase`)
+        prompt    완성 문장
+    """
     # D2: sub_task 미채움이면 되묻지 않는다 (단문 오발동 방지)
     if slots.get("sub_task") is None:
         return None
@@ -120,11 +123,9 @@ def next_question(slots: dict) -> dict | None:
     order = {slot: i for i, (slot, _) in enumerate(_ASK_GATES)}
     slot = min(eligible, key=lambda s: (_partition_max(surv, s), order[s]))
 
-    vals = sorted(set().union(*[_toks(c[slot]) for c in surv]) - {"공통"})
-    phrases = _EXAMPLE_PHRASE.get(slot, {})
-    examples = [phrases.get(v, v) for v in vals][:3]  # 예시 제시형(최대 3)
-    return {"slot": slot, "examples": examples, "remaining": len(surv),
-            "prompt": f"{_ASK_PROMPT.get(slot, '')} (예: {', '.join(examples)})"}
+    ask = qform_ask.build_question(slot, slots, surv)   # 문구 생성은 전적으로 위임
+    return {"slot": slot, "values": ask["values"], "examples": ask["phrases"],
+            "remaining": len(surv), "prompt": ask["text"]}
 
 
 def serialize(slots: dict) -> str:
@@ -143,10 +144,8 @@ def serialize(slots: dict) -> str:
 # ══════════════════════════════════════════════════════════════════════════
 if __name__ == "__main__":
     import json
-    import sys
 
-    sys.path.insert(0, str(_BASE / "chatbot"))
-    from qform_extract import extract
+    from qform_extract import extract   # sys.path 는 위에서 이미 잡았다
 
     print(f"조합 테이블 {len(_COMBOS)}행 로드\n")
 
