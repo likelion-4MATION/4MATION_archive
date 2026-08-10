@@ -128,6 +128,9 @@ DETERMINISTIC = ("bf", "slots", "combos", "search", "attachments", "checks")
 SKIP_PENDING = "생략 (되묻기 턴 — 미실행)"
 SKIP_REJECT = "생략 (소관 밖)"
 
+# 슬롯 출처 표기 (ver3 T2) — 값의 주인은 `qform_flow`, 여기서는 표기만 맞춘다.
+ORIGIN_NEW, ORIGIN_CARRY, ORIGIN_EMPTY = "신규", "이월", "미채움"
+
 
 def bf_debug_of(query: str) -> dict:
     """`bf_debug` 의 별칭 — `collect()` 안에서 동명 파라미터에 가려지는 것을 피한다."""
@@ -167,7 +170,7 @@ def collect(query: str, bf_debug: dict, slots: dict, surv: list | None,
             ask: dict | None, result: dict | None, boost_on: bool, *,
             search_q: str | None = None, hits: list | None = None,
             search_fn=None, hcx_calls: int | None = None,
-            ask_turn: int | None = None) -> dict:
+            ask_turn: int | None = None, slot_origin: dict | None = None) -> dict:
     """질의 1건의 층별 트레이스를 조립한다. **LLM 콜 0.**
 
     파이프라인에 계측을 심지 않는다(E2). 값은 셋 중 하나로만 얻는다 —
@@ -175,6 +178,10 @@ def collect(query: str, bf_debug: dict, slots: dict, surv: list | None,
 
     result=None  되묻기 턴 (아직 `answer()` 를 부르지 않았다) → 검색 이후 층은 "생략"
     route=reject 소관 밖 → 검색·생성·첨부 층은 "생략"
+
+    slot_origin  {슬롯: 신규|이월|미채움} (ver3 T2). 생략하면 `slots["_origin"]` 에서
+        읽고, 그것도 없으면 값 유무로 신규/미채움만 되짚는다 — ver2 호출부가 인자를
+        안 넘겨도 깨지지 않아야 하기 때문이다.
     """
     import attachments as _att
     import qform_state
@@ -203,10 +210,18 @@ def collect(query: str, bf_debug: dict, slots: dict, surv: list | None,
     L["bf"] = {"status": "수집", "calls": 0, **(bf_debug or bf_debug_of(query))}
 
     # ── 슬롯 추출 — `extract()` 반환 읽기 ──────────────────────────────────
+    # 출처(신규/이월/미채움)는 ver3 T2. 이월이 왜 됐는지/안 됐는지가 안 보이면
+    # "첨부가 왜 좁아졌나"를 시연에서 설명할 수 없다.
+    origin = slot_origin or raw.get("_origin") or {
+        f: ORIGIN_NEW if clean.get(f) else ORIGIN_EMPTY for f in qform_state.SLOT_FIELDS}
+    origin = {f: origin.get(f, ORIGIN_EMPTY) for f in qform_state.SLOT_FIELDS}
     L["slots"] = {
         "status": "수집", "calls": 0, "slots": clean,
         "triggers": raw.get("_hits") or {}, "scope": raw.get("_scope"),
         "bf_used": raw.get("_bf"), "filled": sum(1 for v in clean.values() if v),
+        "origin": origin,
+        "carried": sum(1 for v in origin.values() if v == ORIGIN_CARRY),
+        "carryover": raw.get("_carryover"),
     }
 
     # ── 조합 생존 — `survivors()` 재호출로 추이 재구성 ──────────────────────
@@ -671,7 +686,8 @@ if __name__ == "__main__":
         summary = {
             "gate": lambda: f"{lay['label']} — {lay['reason']}",
             "bf": lambda: f"{lay['bf']} [{lay['verdict']}] 마진 {lay['margin']}",
-            "slots": lambda: f"{lay['filled']}/5 채움 · scope={lay['scope']}",
+            "slots": lambda: (f"{lay['filled']}/5 채움 · scope={lay['scope']}"
+                              f" · 이월 {lay['carried']}개 ({lay['carryover']})"),
             "combos": lambda: " → ".join(f"{n}" for _, n in lay["trail"]) +
                               f"  ({', '.join(lay['combo_ids'])})",
             "ask": lambda: (f"{lay['slot']} 물음 ({lay['mode']})" if lay["fired"]
