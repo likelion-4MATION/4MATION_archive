@@ -94,6 +94,28 @@ def _mark_asked(state: dict, slot) -> None:
         state["asked"].append(slot)
 
 
+def options(state: dict) -> list[str]:
+    """지금 묻고 있는 슬롯의 **선택지 값 목록** (ver3 T5 · 버튼 렌더용).
+
+    **값은 조합 테이블 생존 행에서만 온다(C6).** 라벨을 다듬거나 부연을 붙이지 않는다 —
+    v1 에서 부연 4개가 전부 코퍼스 0청크(창작)로 판명된 이력이 있다(DECISIONS 08-09).
+
+    정렬은 `qform_prompts.csv` 행 순서를 따른다. 문구를 가져오는 게 아니라 **순서만**
+    빌린다 — 서류가 실제로 갈리는 유형이 앞에 오도록 CSV 가 이미 정해 둔 순서다.
+    CSV 에 없는 값은 뒤에 사전순으로 붙인다(누락 방지).
+
+    되묻는 중이 아니면 빈 리스트. LLM 콜 0.
+    """
+    slot = state.get("pending_slot")
+    if not slot:
+        return []
+    slots = state.get("qform") or {}
+    vals = qform_ask.survivor_values(slot, qform_state.survivors(slots))
+    rows = qform_ask.rows_for(slot, slots.get("sub_task"))
+    covered = {r["value"] for r in rows}
+    return [r["value"] for r in rows if r["value"] in vals] + sorted(vals - covered)
+
+
 def _carryover_gate(cfg: dict, cls_bf, prev_bf, prev: dict) -> tuple[bool, str]:
     """이월을 **허용할지**와 그 사유. 추출 전에 판정되는 부분만 여기서 본다.
 
@@ -177,7 +199,8 @@ def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = 
                  answer_fn=answer_fn, llm_call=llm_call)
 
 
-def reply(state: dict, text: str, *, ask_mode: str = "template", boost: bool = False,
+def reply(state: dict, text: str, *, value: str | None = None,
+          ask_mode: str = "template", boost: bool = False,
           answer_fn=None, llm_call=None, config=None) -> dict:
     """되묻기 응답 반영. **빈 슬롯만 채운다** — 이미 확정된 값을 덮어쓰지 않는다.
 
@@ -188,16 +211,34 @@ def reply(state: dict, text: str, *, ask_mode: str = "template", boost: bool = F
     **슬롯이 채워졌든 아니든 물었던 슬롯은 `asked` 에 적재한다(T1).** 못 채웠을 때
     적재하는 쪽이 핵심이다 — 채워진 슬롯은 `next_question` 이 어차피 안 고르지만,
     못 채운 슬롯은 조건이 그대로라 같은 질문이 무한히 재발동한다.
+
+    value: 선택지 버튼 경로(ver3 T5). 주면 **자연어 추출을 경유하지 않고** 지금 묻는
+        슬롯에 값을 직접 넣는다 — 값이 enum 에서 직접 오므로 오추출이 구조적으로 0 이다.
+        `options()` 밖 값은 무시하고 자연어 경로로 되돌린다(C6 가드). 조용히 통과시키지
+        않으려고 `_hits` 에 출처를 남긴다.
     """
-    merged = extract(f"{state['base_q']} {text}", business_function=IN_SCOPE_BF)
     origin = dict(state.get("slot_origin") or {})
     slot_turn = dict(state.get("slot_turn") or {})
     turn_no = int(state.get("turn_no") or 0)
-    for f in SLOT_FIELDS:
-        if not state["qform"].get(f) and merged.get(f):
-            state["qform"][f] = merged[f]
-            origin[f] = SRC_NEW              # 되묻기로 채운 값도 '신규'다
-            slot_turn[f] = turn_no           # 이 턴에 설정됨 → TTL 이 여기서부터 센다
+    slot = state.get("pending_slot")
+
+    if value is not None and slot and value in set(options(state)):
+        # 버튼 경로 — extract() 를 부르지 않는다. 트레이스가 보는 slots_raw 도 같이 갱신해야
+        # "무엇이 채워졌나"가 화면과 어긋나지 않는다(트레이스는 slots_raw 를 읽는다).
+        merged = dict(state.get("slots_raw") or {})
+        merged["_hits"] = {**(merged.get("_hits") or {}), slot: ["⟵선택지 버튼"]}
+        if not state["qform"].get(slot):
+            state["qform"][slot] = value
+            merged[slot] = value
+            origin[slot] = SRC_NEW
+            slot_turn[slot] = turn_no
+    else:
+        merged = extract(f"{state['base_q']} {text}", business_function=IN_SCOPE_BF)
+        for f in SLOT_FIELDS:
+            if not state["qform"].get(f) and merged.get(f):
+                state["qform"][f] = merged[f]
+                origin[f] = SRC_NEW          # 되묻기로 채운 값도 '신규'다
+                slot_turn[f] = turn_no       # 이 턴에 설정됨 → TTL 이 여기서부터 센다
     # 되묻기 응답은 원 질의와 합쳐 다시 추출하므로 이월분이 merged 에는 없다.
     # 트레이스가 이월 표기를 잃지 않도록 확정 슬롯 기준으로 출처를 되살린다.
     merged["_origin"] = {f: origin.get(f, SRC_EMPTY) if state["qform"].get(f) else SRC_EMPTY

@@ -19,6 +19,11 @@ MoAI 라우터가 꽂힐 자리다. 부스트 ON 으로 검색 쿼리가 바뀌�
 전에는 켜지 않는다(§1-4 no numbers, no merge). 사이드바 토글로 시연 중 비교만 가능.
 되묻기 문구 모드도 **기본 ⓐ 템플릿(콜 0)**. ⓑ는 비교용이다.
 
+ver3 T5 — 되묻기 선택지 버튼과 예시 질의 칩을 붙였다. 둘 다 **콜 0**이고, 값·문구를
+이 파일이 만들지 않는다. 버튼 값은 `qform_flow.options()`(조합 테이블 생존 행),
+칩 문구는 `docs/qform_시험질의셋.md` 원문이다. 렌더가 값을 창작하면 그 순간
+"근거 있는 답변"이라는 주장이 무너진다.
+
 실행: streamlit run chatbot/app.py
 주의: chain.CALL_BUDGET(70콜, 재시도 포함)을 공유 — 소진 시 앱 재시작으로 리셋.
 """
@@ -41,6 +46,28 @@ ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "rejec
 SLOT_LABEL = {"party": "역할", "sub_task": "세부주제", "qualification": "자격",
               "subject": "주체", "method": "접수수단"}
 ASK_MODES = {"ⓐ 템플릿 (콜 0)": "template", "ⓑ LLM 생성 (턴당 1콜)": "llm"}
+
+MAX_VISIBLE_OPTIONS = 6         # 선택지 버튼 노출 상한. 넘으면 접는다 (T5 B1-4)
+
+# ── 예시 질의 칩 (T5 B2) ────────────────────────────────────────────────────
+# 문구는 `docs/qform_시험질의셋.md` 에서 **그대로** 가져온다. 임의 창작 금지 —
+# 조합 테이블·시험 질의셋 밖 문구를 만들지 않는다(CLAUDE.md §2-4·§2-5).
+#
+#   착오송금 반환 신청  ← B1  (되묻기 1턴 경로. 선택지 버튼이 바로 보이는 진입점)
+#   예금자보호제도      ← E1
+#   예금보험금 안내     ← E4
+#   채무조정 안내       ← E2
+#   은닉재산 신고       ← E3
+#   고객 미수령금 신청  ← **시험 질의셋 미수록 → 칩 없음.**
+#       6업무 중 이것 하나만 원천이 없다. 지어내면 그게 창작이라 비워 둔다.
+#       질의셋에 1건이 추가되면 아래 리스트에 한 줄 더 붙이면 끝이다.
+EXAMPLE_CHIPS = [
+    ("착오송금 반환 신청", "착오송금 반환 신청 서류가 뭐예요?"),
+    ("예금자보호제도", "예금보호한도가 얼마인가요?"),
+    ("예금보험금 안내", "예금보험금은 어떻게 신청하나요?"),
+    ("채무조정 안내", "채무조정 신청하려면 어떻게 해요?"),
+    ("은닉재산 신고", "은닉재산 신고하면 포상금 얼마나 받나요?"),
+]
 
 st.set_page_config(page_title="KDIC 안내 챗봇 PoC", page_icon="💬", layout="wide")
 st.title("💬 KDIC 안내 챗봇 — PoC")
@@ -179,6 +206,50 @@ def render_ask(turn: dict) -> None:
     st.caption(f"남은 후보 {turn['remaining']}개 · 건너뛰어도 답변합니다 · {tag}")
 
 
+def render_options(opts: list[str], key_prefix: str) -> str | None:
+    """되묻기 선택지 버튼 (T5 B1). 클릭된 값을 돌려준다.
+
+    **라벨 = 조합 테이블 값 그대로.** 다듬거나 부연을 붙이지 않는다(C6·CLAUDE.md §2-4).
+    버튼 경로는 값이 enum 에서 직접 오므로 슬롯 오추출이 구조적으로 0 이고,
+    HCX 비결정성을 안 타서 시연이 결정론이 된다.
+
+    key 에 턴 인덱스 prefix 를 붙여 히스토리 재렌더 충돌을 막는다(기존 관행).
+    """
+    if not opts:
+        return None
+    picked = None
+
+    def _row(values: list[str], tag: str) -> None:
+        nonlocal picked
+        for col, v in zip(st.columns(len(values)), values):
+            if col.button(v, key=f"opt-{key_prefix}-{tag}-{v}", width="stretch"):
+                picked = v
+
+    head, tail = opts[:MAX_VISIBLE_OPTIONS], opts[MAX_VISIBLE_OPTIONS:]
+    for i in range(0, len(head), 3):
+        _row(head[i:i + 3], f"h{i}")
+    if tail:
+        with st.expander(f"다른 선택지 보기 ({len(tail)}개)"):
+            for i in range(0, len(tail), 3):
+                _row(tail[i:i + 3], f"t{i}")
+    return picked
+
+
+def render_chips(key_prefix: str, per_row: int = 3) -> str | None:
+    """예시 질의 칩 (T5 B2). 클릭된 질의 문구를 돌려준다.
+
+    문구는 `docs/qform_시험질의셋.md` 원문이다 — `EXAMPLE_CHIPS` 주석에 출처를 남겼다.
+    """
+    picked = None
+    for i in range(0, len(EXAMPLE_CHIPS), per_row):
+        chunk = EXAMPLE_CHIPS[i:i + per_row]
+        for col, (label, query) in zip(st.columns(len(chunk)), chunk):
+            if col.button(label, key=f"chip-{key_prefix}-{label}", width="stretch",
+                          help=query):
+                picked = query
+    return picked
+
+
 def build_trace(ev: dict, hcx_calls: int) -> dict | None:
     """트레이스 조립 — **app 층에서만** 한다(E2). 파이프라인에는 계측이 없다.
 
@@ -237,13 +308,28 @@ with left:
                               slots=turn.get("slots"), search_q=turn.get("search_q"))
 
     skip = False
+    chosen = None
+    chip_q = None
     if pending:
+        # 선택지 버튼 — 값이 조합 테이블에서 직접 온다(T5 B1). 자유 입력·탈출구는 그대로.
+        chosen = render_options(qform_flow.options(flow), key_prefix=str(flow["ask_turn"]))
         # 탈출구 상시 노출 — 기획서 §4. 미선택(null)은 결함이 아니라 정상 입력이다.
         skip = st.button("잘 모르겠어요 — 이대로 답변받기", key=f"skip-{flow['ask_turn']}")
+    elif not st.session_state.history:
+        # 첫 화면 — 빈 입력창만 두면 무엇을 물어볼 수 있는지 알 수 없다(T5 B2)
+        st.caption("이런 걸 물어볼 수 있어요")
+        chip_q = render_chips("home")
 
 if right is not None:
     with right:
         qform_panel.render([t["trace"] for t in st.session_state.history if t.get("trace")])
+
+# 대화가 시작되면 칩은 사이드바로 옮긴다 — 본문을 차지하지 않으면서 항상 닿는다.
+if st.session_state.history:
+    with st.sidebar:
+        st.divider()
+        st.subheader("예시 질의")
+        chip_q = render_chips("side", per_row=1) or chip_q
 
 q = st.chat_input("예: 착오송금 반환 신청 서류가 뭐예요?")
 
@@ -254,13 +340,26 @@ if skip and pending:
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
-if q:
-    st.session_state.history.append({"role": "user", "text": q})
+if chosen and pending:
+    # 버튼 경로 — `value=` 로 값을 직접 주입한다. 자연어 추출을 경유하지 않는다.
+    st.session_state.history.append({"role": "user", "text": chosen})
+    with st.spinner("처리 중…"):
+        c0 = chain._calls
+        ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE, boost=BOOST)
+        record(ev, build_trace(ev, chain._calls - c0))
+    st.rerun()
+
+# 칩은 되묻기 중이어도 **새 질의**다 — 사용자가 다른 걸 물으려고 누른 것이다.
+q_new, q_reply = (chip_q, None) if chip_q else ((None, q) if pending else (q, None))
+
+if q_new or q_reply:
+    text = q_new or q_reply
+    st.session_state.history.append({"role": "user", "text": text})
     # 되묻기 턴이면 즉시 끝나고, 답변 턴이면 검색·생성이 돈다. 어느 쪽인지는 전이가 정한다.
     with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
         c0 = chain._calls
-        step = qform_flow.reply if pending else qform_flow.start
-        ev = step(flow, q, ask_mode=ASK_MODE, boost=BOOST)
+        step = qform_flow.reply if q_reply else qform_flow.start
+        ev = step(flow, text, ask_mode=ASK_MODE, boost=BOOST)
         # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
