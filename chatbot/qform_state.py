@@ -93,12 +93,18 @@ def _partition_max(rows: list[dict], field: str) -> int:
     return max(cnt.values()) if cnt else len(rows)
 
 
-def next_question(slots: dict) -> dict | None:
+def next_question(slots: dict, exclude: set | None = None) -> dict | None:
     """되묻기 **판정**. None 이면 되묻지 않고 바로 검색.
 
     슬롯 선택까지가 이 함수의 책임이고, 문구는 `qform_ask.build_question()` 이 만든다.
     여기서 붙는 문구는 **템플릿(ⓐ, 콜 0)** 뿐이다 — LLM 모드(ⓑ)는 호출자가
     `build_question(mode="llm")` 을 따로 부른다. 판정 함수가 LLM 을 부르면 안 된다.
+
+    exclude: 이미 물었던 슬롯 이름 집합 (ver3 T1). 대화 이력은 이 파일이 들고 있지
+        않다 — 호출자(`qform_flow`)가 `state["asked"]` 를 넘긴다. 판정 함수를
+        무상태로 두려는 것이고, 그래서 **`exclude=None` 이면 ver2 와 완전히 동일**하다.
+        물었는데 답을 못 얻은 슬롯을 후보에서 빼야 같은 질문이 반복되지 않는다.
+
     반환: {"slot", "values", "examples", "remaining", "prompt"}
         values    문구에 오른 조합 테이블 값 (표시 문구의 원본)
         examples  표시 문구 (CSV `phrase`)
@@ -112,9 +118,12 @@ def next_question(slots: dict) -> dict | None:
         return None
 
     # 되물을 수 있는 슬롯: 게이트 통과 & 아직 None & surv 를 실제로 가르는 것
+    # & 아직 안 물어본 것 (exclude — 재질문 차단)
+    done = exclude or ()
     eligible = [
         slot for slot, gate in _ASK_GATES
         if gate(slots) and slots.get(slot) is None and _distinct(surv, slot) > 1
+        and slot not in done
     ]
     if not eligible:
         return None  # 더 좁힐 수단 없음 → 진행
