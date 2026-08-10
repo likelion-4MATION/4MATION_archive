@@ -130,6 +130,8 @@ SKIP_REJECT = "생략 (소관 밖)"
 
 # 슬롯 출처 표기 (ver3 T2) — 값의 주인은 `qform_flow`, 여기서는 표기만 맞춘다.
 ORIGIN_NEW, ORIGIN_CARRY, ORIGIN_EMPTY = "신규", "이월", "미채움"
+# 되묻기 우회 사유 (ver3 T3) — `qform_flow.BYPASS_DEFINITIONAL` 과 같은 문자열이어야 한다.
+BYPASS_DEFINITIONAL = "definitional_bypass"
 
 
 def bf_debug_of(query: str) -> dict:
@@ -152,9 +154,12 @@ def _forms(atts: list) -> set:
     return {pathlib.Path(a["orig_filename"]).stem for a in atts if a.get("orig_filename")}
 
 
-def _no_ask_reason(slots: dict, surv: list, turn: int | None) -> str:
+def _no_ask_reason(slots: dict, surv: list, turn: int | None,
+                   bypass: str | None = None) -> str:
     """되묻지 **않은** 사유를 결정론으로 되짚는다 — 패널에서 '왜 안 물었나'가 보여야 한다."""
     import qform_state
+    if bypass == BYPASS_DEFINITIONAL:
+        return "정의형 질의 — 되묻기 우회 (definitional_bypass)"
     if not slots.get("sub_task"):
         return "sub_task 미상 → 되묻지 않음 (D2 · 단문 오발동 방지)"
     if len(surv) <= 1:
@@ -245,13 +250,15 @@ def collect(query: str, bf_debug: dict, slots: dict, surv: list | None,
             "mode": ask.get("mode"), "calls": ask.get("calls") or 0,
             "fallback_reason": ask.get("fallback_reason"),
             "values": ask.get("values"), "prompt": ask.get("text"),
+            "bypass": None,          # 되물었다 = 우회하지 않았다 (키 구성은 양쪽 동일)
         }
     else:
         L["ask"] = {
             "status": "수집", "fired": False, "slot": None, "turn": ask_turn,
-            "remaining": len(surv), "reason": _no_ask_reason(clean, surv, ask_turn),
+            "remaining": len(surv),
+            "reason": _no_ask_reason(clean, surv, ask_turn, raw.get("_ask_bypass")),
             "mode": None, "calls": 0, "fallback_reason": None,
-            "values": [], "prompt": None,
+            "values": [], "prompt": None, "bypass": raw.get("_ask_bypass"),
         }
 
     # ── 검색 — 결정론 재호출 (LLM 콜 0) ───────────────────────────────────

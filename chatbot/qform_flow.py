@@ -43,7 +43,7 @@ for _p in (_BASE / "chatbot", _BASE / "crawler"):
 import qform_ask  # noqa: E402
 import qform_config  # noqa: E402
 import qform_state  # noqa: E402
-from qform_extract import IN_SCOPE_BF, extract  # noqa: E402
+from qform_extract import IN_SCOPE_BF, extract, is_definitional  # noqa: E402
 
 # D2: 되묻기 상한. **값의 주인은 `qform_config` 로 옮겼고(ver3 T2) 이 이름은 별칭이다.**
 # `verify_docs.py` 가 `qform_flow.MAX_ASK_TURNS` 를 읽으므로 이름을 없애지 않는다.
@@ -52,6 +52,9 @@ SLOT_FIELDS = qform_state.SLOT_FIELDS
 
 # 슬롯 출처 표기 (트레이스 노출용 — T2)
 SRC_NEW, SRC_CARRY, SRC_EMPTY = "신규", "이월", "미채움"
+
+# 되묻기 우회 사유 (트레이스 노출용 — T3)
+BYPASS_DEFINITIONAL = "definitional_bypass"
 
 
 def new_state() -> dict:
@@ -66,7 +69,8 @@ def new_state() -> dict:
             "turn_no": 0,                              # 질의 턴 번호 (되묻기는 안 센다)
             "slot_turn": {},                           # {슬롯: 설정된 턴} — TTL 판정용
             "slot_origin": {},                         # {슬롯: 신규|이월|미채움} — 트레이스
-            "carryover": None}                         # 이월 판정 사유 (트레이스)
+            "carryover": None,                         # 이월 판정 사유 (트레이스)
+            "ask_bypass": None}                        # 되묻기 우회 사유 (ver3 T3)
 
 
 def _default_classify(query: str):
@@ -224,6 +228,20 @@ def _step(state: dict, *, ask_mode: str, boost: bool, answer_fn, llm_call,
     """
     cfg = config if isinstance(config, dict) and "MAX_ASK_TURNS" in config \
         else qform_config.resolve(config)
+
+    # 정의형 질의는 되묻지 않고 곧장 답한다(T3). 개념을 물었는데 신청 절차 슬롯을
+    # 채우라고 요구하면 안 된다. **슬롯은 지우지 않는다** — `skip` 과 같은 취급이라
+    # 안 좁힌 슬롯이 첨부를 넓게 남길 뿐이다(graceful degradation).
+    # 스코프 게이트는 `extract()`·`chain.answer()` 쪽에 그대로 살아 있다 — 여기서
+    # 건너뛰는 것은 **되묻기뿐**이라 소관 밖 정의형 질의는 여전히 reject 된다.
+    bypass = BYPASS_DEFINITIONAL if is_definitional(state.get("base_q") or "") else None
+    state["ask_bypass"] = bypass
+    if isinstance(state.get("slots_raw"), dict):
+        state["slots_raw"]["_ask_bypass"] = bypass
+    if bypass:
+        state["pending_slot"] = None
+        return _finalize(state, boost=boost, answer_fn=answer_fn)
+
     nq = (qform_state.next_question(state["qform"], exclude=set(state.get("asked") or ()))
           if state["ask_turn"] < cfg["MAX_ASK_TURNS"] else None)
     if nq is None:
