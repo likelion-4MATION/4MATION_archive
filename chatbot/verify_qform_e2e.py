@@ -89,18 +89,25 @@ _, ev1b = run(["착오송금 반환 신청하려는데 필요한 서류 알려�
 b_ask = sum(e["ask"]["calls"] for e in ev1b if e["kind"] == "ask")
 print(f"  [참고] ⓑ 모드 같은 대화: 되묻기 콜 {b_ask} + 생성 {len(CALLS)} = 총 {b_ask + len(CALLS)}콜")
 
-# ── AC2. 최대 2턴 후 슬롯 미채움이어도 진행 ─────────────────────────────────
-print("\n── AC2. 2턴 후 미채움이어도 진행 ──")
+# ── AC2. 슬롯 미채움이어도 진행 ─────────────────────────────────────────────
+# [ver3 T1 개정 · 08-11] 기대값을 ["ask","ask","answer"]·turn=2 → ["ask","answer"]·turn=1
+#   로 고쳤다. ver2 의 **2번째 ask 는 1번째와 같은 `qualification` 을 다시 묻는 것**이었다.
+#   그게 ver3 T1(AC1-1 "재질문 0")이 없앤 버그라, 이 대본으로 2턴에 닿는 것은 이제
+#   구조적으로 불가능하다 — `subject` 게이트는 `qualification=="대리인"` 일 때만 열리는데
+#   응답이 슬롯을 못 채우면 그 조건이 서지 않는다.
+#   **이 AC 가 지키려던 성질은 그대로다** ("미채움이어도 답변 도달 · 무한 되묻기 없음").
+#   오히려 강해졌다(2턴 → 1턴). 같은 성질을 `verify_qform_multiturn.py` R2 가 재검증한다.
+print("\n── AC2. 미채움이어도 진행 (같은 슬롯 재질문 없이) ──")
 CALLS.clear()
 st2, ev2 = run(["착오송금 반환 신청 서류가 뭐예요?", "글쎄요", "잘 모르겠어요"])
 kinds2 = [e["kind"] for e in ev2]
 unfilled = [f for f in ("qualification", "subject") if st2["qform"][f] is None]
-ac2 = kinds2 == ["ask", "ask", "answer"] and len(CALLS) == 1 and st2["ask_turn"] == 2
+ac2 = kinds2 == ["ask", "answer"] and len(CALLS) == 1 and st2["ask_turn"] == 1
 print(f"  전이: {' → '.join(kinds2)} · ask_turn={st2['ask_turn']} · 미채움 슬롯 {unfilled}")
-print(f"  3번째 되묻기 없이 답변 진행 · 생존 {len(qform_state.survivors(st2['qform']))}행"
+print(f"  같은 슬롯 재질문 없이 답변 진행 · 생존 {len(qform_state.survivors(st2['qform']))}행"
       f"  → {'OK' if ac2 else 'DIFF ⛔'}")
 if not ac2:
-    fails.append(("AC2", "2턴 후 answer", f"{kinds2} · turn={st2['ask_turn']}"))
+    fails.append(("AC2", "1턴 후 answer (재질문 0)", f"{kinds2} · turn={st2['ask_turn']}"))
 
 # ── AC3. 탈출구 — 즉시 답변 · 되묻기 재발동 없음 ────────────────────────────
 print("\n── AC3. 탈출구 (즉시 답변 · 재발동 없음) ──")
