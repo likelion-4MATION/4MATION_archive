@@ -85,6 +85,10 @@ for p in paths:
             for t in n.targets:
                 if isinstance(t, ast.Name):
                     defined.add(t.id)
+        # 타입 주석이 붙은 대입(`SPEC: dict = {...}`)도 대입이다. 08-11 이전에는
+        # 이걸 놓쳐서, 주석만 붙이면 문서에 적힌 실재 상수가 "코드에 없다"고 나왔다.
+        elif isinstance(n, ast.AnnAssign) and isinstance(n.target, ast.Name):
+            defined.add(n.target.id)
         elif isinstance(n, ast.arg):
             defined.add(n.arg)
 missing_syms = sorted(s for s in syms if s not in defined)
