@@ -38,6 +38,7 @@ sys.path.insert(0, str(ROOT / "crawler"))
 
 import chain
 import qform_flow
+import qform_followup
 import qform_panel
 import qform_state
 import qform_trace
@@ -48,6 +49,33 @@ SLOT_LABEL = {"party": "역할", "sub_task": "세부주제", "qualification": "�
 ASK_MODES = {"ⓐ 템플릿 (콜 0)": "template", "ⓑ LLM 생성 (턴당 1콜)": "llm"}
 
 MAX_VISIBLE_OPTIONS = 6         # 선택지 버튼 노출 상한. 넘으면 접는다 (T5 B1-4)
+LOW_CALL_WARN = 10              # 남은 HCX 콜이 이 이하면 사이드바에 경고 (T7 B6)
+
+# ── 에러 문구 (T7 B6-3) ─────────────────────────────────────────────────────
+# `_meta.error` 원문을 화면에 그대로 뿌리면 안 된다. `chain._hcx` 는 실패 시
+# `http_{status}:{응답 본문 200자}` 를 담는데, 그 본문에 엔드포인트·토큰·요청 ID 가
+# 섞여 나올 수 있다. **코드를 사람 문구로 갈아 끼우고, 숫자 상태 코드만 통과시킨다.**
+import re  # noqa: E402  (에러 코드 파싱 전용)
+
+_ERROR_TEXT = {
+    "call_budget_exhausted":
+        "이번 세션의 모델 호출 예산을 모두 사용했습니다. 앱을 다시 시작하면 초기화됩니다. "
+        "되묻기·선택지·슬롯 수정은 예산과 무관하게 계속 쓰실 수 있습니다.",
+}
+_HTTP_RE = re.compile(r"^http_(\d{3})")
+
+
+def humanize_error(code) -> str:
+    """`_meta.error` → 사람이 읽을 문구. **원문·URL·키·스택트레이스를 노출하지 않는다.**"""
+    code = str(code or "")
+    if code in _ERROR_TEXT:
+        return _ERROR_TEXT[code]
+    m = _HTTP_RE.match(code)
+    if m:                       # 상태 코드 세 자리만 통과 — 응답 본문은 버린다
+        return f"모델 서버에서 응답을 받지 못했습니다 (통신 오류 {m.group(1)}). 잠시 후 다시 시도해 주세요."
+    if code.startswith("exception:"):
+        return "처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
+    return "일시적인 오류로 답변을 만들지 못했습니다. 잠시 후 다시 시도해 주세요."
 
 # ── 예시 질의 칩 (T5 B2) ────────────────────────────────────────────────────
 # 문구는 `docs/qform_시험질의셋.md` 에서 **그대로** 가져온다. 임의 창작 금지 —
@@ -79,7 +107,14 @@ st.session_state.setdefault("needs_regen", False)   # 슬롯 수정 후 재답�
 
 with st.sidebar:
     st.subheader("세션 상태")
+    _left_calls = chain.CALL_BUDGET - chain._calls
     st.metric("HCX 콜 (재시도 포함)", f"{chain._calls} / {chain.CALL_BUDGET}")
+    # 예산 경고 (T7 B6-1) — 소진되고 나서 알면 시연 도중에 막힌다. 미리 보여 준다.
+    if _left_calls <= 0:
+        st.error("모델 호출 예산 소진 — 새 답변을 만들 수 없습니다. "
+                 "되묻기·선택지·슬롯 수정은 계속 동작합니다 (콜 0).")
+    elif _left_calls <= LOW_CALL_WARN:
+        st.warning(f"남은 모델 호출 {_left_calls}회. 답변 1건당 2콜(분류+생성)을 씁니다.")
     st.caption("되묻기 턴은 ⓐ 모드에서 콜을 쓰지 않습니다. 예산 소진 시 앱 재시작으로 리셋됩니다.")
     st.divider()
 
@@ -187,16 +222,19 @@ def render_attachments(atts: list, key_prefix: str) -> None:
 
 
 def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
-                  search_q: str | None = None, editable: bool = False) -> dict:
+                  search_q: str | None = None, editable: bool = False,
+                  followups: list[dict] | None = None) -> dict:
     """answer() 결과 1건 렌더 — 계약 4필드 + 부가(checks/_meta)만 사용.
 
-    반환: {"unset": 해제 클릭된 슬롯|None, "chip": reject 복구 칩 질의|None}
+    반환: {"unset": 해제 슬롯|None, "chip": 복구 칩 질의|None, "followup": 후속 질의|None}
     """
+    out = {"unset": None, "chip": None, "followup": None}
     if r["text"] is None:
-        st.error(f"답변 생성 실패: {r['_meta'].get('error', '원인 미상')}")
-        return {"unset": None, "chip": None}
+        # 대화를 죽이지 않는다 — 안내 문구 + 다음 행동(예시 칩)을 같이 낸다(T7 B6-2·3).
+        st.warning(humanize_error(r["_meta"].get("error")))
+        out["chip"] = render_chips(f"err-{key_prefix}")
+        return out
     st.markdown(r["text"])
-    out = {"unset": None, "chip": None}
     if slots:
         out["unset"] = render_slots(slots, key_prefix=key_prefix, editable=editable)
     meta = r["_meta"]
@@ -224,7 +262,28 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
     if r.get("route") == "reject":
         st.caption("다른 질문을 해보세요")
         out["chip"] = render_chips(f"rej-{key_prefix}")
+    elif followups:
+        out["followup"] = render_followups(followups, key_prefix)
     return out
+
+
+def render_followups(items: list[dict], key_prefix: str) -> str | None:
+    """후속 질문 추천 (T7 B5). 클릭된 질의를 돌려준다. **HCX 콜 +0.**
+
+    라벨은 `축 이름 · 조합 테이블 값` 이다. 축 이름은 화면이 이미 쓰던 `SLOT_LABEL`,
+    값은 생존 행 그대로 — **문구를 만들지 않는다**(CLAUDE.md §2-4).
+    착오송금 외 업무에서는 `items` 가 비어 이 함수가 아예 안 불린다. 정상이다(§2-5).
+    """
+    if not items:
+        return None
+    picked = None
+    st.caption("이어서 물어보기")
+    for col, it in zip(st.columns(len(items)), items):
+        label = f"{SLOT_LABEL.get(it['field'], it['field'])} · {it['value']}"
+        if col.button(label, key=f"fu-{key_prefix}-{it['field']}-{it['value']}",
+                      width="stretch", help=it["query"]):
+            picked = it["query"]
+    return picked
 
 
 def render_ask(turn: dict) -> None:
@@ -309,9 +368,13 @@ def record(ev: dict, trace: dict | None = None) -> None:
              "trace": trace}
         )
     else:
+        # 후속 추천은 여기서 **한 번** 계산해 히스토리에 굳힌다. 매 렌더마다 다시 뽑으면
+        # 나중 턴의 슬롯이 과거 답변의 추천을 바꿔 버린다. 결정론이고 콜 0 이다.
         st.session_state.history.append(
             {"role": "answer", "r": ev["result"], "slots": ev["slots"],
-             "search_q": ev["boosted"], "trace": trace}
+             "search_q": ev["boosted"], "trace": trace,
+             "followups": qform_followup.suggest(
+                 ev["slots"], base_q=st.session_state.flow.get("base_q"))}
         )
 
 
@@ -330,6 +393,7 @@ last_answer = max((i for i, t in enumerate(st.session_state.history)
 with left:
     unset_field = None
     chip_q = None
+    followup_q = None
     for ti, turn in enumerate(st.session_state.history):
         if turn["role"] == "user":
             with st.chat_message("user"):
@@ -343,9 +407,12 @@ with left:
                 # 하면 화면과 실제 상태(flow)가 갈린다.
                 act = render_answer(turn["r"], key_prefix=f"h{ti}",
                                     slots=turn.get("slots"), search_q=turn.get("search_q"),
-                                    editable=(ti == last_answer and not pending))
+                                    editable=(ti == last_answer and not pending),
+                                    followups=(turn.get("followups")
+                                               if ti == last_answer and not pending else None))
                 unset_field = act["unset"] or unset_field
                 chip_q = act["chip"] or chip_q
+                followup_q = act["followup"] or followup_q
 
     # 슬롯을 고친 뒤 되물을 것이 없으면 여기서 재생성을 **명시로** 받는다.
     # 자동 재생성을 안 하는 이유: 칩을 만질 때마다 HCX 2콜이 나가면 예산이 샌다(AC6-5).
@@ -419,8 +486,10 @@ if chosen and pending:
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
-# 칩은 되묻기 중이어도 **새 질의**다 — 사용자가 다른 걸 물으려고 누른 것이다.
-q_new, q_reply = (chip_q, None) if chip_q else ((None, q) if pending else (q, None))
+# 칩·후속 추천은 되묻기 중이어도 **새 질의**다 — 사용자가 다른 걸 물으려고 누른 것이다.
+# 후속 추천 클릭은 T2 이월과 맞물린다: 직전 슬롯이 살아 있어 조건이 유지된 채로 이어진다.
+_click_q = chip_q or followup_q
+q_new, q_reply = (_click_q, None) if _click_q else ((None, q) if pending else (q, None))
 
 if q_new or q_reply:
     text = q_new or q_reply
