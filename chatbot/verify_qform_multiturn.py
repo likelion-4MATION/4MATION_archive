@@ -257,6 +257,56 @@ for sid, q in CTR_Q.items():
           f"정의형={is_definitional(q)} · bypass={d[0]['bypass']}", ok)
 
 # ══════════════════════════════════════════════════════════════════════════
+# E — 슬롯 칩 수정 (T6)
+# ══════════════════════════════════════════════════════════════════════════
+# E1 — 해제하면 되묻기가 **다시 뜬다**. 안 뜨면 "보이지만 고칠 수 없다"가 그대로다.
+CALLS.clear()
+st_e, _ = run([CONFIRM], force_answer=True)
+before_e = dict(st_e["qform"])
+turn_before, asked_before = st_e["ask_turn"], list(st_e["asked"])
+ans_before = len(CALLS)
+ev_e = qform_flow.edit(st_e, "subject", None)
+ok_e1 = (ev_e["kind"] == "ask" and ev_e["slot"] == "subject"
+         and st_e["qform"]["subject"] is None and before_e["subject"] == "법인")
+check("E1", "AC6-1", "해제→되묻기 재발동",
+      f"subject {before_e['subject']}→{st_e['qform']['subject']} · {ev_e['kind']}"
+      f"({ev_e.get('slot')})", ok_e1)
+
+# E2 — 해제한 슬롯이 `asked` 에서 빠지고, **상한에 닿아 있던 대화가 다시 물을 수 있다.**
+#      해제 직전 ask_turn 은 상한(2)이었다. `edit` 이 턴을 하나 무르지 않으면
+#      `_try_ask` 가 상한에 걸려 None 을 내고, 해제해도 영영 안 물어본다.
+#      (해제 후 곧바로 재질문이 나가며 ask_turn 이 다시 +1 되므로 최종값은 2 다)
+ok_e2 = ("subject" in asked_before and "subject" not in st_e["asked"]
+         and turn_before == MAX_ASK and st_e["pending_slot"] == "subject"
+         and st_e["ask_turn"] <= MAX_ASK)
+check("E2", "AC6-2", "asked 정리 · 상한서 재질문",
+      f"asked {asked_before}→{st_e['asked']} · 턴 {turn_before}(상한)→{st_e['ask_turn']} · "
+      f"pending={st_e['pending_slot']}", ok_e2)
+
+# E3 — `edit()` 은 answer() 를 부르지 않는다. 칩을 만질 때마다 예산이 새면 안 된다.
+ok_e3 = len(CALLS) == ans_before and "chain" not in sys.modules
+check("E3", "AC6-5", "edit() HCX 콜 0",
+      f"answer() 추가 호출 {len(CALLS) - ans_before}회 · chain 로딩={'chain' in sys.modules}",
+      ok_e3)
+
+# E4 — 되물을 것이 없으면 'ready' 로 멈춘다(자동 재생성 안 함). 재답변은 명시 요청으로만.
+st_r, _ = run([CONFIRM], force_answer=True)
+n_before = len(CALLS)
+ev_r = qform_flow.edit(st_r, "method", "온라인")     # 값 설정 → 되물을 것이 없다
+ok_e4 = (ev_r["kind"] == "ready" and st_r["qform"]["method"] == "온라인"
+         and len(CALLS) == n_before)
+ev_rr = qform_flow.answer_now(st_r, answer_fn=stub_answer)   # 사용자가 명시로 요청
+ok_e4 &= ev_rr["kind"] == "answer" and len(CALLS) == n_before + 1
+check("E4", "AC6-5", "ready→명시 재답변",
+      f"{ev_r['kind']} · 자동생성 0회 · answer_now 후 {len(CALLS) - n_before}회", ok_e4)
+
+# E5 — 해제한 슬롯을 **버튼으로 다시 고를 수 있다**(T5 선택지가 살아 있는가).
+opts_e = qform_flow.options(st_e)
+ok_e5 = bool(opts_e) and "법인" in opts_e
+check("E5", "AC6-2", "해제 후 선택지 복구",
+      f"{len(opts_e)}개 · 법인 포함={'법인' in opts_e}", ok_e5)
+
+# ══════════════════════════════════════════════════════════════════════════
 # AC4-1 — HCX 콜 0 확인
 # ══════════════════════════════════════════════════════════════════════════
 chain_loaded = "chain" in sys.modules

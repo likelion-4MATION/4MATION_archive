@@ -260,19 +260,15 @@ def skip(state: dict, *, boost: bool = False, answer_fn=None, config=None) -> di
     return _finalize(state, boost=boost, answer_fn=answer_fn)
 
 
-def _step(state: dict, *, ask_mode: str, boost: bool, answer_fn, llm_call,
-          config=None) -> dict:
-    """되묻기 판정 → 분기. 턴 상한에 닿거나 **물을 슬롯이 동나면** 미채움이어도 진행한다.
+def _try_ask(state: dict, *, ask_mode: str, llm_call, cfg: dict) -> dict | None:
+    """되묻기 **판정 + 문구**. 되물을 것이 없으면 `None`. **`answer()` 를 부르지 않는다.**
 
-    `asked` 제외 후 후보가 없으면 `next_question` 이 None 을 돌려주므로,
-    `MAX_ASK_TURNS` 도달과 **같은 경로**로 답변 턴에 들어간다(T1-④).
+    `_step`(없으면 답변까지 간다)과 `edit`(없으면 거기서 멈춘다)이 이 함수를 공유한다.
+    갈라 두면 "칩으로 고쳤을 때"와 "되묻기로 답했을 때"의 판정이 어긋날 수 있다.
     """
-    cfg = config if isinstance(config, dict) and "MAX_ASK_TURNS" in config \
-        else qform_config.resolve(config)
-
-    # 정의형 질의는 되묻지 않고 곧장 답한다(T3). 개념을 물었는데 신청 절차 슬롯을
-    # 채우라고 요구하면 안 된다. **슬롯은 지우지 않는다** — `skip` 과 같은 취급이라
-    # 안 좁힌 슬롯이 첨부를 넓게 남길 뿐이다(graceful degradation).
+    # 정의형 질의는 되묻지 않는다(T3). 개념을 물었는데 신청 절차 슬롯을 채우라고
+    # 요구하면 안 된다. **슬롯은 지우지 않는다** — `skip` 과 같은 취급이라 안 좁힌
+    # 슬롯이 첨부를 넓게 남길 뿐이다(graceful degradation).
     # 스코프 게이트는 `extract()`·`chain.answer()` 쪽에 그대로 살아 있다 — 여기서
     # 건너뛰는 것은 **되묻기뿐**이라 소관 밖 정의형 질의는 여전히 reject 된다.
     bypass = BYPASS_DEFINITIONAL if is_definitional(state.get("base_q") or "") else None
@@ -281,13 +277,13 @@ def _step(state: dict, *, ask_mode: str, boost: bool, answer_fn, llm_call,
         state["slots_raw"]["_ask_bypass"] = bypass
     if bypass:
         state["pending_slot"] = None
-        return _finalize(state, boost=boost, answer_fn=answer_fn)
+        return None
 
     nq = (qform_state.next_question(state["qform"], exclude=set(state.get("asked") or ()))
           if state["ask_turn"] < cfg["MAX_ASK_TURNS"] else None)
     if nq is None:
         state["pending_slot"] = None
-        return _finalize(state, boost=boost, answer_fn=answer_fn)
+        return None
 
     surv = qform_state.survivors(state["qform"])
     ask = qform_ask.build_question(nq["slot"], state["qform"], surv,
@@ -297,6 +293,84 @@ def _step(state: dict, *, ask_mode: str, boost: bool, answer_fn, llm_call,
     return {"kind": "ask", "slot": nq["slot"], "prompt": ask["text"],
             "remaining": nq["remaining"], "turn": state["ask_turn"],
             "survivors": surv, "ask": ask}
+
+
+def _step(state: dict, *, ask_mode: str, boost: bool, answer_fn, llm_call,
+          config=None) -> dict:
+    """되묻기 판정 → 분기. 턴 상한에 닿거나 **물을 슬롯이 동나면** 미채움이어도 진행한다.
+
+    `asked` 제외 후 후보가 없으면 `next_question` 이 None 을 돌려주므로,
+    `MAX_ASK_TURNS` 도달과 **같은 경로**로 답변 턴에 들어간다(T1-④).
+    """
+    cfg = config if isinstance(config, dict) and "MAX_ASK_TURNS" in config \
+        else qform_config.resolve(config)
+    ev = _try_ask(state, ask_mode=ask_mode, llm_call=llm_call, cfg=cfg)
+    return ev if ev is not None else _finalize(state, boost=boost, answer_fn=answer_fn)
+
+
+def edit(state: dict, field: str, value: str | None = None, *,
+         ask_mode: str = "template", llm_call=None, config=None) -> dict:
+    """슬롯 1개를 고치거나(`value`) 해제하고(`value=None`) **되묻기 판정만** 다시 돈다.
+
+    기획서 §7 "조용히 반영 금지"는 ver2 에서 절반만 지켜졌다 — 슬롯이 **보이지만
+    고칠 수는 없었다.** 이 함수가 나머지 절반이다.
+
+    **`answer()` 를 부르지 않는다** (08-11 결정 · AC6-5). 명세 B3-1 은 `_step` 재실행을
+    적었지만 `_step` 은 되물을 것이 없으면 `_finalize` 로 빠져 생성 콜을 쓴다. 칩을
+    만지작거릴 때마다 예산이 새면 안 되므로, 재생성은 사용자가 명시로 요청할 때만
+    한다(`answer_now`). ⓐ 모드에서 이 함수의 HCX 콜은 **0**이다.
+
+    해제 시:
+      - `asked` 에서 그 슬롯을 뺀다 — **다시 물을 수 있어야** 고치는 의미가 있다(AC6-2)
+      - `ask_turn` 을 `len(asked)` 로 되돌린다. 안 그러면 상한에 이미 닿은 대화에서
+        해제해도 되묻기가 영영 안 뜬다. 되묻기 하나를 무른 것이니 턴도 하나 무른다.
+
+    반환: `{"kind": "ask", …}` 되물을 것이 생김 (콜 0 · ⓐ)
+          `{"kind": "ready", …}` 되물을 것 없음 → 화면이 '다시 답변받기' 를 노출한다
+    """
+    if field not in SLOT_FIELDS:
+        raise ValueError(f"슬롯이 아니다: {field!r} (허용 {SLOT_FIELDS})")
+    cfg = config if isinstance(config, dict) and "MAX_ASK_TURNS" in config \
+        else qform_config.resolve(config)
+
+    origin = dict(state.get("slot_origin") or {})
+    slot_turn = dict(state.get("slot_turn") or {})
+    raw = dict(state.get("slots_raw") or {})
+    hits = dict(raw.get("_hits") or {})
+
+    state.setdefault("qform", {})[field] = value
+    raw[field] = value
+    if value is None:
+        origin[field] = SRC_EMPTY
+        slot_turn.pop(field, None)
+        hits.pop(field, None)
+        state["asked"] = [s for s in (state.get("asked") or []) if s != field]
+        state["ask_turn"] = len(state["asked"])
+    else:
+        origin[field] = SRC_NEW
+        slot_turn[field] = int(state.get("turn_no") or 0)
+        hits[field] = ["⟵슬롯 칩 수정"]
+
+    raw["_hits"] = hits
+    raw["_origin"] = origin
+    state.update({"slots_raw": raw, "slot_origin": origin, "slot_turn": slot_turn})
+
+    ev = _try_ask(state, ask_mode=ask_mode, llm_call=llm_call, cfg=cfg)
+    if ev is not None:
+        return ev
+    return {"kind": "ready", "field": field, "value": value,
+            "slots": dict(state["qform"]),
+            "survivors": qform_state.survivors(state["qform"])}
+
+
+def answer_now(state: dict, *, boost: bool = False, answer_fn=None) -> dict:
+    """현재 슬롯 그대로 답변 턴을 돈다 — 슬롯 칩 수정 뒤 '다시 답변받기'(T6).
+
+    `skip()` 과 다른 점: **`ask_turn` 을 상한으로 밀지 않는다.** 탈출구는 "더 묻지 마"
+    라는 뜻이지만 재답변은 아니다 — 이후에 다른 슬롯을 해제하면 다시 물을 수 있어야 한다.
+    """
+    state["pending_slot"] = None
+    return _finalize(state, boost=boost, answer_fn=answer_fn)
 
 
 def _finalize(state: dict, *, boost: bool, answer_fn) -> dict:

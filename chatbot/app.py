@@ -75,6 +75,7 @@ st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실�
 
 st.session_state.setdefault("history", [])
 st.session_state.setdefault("flow", qform_flow.new_state())
+st.session_state.setdefault("needs_regen", False)   # 슬롯 수정 후 재답변 대기 (T6)
 
 with st.sidebar:
     st.subheader("세션 상태")
@@ -101,6 +102,7 @@ with st.sidebar:
     if st.button("대화 초기화"):
         st.session_state.history = []
         st.session_state.flow = qform_flow.new_state()
+        st.session_state.needs_regen = False
         st.rerun()
 
     st.divider()
@@ -122,13 +124,28 @@ def _fmt_size(n) -> str:
     return f" · {n / 1024:.0f}KB" if n < 1024 * 1024 else f" · {n / 1024 / 1024:.1f}MB"
 
 
-def render_slots(slots: dict) -> None:
-    """채워진 슬롯 노출 — 기획서 §7 '조용히 반영 금지'. 사용자가 보고 고칠 수 있어야 한다."""
-    filled = [(SLOT_LABEL.get(f, f), v) for f, v in slots.items()
+def render_slots(slots: dict, *, key_prefix: str = "", editable: bool = False) -> str | None:
+    """채워진 슬롯 노출 — 기획서 §7 '조용히 반영 금지'. 사용자가 보고 **고칠 수 있어야** 한다.
+
+    editable 이면 슬롯마다 해제 버튼을 붙이고, 눌린 슬롯 이름을 돌려준다(T6 B3).
+    ver2 는 표시만 했다 — 보이지만 고칠 수 없으면 §7 을 절반만 지킨 것이다.
+    과거 턴에는 안 붙인다. 지금 상태가 아닌 것을 고치는 시늉이 되기 때문이다.
+    """
+    filled = [(f, SLOT_LABEL.get(f, f), v) for f, v in slots.items()
               if f in qform_state.SLOT_FIELDS and v]
     if not filled:
-        return
-    st.caption("🎯 " + " · ".join(f"{lab} **{v}**" for lab, v in filled))
+        return None
+    if not editable:
+        st.caption("🎯 " + " · ".join(f"{lab} **{v}**" for _, lab, v in filled))
+        return None
+
+    unset = None
+    st.caption("🎯 확정된 조건 — 잘못 잡혔으면 ✕ 로 풀고 다시 고르세요")
+    for col, (f, lab, v) in zip(st.columns(len(filled)), filled):
+        if col.button(f"{lab} {v}  ✕", key=f"unset-{key_prefix}-{f}", width="stretch",
+                      help=f"'{lab}' 조건을 해제하고 되묻기를 다시 받습니다 (HCX 콜 0)"):
+            unset = f
+    return unset
 
 
 def render_attachments(atts: list, key_prefix: str) -> None:
@@ -170,14 +187,18 @@ def render_attachments(atts: list, key_prefix: str) -> None:
 
 
 def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
-                  search_q: str | None = None) -> None:
-    """answer() 결과 1건 렌더 — 계약 4필드 + 부가(checks/_meta)만 사용."""
+                  search_q: str | None = None, editable: bool = False) -> dict:
+    """answer() 결과 1건 렌더 — 계약 4필드 + 부가(checks/_meta)만 사용.
+
+    반환: {"unset": 해제 클릭된 슬롯|None, "chip": reject 복구 칩 질의|None}
+    """
     if r["text"] is None:
         st.error(f"답변 생성 실패: {r['_meta'].get('error', '원인 미상')}")
-        return
+        return {"unset": None, "chip": None}
     st.markdown(r["text"])
+    out = {"unset": None, "chip": None}
     if slots:
-        render_slots(slots)
+        out["unset"] = render_slots(slots, key_prefix=key_prefix, editable=editable)
     meta = r["_meta"]
     st.caption(
         f"{ROUTE_LABEL.get(r['route'], r['route'])}"
@@ -195,6 +216,15 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
         with st.expander("⚑ 검증 플래그 (차단 아님)"):
             for f in r["checks"]["flags"]:
                 st.markdown(f"- {f}")
+
+    # reject 복구 경로 (T6 B4) — 소관 밖이라고 끝내면 그 화면이 막다른 길이 된다.
+    # **타기관 이름·URL 을 붙이지 않는다.** HOLES H7 이 열려 있어 근거가 없고,
+    # 없는 기관을 안내하는 순간 R2(참고문서에 있는 내용만) 위반이다.
+    # 할 수 있는 것은 "우리가 답할 수 있는 것"을 다시 보여 주는 것까지다.
+    if r.get("route") == "reject":
+        st.caption("다른 질문을 해보세요")
+        out["chip"] = render_chips(f"rej-{key_prefix}")
+    return out
 
 
 def render_ask(turn: dict) -> None:
@@ -294,7 +324,12 @@ SHOW_TRACE = bool(st.session_state.get("show_trace"))
 
 left, right = st.columns([3, 2]) if SHOW_TRACE else (st.container(), None)
 
+last_answer = max((i for i, t in enumerate(st.session_state.history)
+                   if t["role"] == "answer"), default=None)
+
 with left:
+    unset_field = None
+    chip_q = None
     for ti, turn in enumerate(st.session_state.history):
         if turn["role"] == "user":
             with st.chat_message("user"):
@@ -304,12 +339,25 @@ with left:
                 render_ask(turn)
         else:
             with st.chat_message("assistant"):
-                render_answer(turn["r"], key_prefix=f"h{ti}",
-                              slots=turn.get("slots"), search_q=turn.get("search_q"))
+                # 슬롯 해제는 **마지막 답변에만** 붙인다 — 과거 턴의 슬롯을 고치는 시늉을
+                # 하면 화면과 실제 상태(flow)가 갈린다.
+                act = render_answer(turn["r"], key_prefix=f"h{ti}",
+                                    slots=turn.get("slots"), search_q=turn.get("search_q"),
+                                    editable=(ti == last_answer and not pending))
+                unset_field = act["unset"] or unset_field
+                chip_q = act["chip"] or chip_q
+
+    # 슬롯을 고친 뒤 되물을 것이 없으면 여기서 재생성을 **명시로** 받는다.
+    # 자동 재생성을 안 하는 이유: 칩을 만질 때마다 HCX 2콜이 나가면 예산이 샌다(AC6-5).
+    # 위젯 key 와 상태 플래그 이름을 반드시 갈라 둔다 — 같은 이름이면 버튼이 매 런
+    # 자기 반환값을 session_state 에 써서 플래그를 덮어쓴다.
+    if st.session_state.get("needs_regen") and not pending:
+        st.info("조건이 바뀌었습니다. 이 조건으로 답변을 다시 받으시겠어요?")
+    regen = (st.button("이 조건으로 다시 답변받기", key="btn-regen", type="primary")
+             if st.session_state.get("needs_regen") and not pending else False)
 
     skip = False
     chosen = None
-    chip_q = None
     if pending:
         # 선택지 버튼 — 값이 조합 테이블에서 직접 온다(T5 B1). 자유 입력·탈출구는 그대로.
         chosen = render_options(qform_flow.options(flow), key_prefix=str(flow["ask_turn"]))
@@ -333,10 +381,31 @@ if st.session_state.history:
 
 q = st.chat_input("예: 착오송금 반환 신청 서류가 뭐예요?")
 
+if unset_field:
+    # 슬롯 해제 — **HCX 콜 0**. 답변을 다시 만들지 않는다(AC6-5 · 08-11 결정).
+    ev = qform_flow.edit(flow, unset_field, None, ask_mode=ASK_MODE)
+    lab = SLOT_LABEL.get(unset_field, unset_field)
+    st.session_state.history.append({"role": "user", "text": f"'{lab}' 조건 해제"})
+    if ev["kind"] == "ask":
+        st.session_state.needs_regen = False        # 되물으니 재생성 버튼은 필요 없다
+        record(ev, build_trace(ev, 0))
+    else:
+        st.session_state.needs_regen = True   # 물을 것이 없다 → 사용자가 재생성을 정한다
+    st.rerun()
+
+if regen:
+    with st.spinner("문서 검색·답변 생성 중…"):
+        c0 = chain._calls
+        ev = qform_flow.answer_now(flow, boost=BOOST)
+        st.session_state.needs_regen = False
+        record(ev, build_trace(ev, chain._calls - c0))
+    st.rerun()
+
 if skip and pending:
     with st.spinner("문서 검색·답변 생성 중…"):
         c0 = chain._calls
         ev = qform_flow.skip(flow, boost=BOOST)
+        st.session_state.needs_regen = False
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
@@ -346,6 +415,7 @@ if chosen and pending:
     with st.spinner("처리 중…"):
         c0 = chain._calls
         ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE, boost=BOOST)
+        st.session_state.needs_regen = False
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
@@ -359,6 +429,7 @@ if q_new or q_reply:
     with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
         c0 = chain._calls
         step = qform_flow.reply if q_reply else qform_flow.start
+        st.session_state.needs_regen = False
         ev = step(flow, text, ask_mode=ASK_MODE, boost=BOOST)
         # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
         record(ev, build_trace(ev, chain._calls - c0))
