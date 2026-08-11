@@ -309,7 +309,8 @@ def _step(state: dict, *, ask_mode: str, boost: bool, answer_fn, llm_call,
 
 
 def edit(state: dict, field: str, value: str | None = None, *,
-         ask_mode: str = "template", llm_call=None, config=None) -> dict:
+         source: str = "슬롯 칩 수정", ask_mode: str = "template",
+         llm_call=None, config=None) -> dict:
     """슬롯 1개를 고치거나(`value`) 해제하고(`value=None`) **되묻기 판정만** 다시 돈다.
 
     기획서 §7 "조용히 반영 금지"는 ver2 에서 절반만 지켜졌다 — 슬롯이 **보이지만
@@ -349,7 +350,7 @@ def edit(state: dict, field: str, value: str | None = None, *,
     else:
         origin[field] = SRC_NEW
         slot_turn[field] = int(state.get("turn_no") or 0)
-        hits[field] = ["⟵슬롯 칩 수정"]
+        hits[field] = [f"⟵{source}"]      # 트레이스가 출처를 정확히 말해야 한다
 
     raw["_hits"] = hits
     raw["_origin"] = origin

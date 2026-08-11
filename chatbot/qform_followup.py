@@ -28,8 +28,8 @@ v1 에서 부연 4개가 전부 코퍼스 0청크(창작)로 판명된 이력이
 
     from qform_followup import suggest
     suggest({"party": "송금인", "sub_task": "반환신청", "qualification": "본인",
-             "subject": "본인", "method": None}, base_q="착오송금 반환 신청 서류가 뭐예요?")
-    # [{"field": "method", "value": "온라인", "query": "착오송금 … 뭐예요? 온라인"}, …]
+             "subject": "본인", "method": None})
+    # [{"field": "method", "value": "온라인"}, {"field": "method", "value": "방문"}]
 """
 from __future__ import annotations
 
@@ -74,15 +74,19 @@ def _values_in(surv: list[dict], field: str) -> list[str]:
     return seen
 
 
-def suggest(slots: dict, *, base_q: str | None = None,
-            max_n: int = MAX_SUGGESTIONS) -> list[dict]:
+def suggest(slots: dict, *, max_n: int = MAX_SUGGESTIONS) -> list[dict]:
     """후속 질문 후보. **LLM 콜 0.** 없으면 빈 리스트 — 그것이 오류가 아니라 정상이다.
 
-    반환 항목: {"field": 축, "value": 조합 테이블 값, "query": 클릭 시 보낼 질의}
+    반환 항목: {"field": 축, "value": 조합 테이블 값}
 
-    query 는 **직전 질의(사용자 본인의 말) + 조합 테이블 값**이다. 값만 보내면
-    검색 쿼리가 "온라인" 한 단어가 되어 검색이 망가진다. 여기서 새로 만드는 낱말은 없다 —
-    부스트(`qform_state.serialize`)가 슬롯을 쿼리에 덧붙이는 것과 같은 방식이다.
+    **값만 돌려주고 질의문을 만들지 않는다(08-11 결정 · C안).** 화면은 이 값을
+    `qform_flow.edit(state, field, value)` 로 흘려 **슬롯을 좁히고**, 답변은 사용자가
+    '다시 답변받기'를 누를 때 다시 만든다.
+
+    처음에는 `직전 질의 + 값` 을 새 질의로 보냈다가 되돌렸다. 그건 슬롯 값을 검색
+    쿼리에 덧붙이는 것이라 **기본 OFF 인 쿼리 부스트를 우회해서 켜는 것과 같았고**
+    (§2-8 · 450셋 회귀 미수행), 실측에서 첨부가 6건 → 0건으로 무너졌다.
+    슬롯만 좁히면 검색 쿼리가 그대로라 회귀 트리거가 0이다 — 이번 스프린트의 전제다.
     """
     clean = {f: (slots or {}).get(f) for f in SLOT_FIELDS}
     surv = qform_state.survivors(clean)
@@ -98,8 +102,7 @@ def suggest(slots: dict, *, base_q: str | None = None,
         if clean.get(field) is not None:
             continue                       # 이미 정해진 축은 이어갈 것이 없다
         for value in _values_in(surv, field):
-            q = f"{base_q} {value}".strip() if base_q else value
-            out.append({"field": field, "value": value, "query": q})
+            out.append({"field": field, "value": value})
             if len(out) >= max_n:
                 return out
     return out
@@ -118,7 +121,6 @@ if __name__ == "__main__":
     COMBOS = qform_state._COMBOS
     TABLE = {f: {t for c in COMBOS for t in _split(c[f])} - {"공통"} for f in SLOT_FIELDS}
     fails: list[tuple[str, str, str]] = []
-    Q = "착오송금 반환 신청 서류가 뭐예요?"
 
     print(f"후속 질문 추천 — 자기검사 (조합 테이블 {len(COMBOS)}행 · 최대 {MAX_SUGGESTIONS}개)\n")
 
@@ -151,7 +153,7 @@ if __name__ == "__main__":
     for bf, q in SMOKE:
         s = {f: v for f, v in extract(q, business_function=classify(q)).items()
              if f in SLOT_FIELDS}
-        r = suggest(s, base_q=q)
+        r = suggest(s)
         if bf != "착오송금 반환 신청" and r:
             ac2 = False
         print(f"  {bf:18} {len(r):>4}  {[x['value'] for x in r] or '—'}")
@@ -166,7 +168,7 @@ if __name__ == "__main__":
         for keep in itertools.chain.from_iterable(
                 itertools.combinations(SLOT_FIELDS, k) for k in range(len(SLOT_FIELDS) + 1)):
             s = {f: (c[f] or None) if f in keep else None for f in SLOT_FIELDS}
-            for it in suggest(s, base_q=Q):
+            for it in suggest(s):
                 seen[it["field"]].add(it["value"])
                 if it["value"] not in TABLE[it["field"]]:
                     outside.append((it["field"], it["value"]))
@@ -184,8 +186,8 @@ if __name__ == "__main__":
     print("\n── 결정론 — 추천 순서 고정 ──")
     PROBE = {"party": "수취인", "sub_task": None, "qualification": None,
              "subject": None, "method": None}
-    seq = [x["value"] for x in suggest(PROBE, base_q=Q)]
-    ac4 = seq == [x["value"] for x in suggest(PROBE, base_q=Q)]
+    seq = [x["value"] for x in suggest(PROBE)]
+    ac4 = seq == [x["value"] for x in suggest(PROBE)]
     print(f"  {seq}  → {'OK' if ac4 else 'DIFF ⛔'}")
     print("  ※ 프로세스 간 동일성: PYTHONHASHSEED 를 바꿔 재실행해도 같아야 한다")
 

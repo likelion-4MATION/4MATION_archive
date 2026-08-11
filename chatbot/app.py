@@ -81,18 +81,19 @@ def humanize_error(code) -> str:
 # 문구는 `docs/qform_시험질의셋.md` 에서 **그대로** 가져온다. 임의 창작 금지 —
 # 조합 테이블·시험 질의셋 밖 문구를 만들지 않는다(CLAUDE.md §2-4·§2-5).
 #
-#   착오송금 반환 신청  ← B1  (되묻기 1턴 경로. 선택지 버튼이 바로 보이는 진입점)
-#   예금자보호제도      ← E1
-#   예금보험금 안내     ← E4
-#   채무조정 안내       ← E2
-#   은닉재산 신고       ← E3
-#   고객 미수령금 신청  ← **시험 질의셋 미수록 → 칩 없음.**
-#       6업무 중 이것 하나만 원천이 없다. 지어내면 그게 창작이라 비워 둔다.
-#       질의셋에 1건이 추가되면 아래 리스트에 한 줄 더 붙이면 끝이다.
+#   착오송금 반환 신청  ← 시험 질의셋 B1 (되묻기 1턴 경로. 선택지 버튼이 바로 보이는 진입점)
+#   예금자보호제도      ← 시험 질의셋 E1
+#   예금보험금 안내     ← 시험 질의셋 E4
+#   채무조정 안내       ← 시험 질의셋 E2
+#   은닉재산 신고       ← 시험 질의셋 E3
+#   고객 미수령금 신청  ← **`crawler/data/testset_natural_450.jsonl` 수록 문구** (08-11 결정)
+#       이 업무만 시험 질의셋에 항목이 없다. 지어내는 대신 450셋에서 그대로 가져왔다
+#       (해당 업무 77건 중 classify 판정이 일치하는 문구). 원천이 둘인 유일한 칩이다.
 EXAMPLE_CHIPS = [
     ("착오송금 반환 신청", "착오송금 반환 신청 서류가 뭐예요?"),
     ("예금자보호제도", "예금보호한도가 얼마인가요?"),
     ("예금보험금 안내", "예금보험금은 어떻게 신청하나요?"),
+    ("고객 미수령금 신청", "고객 미수령금은 어떻게 조회하고 신청하나요?"),
     ("채무조정 안내", "채무조정 신청하려면 어떻게 해요?"),
     ("은닉재산 신고", "은닉재산 신고하면 포상금 얼마나 받나요?"),
 ]
@@ -267,22 +268,26 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
     return out
 
 
-def render_followups(items: list[dict], key_prefix: str) -> str | None:
-    """후속 질문 추천 (T7 B5). 클릭된 질의를 돌려준다. **HCX 콜 +0.**
+def render_followups(items: list[dict], key_prefix: str) -> dict | None:
+    """후속 질문 추천 (T7 B5). 클릭된 {"field","value"} 를 돌려준다. **HCX 콜 +0.**
 
     라벨은 `축 이름 · 조합 테이블 값` 이다. 축 이름은 화면이 이미 쓰던 `SLOT_LABEL`,
     값은 생존 행 그대로 — **문구를 만들지 않는다**(CLAUDE.md §2-4).
     착오송금 외 업무에서는 `items` 가 비어 이 함수가 아예 안 불린다. 정상이다(§2-5).
+
+    클릭은 **새 질의가 아니라 슬롯 좁히기**로 흐른다(08-11 결정 · C안). 검색 쿼리를
+    건드리지 않아야 회귀 트리거가 0으로 유지된다 — 자세한 사유는 `qform_followup` 참조.
     """
     if not items:
         return None
     picked = None
-    st.caption("이어서 물어보기")
+    st.caption("조건을 더 좁혀서 보기")
     for col, it in zip(st.columns(len(items)), items):
-        label = f"{SLOT_LABEL.get(it['field'], it['field'])} · {it['value']}"
-        if col.button(label, key=f"fu-{key_prefix}-{it['field']}-{it['value']}",
-                      width="stretch", help=it["query"]):
-            picked = it["query"]
+        lab = SLOT_LABEL.get(it["field"], it["field"])
+        if col.button(f"{lab} · {it['value']}", width="stretch",
+                      key=f"fu-{key_prefix}-{it['field']}-{it['value']}",
+                      help=f"'{lab}'을(를) '{it['value']}'(으)로 두고 다시 답변받습니다"):
+            picked = it
     return picked
 
 
@@ -373,8 +378,7 @@ def record(ev: dict, trace: dict | None = None) -> None:
         st.session_state.history.append(
             {"role": "answer", "r": ev["result"], "slots": ev["slots"],
              "search_q": ev["boosted"], "trace": trace,
-             "followups": qform_followup.suggest(
-                 ev["slots"], base_q=st.session_state.flow.get("base_q"))}
+             "followups": qform_followup.suggest(ev["slots"])}
         )
 
 
@@ -448,11 +452,20 @@ if st.session_state.history:
 
 q = st.chat_input("예: 착오송금 반환 신청 서류가 뭐예요?")
 
+# 슬롯 해제(T6)와 후속 추천(T7 C안)은 **같은 경로**다 — 둘 다 슬롯을 고치고
+# 되묻기만 재판정한다. `answer()` 는 부르지 않으므로 HCX 콜 0 이다(AC6-5·AC7-1).
+_edit = None
 if unset_field:
-    # 슬롯 해제 — **HCX 콜 0**. 답변을 다시 만들지 않는다(AC6-5 · 08-11 결정).
-    ev = qform_flow.edit(flow, unset_field, None, ask_mode=ASK_MODE)
-    lab = SLOT_LABEL.get(unset_field, unset_field)
-    st.session_state.history.append({"role": "user", "text": f"'{lab}' 조건 해제"})
+    _edit = (unset_field, None, "슬롯 칩 수정", f"'{SLOT_LABEL.get(unset_field, unset_field)}' 조건 해제")
+elif followup_q:
+    _lab = SLOT_LABEL.get(followup_q["field"], followup_q["field"])
+    _edit = (followup_q["field"], followup_q["value"], "후속 추천",
+             f"{_lab} · {followup_q['value']}(으)로 좁히기")
+
+if _edit:
+    field, value, source, note = _edit
+    ev = qform_flow.edit(flow, field, value, source=source, ask_mode=ASK_MODE)
+    st.session_state.history.append({"role": "user", "text": note})
     if ev["kind"] == "ask":
         st.session_state.needs_regen = False        # 되물으니 재생성 버튼은 필요 없다
         record(ev, build_trace(ev, 0))
@@ -486,10 +499,9 @@ if chosen and pending:
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
-# 칩·후속 추천은 되묻기 중이어도 **새 질의**다 — 사용자가 다른 걸 물으려고 누른 것이다.
-# 후속 추천 클릭은 T2 이월과 맞물린다: 직전 슬롯이 살아 있어 조건이 유지된 채로 이어진다.
-_click_q = chip_q or followup_q
-q_new, q_reply = (_click_q, None) if _click_q else ((None, q) if pending else (q, None))
+# 예시 칩은 되묻기 중이어도 **새 질의**다 — 사용자가 다른 걸 물으려고 누른 것이다.
+# (후속 추천은 새 질의가 아니라 슬롯 좁히기라 위 `_edit` 경로로 빠진다.)
+q_new, q_reply = (chip_q, None) if chip_q else ((None, q) if pending else (q, None))
 
 if q_new or q_reply:
     text = q_new or q_reply
