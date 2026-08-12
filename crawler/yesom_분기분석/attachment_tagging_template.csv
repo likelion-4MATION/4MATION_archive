@@ -1,0 +1,34 @@
+﻿attachment_id,source_doc_id,business_function,party,sub_task,qualification,subject,method,doc_kind,form_type,node_tag,retrieval_tier,file_title,canonical_filename,available_formats,source_url,confidence(제안),verified(사람입력),corrected_tags(사람입력),notes
+ATT-13,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,대리인변경,대리인,대리인,방문,양식,통지서,,B,위임해지통지서양식,09_위임해지통지서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,대리인 변경(온라인 불가). 챗봇 미노출 분기
+ATT-11,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,매입계약해제,본인;대리인,공통,온라인,양식,해제신청서,,B,부당이득반환채권 매입계약 해제 신청서 양식,07_매입계약해제신청서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,매입계약 체결 후 해제. 챗봇 미노출 분기
+ATT-03,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,반환신청,본인;대리인,공통,온라인;방문,양식,신청서,#착오송금반환신청서류,B,신청서양식,01_신청서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,본인·대리인 공통 기본서식
+ATT-04,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,반환신청,본인;대리인,공통,온라인;방문,양식,동의서,#착오송금반환신청서류,B,금융거래정보제공동의서,02_금융거래정보 제공 요구(동의)서,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,본인·대리인 공통
+ATT-05,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,반환신청,본인,본인,온라인;방문,기재예시,신청서(샘플),#본인착오송금서류,B,"본인 | 공통 서류 | 본인 확인용 신분증
+ 주민등록증, 운전면허증, 여권 등 
+ 
+ 착오송금 반환지원 신청",01_신청서샘플_본인,other,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,작성 예시
+ATT-06,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,반환신청,본인;대리인,공통,온라인;방문,양식,위임장,#착오송금반환신청서류,B,채권양도통지위임장,03_채권양도통지 위임장 양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,본인·대리인 공통
+ATT-07,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,반환신청,대리인,대리인,온라인;방문,기재예시,신청서(샘플),#대리인착오송금서류,B,"대리인 | 공통 서류 | 대리인 확인용 신분증
+ (주민등록증, 운전면허증, 여권 등) ※ 미성년자는 대리인이",01_신청서샘플_대리인,other,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,작성 예시
+ATT-08,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,반환신청,대리인,대리인,온라인;방문,양식,위임장,#대리인착오송금서류,B,착오송금반환지원신청위임장 양식,04_착오송금반환지원 신청등위임장양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,대리 위임 전용
+ATT-09,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,반환신청,대리인,미성년자,온라인;방문,양식,합의서,#미성년자착오송금서류,B,친권합의서양식,05_친권합의서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,미성년자 대리 추가서류
+ATT-14,kdic-fins-ir-aplygudn-MtrsVstRcptGudn-selectScrn,착오송금 반환 신청,송금인,반환신청,본인;대리인,공통,온라인;방문,양식,신청서,#착오송금반환신청서류,B,"STEP2
+신청서 제출
+신청서 작성 후 구비서류와 함께
+제출해 주세요.",01_신청서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MtrsVstRcptGudn/selectScrn.do,high,,,본인·대리인 공통 기본서식
+ATT-12,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,수령계좌변경,본인;대리인,공통,온라인;방문,양식,변경신청서,,B,수령계좌 변경신청서 양식,08_수령계좌변경신청서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,반환금 수령계좌 변경. 챗봇 미노출 분기
+ATT-10,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn,착오송금 반환 신청,송금인,신청철회,본인;대리인,공통,온라인,양식,철회서,,B,신청철회 양식,06_취소신청서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrprPossDcmntGudn/selectScrn.do,high,,,매입계약 체결 전 철회. 챗봇 미노출 분기
+ATT-01,kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn,착오송금 반환 신청,수취인,이의제기,,공통,온라인;방문,양식,이의제기서,#착오송금수취인이의제기,B,착오송금 반환요구에 대한 이의 제기서 양식,10_착오송금액반환요구에대한 이의제기서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrAddrsePossDcmntGudn/selectScrn.do,high,,,
+ATT-02,kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn,착오송금 반환 신청,수취인,이체수수료환급,,공통,온라인;방문;이메일;팩스,양식,환급신청서,#착오송금수취인이체수수료환급,B,착오송금 반환관련 이체수수료 환급신청서,11_착오송금액반환관련 이체수수료환급신청서양식,hwp;pdf,https://fins.kdic.or.kr/ir/aplygudn/MsdrAddrsePossDcmntGudn/selectScrn.do,high,,,이체수수료 환급 접수처 팩스 02-758-0270 / 이메일 kmrs@kdic.or.kr (T1-b 보정)
+ATT-15,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,예금보험금 안내,,보험금신청,본인;대리인,공통,방문,양식,동의서,#예금보험금서류,B,예금보험금 등 지급청구 및 동의서,예금보험금 등 지급청구 및 동의서,hwp;pdf,https://www.kdic.or.kr/sp/dpstrprot/DpsmIbamtAplyPossDcmnt/selectScrn.do,high,,,기본 신청서식
+ATT-16,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,예금보험금 안내,,보험금신청,대리인,대리인,방문,양식,위임장,#대리인예금보험금서류,B,위임장,위임장,hwp;pdf,https://www.kdic.or.kr/sp/dpstrprot/DpsmIbamtAplyPossDcmnt/selectScrn.do,high,,,
+ATT-17,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,예금보험금 안내,,보험금신청,대리인,미성년자,방문,양식,합의서,#미성년자예금보험금서류,B,친권자합의서,친권자합의서,hwp;pdf,https://www.kdic.or.kr/sp/dpstrprot/DpsmIbamtAplyPossDcmnt/selectScrn.do,high,,,
+ATT-18,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,예금보험금 안내,,보험금신청,대리인,사망 예금자,방문,양식,동의서,#사망예금보험금서류,B,지분신고서 및 수령권한 위임 동의서,지분신고서 및 수령권한 위임 동의서,hwp;pdf,https://www.kdic.or.kr/sp/dpstrprot/DpsmIbamtAplyPossDcmnt/selectScrn.do,med,,,공동상속 지분신고. 사망 추정-검증필요
+ATT-19,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,예금보험금 안내,,보험금신청,대리인,사망 예금자,방문,양식,약정서,#사망예금보험금서류,B,손해담보 약정서,손해담보 약정서,hwp;pdf,https://www.kdic.or.kr/sp/dpstrprot/DpsmIbamtAplyPossDcmnt/selectScrn.do,low,,,상속 미확정/무증빙 담보 추정-검증필요
+ATT-20,kdic-www-sp-dpstrprot-selectProtSystProtSumr,예금자보호제도,,부보금융회사조회,,,,목록·표,목록,#보호대상금융회사,A,부보금융회사 변동현황,(붙임) 부보금융회사 변동 현황(26년 2분기 기준)_홈페이지 공시,other,https://www.kdic.or.kr/sp/dpstrprot/selectProtSystProtSumr.do,high,,,주기적 갱신 데이터. 서식 아님-검색대상
+ATT-21,kdic-www-sp-dpstrprot-selectProtSystProtSumr,예금자보호제도,,부보금융회사조회,,,,목록·표,목록,#보호대상금융회사,A,부보금융회사 목록,(붙임) 부보금융회사 목록(26년 2분기 기준)_홈페이지 공시,other,https://www.kdic.or.kr/sp/dpstrprot/selectProtSystProtSumr.do,high,,,주기적 갱신 데이터. 서식 아님-검색대상
+ATT-22,kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn,채무조정 안내,,부채증명,본인,본인,방문,양식,증명원신청서,,B,방문 신청 시 | 본인 방문 | 부채증명원 발급신청서,부채증명원 발급신청서,other,https://www.kdic.or.kr/sp/sprtfund/SprtFndDebtDlngAplyGudn/selectScrn.do,high,,,본인 방문
+ATT-23,kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn,채무조정 안내,,부채증명,본인,본인,방문,양식,신청서,,B,금융거래정보 발급신청서,금융거래정보 발급신청서,other,https://www.kdic.or.kr/sp/sprtfund/SprtFndDebtDlngAplyGudn/selectScrn.do,high,,,본인 방문
+ATT-24,kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn,채무조정 안내,,부채증명,대리인,대리인,방문,양식,증명원신청서,,B,대리인 방문 | 부채증명원 발급신청서,대리인 부채증명원 발급신청서,other,https://www.kdic.or.kr/sp/sprtfund/SprtFndDebtDlngAplyGudn/selectScrn.do,high,,,대리인 방문
+ATT-25,kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn,채무조정 안내,,부채증명,대리인,대리인,방문,양식,신청서,,B,금융거래정보 발급신청서,대리인 금융거래정보 발급신청서,other,https://www.kdic.or.kr/sp/sprtfund/SprtFndDebtDlngAplyGudn/selectScrn.do,high,,,대리인 방문
+ATT-26,kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn,채무조정 안내,,부채증명,대리인,대리인,방문,양식,위임장,,B,위임장,대리인 위임장,other,https://www.kdic.or.kr/sp/sprtfund/SprtFndDebtDlngAplyGudn/selectScrn.do,high,,,대리 위임
