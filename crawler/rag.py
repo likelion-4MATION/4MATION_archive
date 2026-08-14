@@ -29,6 +29,8 @@ EMB_DIM = 1024   # bge-m3 임베딩 차원(모델 교체 시 갱신). build 시 
 
 _model = None
 _kiwi = None
+_router = None
+_router_failed = False
 
 
 def get_model():
@@ -70,6 +72,23 @@ def chunk_embed_text(chunk: dict) -> str:
     return f"{title}\n{chunk['text']}" if title else chunk["text"]
 
 
+def get_router():
+    """질의 BF 라우터 지연 로드. 체크포인트 부재·로드 실패 시 None(키워드 폴백).
+
+    실패를 한 번만 보고하고 이후 조용히 폴백한다 — 체크포인트가 없는 환경(클론 직후,
+    CI)에서 질의마다 예외를 던지면 검색 자체가 못 돌기 때문. 단건 추론 median 35ms
+    (MPS 기준, 모델 로드 5.7s는 최초 1회).
+    """
+    global _router, _router_failed
+    if _router is None and not _router_failed:
+        try:
+            _router = fbm.Router(ROUTER_PATH)
+        except Exception as e:               # 체크포인트 부재 · torch 미설치 · 라벨 불일치
+            _router_failed = True
+            print(f"[router] 로드 실패({type(e).__name__}) — 키워드 분류로 폴백: {ROUTER_PATH}")
+    return _router
+
+
 # ── 질의 업무 분류 (하드 필터용, 결정론적 키워드) ─────────────────────────
 # chunk.py 문서측 재태깅과 짝을 이루는 질의측 분류. 사용자 구어체 어휘 반영.
 # 점수/마진 미달(불명)이면 None → 필터 미적용(전체 검색)으로 안전 폴백.
@@ -94,8 +113,15 @@ BF_QUERY_KEYWORDS = {
                  ("제보", 3), ("포상금", 3), ("부실관련자", 3), ("신고센터", 2),
                  ("은닉", 2), ("신고", 1)],
 }
-QBF_MIN_SCORE = 3
-QBF_MARGIN = 2
+QBF_MIN_SCORE = 3          # 키워드 분류(폴백) 최소 점수
+QBF_MARGIN = 2             # 키워드 분류(폴백) 1위–2위 마진
+# 라우터 6분류 체크포인트. .gitignore 대상(2.4GB)이라 레포에 없을 수 있으며,
+# 없으면 classify_query_bf가 키워드 분류로 폴백한다(클론 직후에도 동작).
+ROUTER_PATH = str(pathlib.Path(__file__).resolve().parent.parent / "router_moai_embedding_model")
+# MSP 임계. 주의: 이 체크포인트는 held-out 450셋에서 MSP 최솟값 0.9991·중앙값 1.0000으로
+# 체계적 과신 상태라 사실상 한 건도 걸러내지 못한다(θ 0.00~0.99 결과 동일). 소관밖(OOS)
+# 판정 장치로 신뢰하지 말 것 — 작업계획서 B안의 MSP 임계 설계는 캘리브레이션 후 재검토 대상.
+QBF_MSP_MIN = 0.70
 BF_DOC_CAP = 5     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
@@ -106,7 +132,13 @@ BF_MODE = "soft"
 BF_BOOST = 0.12           # 소프트부스트 강도
 RRF_ALPHA = 0.35          # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
 RRF_K = 2                 # RRF 상수(낮을수록 상위 랭크 신뢰↑)
-FACET_BOOST = 0.02        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산.
+# FACET_BOOST 0.02 → 0.15 재튜닝(2026-08-14, eval_router_facet.py --facet-sweep):
+# held-out 450셋(gt_testset_retrieval_450, 448문항 — 라우터 학습셋과 교집합 0)에서
+# 0.00/.721 · 0.02/.728 · 0.05/.746 · 0.10/.748 · 0.15/.754 · 0.20/.754 · 0.30/.748 →
+# 0.10~0.20 플래토(고립스파이크 아님). 기존 0.02는 2026-08-12 그리드서치 값인데,
+# 그때 쓴 gt_testset_retrieval.jsonl은 라우터 학습셋 계열이라 facet 축이 가려져 있었다.
+# 주의: 0.15는 이 448문항에서 스윕해 고른 값이므로 그만큼 낙관적 — 별도 split 확정 필요.
+FACET_BOOST = 0.15        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산.
 # 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
 # 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
 BF_SHARED_DOCS = {
@@ -114,8 +146,8 @@ BF_SHARED_DOCS = {
 }
 
 
-def classify_query_bf(query: str):
-    """질의 → 6대 업무 중 하나 또는 None(불명). 하드 필터의 대상 업무 결정.
+def classify_query_bf_keyword(query: str):
+    """질의 → 6대 업무 중 하나 또는 None(불명). 결정론 키워드 분류(라우터 폴백 · A/B 재현용).
 
     공백 정규화: 질의·키워드 양쪽 공백 제거 후 매칭 → "보호 한도"가 "보호한도"로 잡힘.
     """
@@ -128,6 +160,24 @@ def classify_query_bf(query: str):
     if len(ranked) > 1 and ranked[0][1] - ranked[1][1] < QBF_MARGIN:
         return None
     return ranked[0][0]
+
+
+def classify_query_bf(query: str):
+    """질의 → 6대 업무 중 하나 또는 None(불명). 소프트부스트의 대상 업무 결정.
+
+    라우터(6분류) 우선, 체크포인트가 없으면 키워드 분류로 폴백한다. 시그니처·반환
+    규약(업무명 | None)은 불변이므로 호출부는 그대로다.
+
+    채택 근거(2026-08-14, held-out 450셋 448문항 · eval_router_facet.py):
+      질의 BF 정확도 키워드 69.2%(기권 28.6%) → 라우터 100.0%(기권 0%),
+      hit@5 .699 → .728(개선 15 · 악화 2). 키워드의 실패 유형은 '오답'이 아니라
+      '기권'이었고(부스트가 아예 안 걸림), 라우터가 그 구간을 메운다.
+    """
+    router = get_router()
+    if router is None:
+        return classify_query_bf_keyword(query)
+    bf, msp = router.predict([query])[0]
+    return bf if msp >= QBF_MSP_MIN else None
 
 
 # ── 서브인텐트 패싯(업무 내부 문서타입) 분류 — hybrid_soft 패싯 부스트용 ──────────
