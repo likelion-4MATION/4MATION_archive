@@ -29,7 +29,7 @@ OUT_PATH = "data/chunks.jsonl"
 DOC_ATT_PATH = "data/doc_attachments.json"   # [doc-agg] 문서 단위 첨부 집합
 
 CHUNK_SIZE = 800
-OVERLAP = 100
+OVERLAP = 200
 MIN_CHUNK = 60   # 표 사이 낀 짧은 헤딩/라인 파편 병합 임계
 
 SCHEMA_FIELDS = ["chunk_id", "parent_doc_id", "business_function", "sub_category",

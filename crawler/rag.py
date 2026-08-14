@@ -17,12 +17,15 @@ import pickle
 import faiss
 import numpy as np
 
-MODEL_NAME = "BAAI/bge-m3"
+MODEL_NAME = "dragonkue/BGE-m3-ko"  # M2.5(항목13): base bge-m3 대비 벤치용 교체(2026-08-02)
 INDEX_DIR = "data/index"
-EMB_DIM = 1024   # bge-m3 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
+EMB_DIM = 1024   # bge-m3 계열 공통 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
+RERANK_MODEL_NAME = "jinaai/jina-reranker-v2-base-multilingual"
+RERANK_POOL = 30   # 리랭커에 넘길 1차 후보 개수(cap 적용 후 top-N)
 
 _model = None
 _kiwi = None
+_reranker = None
 
 
 def get_model():
@@ -31,6 +34,15 @@ def get_model():
         from sentence_transformers import SentenceTransformer
         _model = SentenceTransformer(MODEL_NAME)
     return _model
+
+
+def get_reranker():
+    """Jina reranker v2(cross-encoder) 지연 로드. trust_remote_code 필요(커스텀 모델링 코드)."""
+    global _reranker
+    if _reranker is None:
+        from sentence_transformers import CrossEncoder
+        _reranker = CrossEncoder(RERANK_MODEL_NAME, trust_remote_code=True)
+    return _reranker
 
 
 def _get_kiwi():
@@ -90,15 +102,15 @@ BF_QUERY_KEYWORDS = {
 }
 QBF_MIN_SCORE = 3
 QBF_MARGIN = 2
-BF_DOC_CAP = 1     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
+BF_DOC_CAP = 5     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
 BF_MODE = "soft"
 # bge-m3 재튜닝(2026-07-22): 강한 dense에 맞춰 부스트↓·dense가중↑ (eval_rrf_tune A/B, A안).
 BF_BOOST = 0.005          # 소프트부스트 강도(과보정 방지: 0.02→0.005)
-RRF_ALPHA = 0.6           # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
+RRF_ALPHA = 0.6        # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
 RRF_K = 5                 # RRF 상수(낮을수록 상위 랭크 신뢰↑). bge-m3 스윕 최적값(60→5).
-FACET_BOOST = 0.03        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산. eval_facet A/B 채택.
+FACET_BOOST = 0.05       # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산. eval_facet A/B 채택.
 # 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
 # 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
 BF_SHARED_DOCS = {
@@ -304,6 +316,16 @@ class Searcher:
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return ranked
 
+    def rerank(self, query: str, candidates: list[tuple[int, float]], k: int) -> list[tuple[int, float]]:
+        """cross-encoder로 후보(candidates)만 재정렬 — 전체 코퍼스가 아니라 1차 검색 결과만 대상."""
+        if not candidates:
+            return candidates
+        reranker = get_reranker()
+        pairs = [(query, chunk_embed_text(self.chunks[idx])) for idx, _ in candidates]
+        scores = reranker.predict(pairs)
+        reranked = sorted(zip(candidates, scores), key=lambda x: -x[1])
+        return [(idx, float(sc)) for (idx, _), sc in reranked[:k]]
+
     def _cap_by_doc(self, hits: list[tuple[int, float]], cap: int) -> list[tuple[int, float]]:
         """parent_doc_id당 cap개까지만 순서 유지하며 남김(문서 단위 다양성 확보)."""
         if not cap or cap <= 0:
@@ -331,6 +353,16 @@ class Searcher:
             else:
                 pool = self.hybrid(query, max(k * 5, 50), bf=bf)
             hits = self._cap_by_doc(pool, BF_DOC_CAP)[:k]
+        elif mode == "hybrid_bf_rerank":
+            # hybrid_bf와 동일하게 1차 후보를 뽑되, cap 적용 후 top-k로 자르지 않고
+            # RERANK_POOL개까지 넉넉히 남긴 뒤 cross-encoder로 재정렬해서 top-k만 반환.
+            bf = classify_query_bf(query)
+            if BF_MODE == "soft":
+                pool = self.hybrid_soft(query, len(self.chunks), bf=bf, boost=BF_BOOST)
+            else:
+                pool = self.hybrid(query, max(RERANK_POOL * 2, 50), bf=bf)
+            capped = self._cap_by_doc(pool, BF_DOC_CAP)[:RERANK_POOL]
+            hits = self.rerank(query, capped, k)
         else:
             hits = self.hybrid(query, k)
         out = []
