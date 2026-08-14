@@ -130,8 +130,16 @@ BF_MODE = "soft"
 # alpha/rrf_k/boost/facet/cap 5축 스윕 결과 hit@1 0.292→0.366, hit@10 0.749→0.831,
 # mrr 0.445→0.509로 뚜렷한 단일 안정 플래토(고립스파이크 아님) 확인 후 채택.
 BF_BOOST = 0.12           # 소프트부스트 강도
-RRF_ALPHA = 0.35          # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
-RRF_K = 2                 # RRF 상수(낮을수록 상위 랭크 신뢰↑)
+# RRF_ALPHA 0.35→0.65 · RRF_K 2→1 재튜닝(2026-08-14, tune_params.py 5축 그리드 3360 config).
+# VAL(355)·TEST(430) 양쪽에서 스윕한 뒤 '두 셋 모두 개선되는' 설정만 채택했다:
+#   TEST 430  hit@5 .7837→.8186(+.035) · hit@1 .3698→.4233 · MRR .5342→.5825
+#   VAL  355  hit@5 .7606→.8254(+.065) · MRR .5586→.6383
+# 각 셋 단독 최적은 전이되지 않아 버렸다 — 430 단독(bf=0.18)은 VAL을 .8254→.8028로,
+# 355 단독(alpha .75/rrf_k 0/bf .09/facet .10/cap 3)은 TEST를 .7837→.7744로 깎는다.
+# alpha·cap은 두 셋에서 최적이 일치했고, bf·facet은 현행값이 이미 두 셋의 교차점이었다.
+# 최적점은 5축 전부 그리드 내부이며 이웃(±1칸)이 매끄럽다(고립 스파이크 아님).
+RRF_ALPHA = 0.65          # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
+RRF_K = 1                 # RRF 상수(낮을수록 상위 랭크 신뢰↑)
 # FACET_BOOST 0.02 → 0.15 재튜닝(2026-08-14, eval_router_facet.py --facet-sweep):
 # held-out 450셋(gt_testset_retrieval_450, 448문항 — 라우터 학습셋과 교집합 0)에서
 # 0.00/.721 · 0.02/.728 · 0.05/.746 · 0.10/.748 · 0.15/.754 · 0.20/.754 · 0.30/.748 →
@@ -355,7 +363,10 @@ class Searcher:
         return [(int(i), float(scores[i])) for i in order]
 
     def hybrid(self, query: str, k: int = 10, pool: int = 20,
-               rrf_k: int = RRF_K, bf: str | None = None) -> list[tuple[int, float]]:
+               rrf_k: int | None = None, bf: str | None = None) -> list[tuple[int, float]]:
+        # rrf_k 기본값을 시그니처에 박지 않는다 — 기본인자는 정의 시점에 고정되므로
+        # 런타임에 rag.RRF_K를 바꿔도 반영되지 않아 A/B가 조용히 틀린다(실제로 겪음).
+        rrf_k = RRF_K if rrf_k is None else rrf_k
         # bf 지정 시(하드 필터): 후보를 해당 업무 청크로 제한. 필터링으로 후보가
         # 줄므로 pool을 전체로 넓혀 in-bf 청크를 빠짐없이 확보.
         dpool = pool if bf is None else len(self.chunks)
@@ -376,14 +387,19 @@ class Searcher:
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return [(idx, score) for idx, score in ranked]
 
-    def hybrid_soft(self, query: str, k: int = 10, rrf_k: int = RRF_K,
+    def hybrid_soft(self, query: str, k: int = 10, rrf_k: int | None = None,
                     bf: str | None = None, boost: float = 0.0,
-                    alpha: float = RRF_ALPHA) -> list[tuple[int, float]]:
+                    alpha: float | None = None) -> list[tuple[int, float]]:
         """소프트부스트 융합 — 전체 풀 RRF 후 같은 업무 청크에 +boost(제외 없음).
 
         하드필터(hybrid(bf=...))와 달리 타 업무 청크를 남겨두므로, 질의 분류가
         틀려도 정답이 후보에 살아있다(graceful degradation). boost=0이면 순수 하이브리드.
+
+        rrf_k·alpha 기본값은 시그니처가 아니라 호출 시점에 모듈 상수에서 읽는다 —
+        기본인자로 박으면 정의 시점에 고정돼 런타임 A/B가 조용히 틀린다.
         """
+        rrf_k = RRF_K if rrf_k is None else rrf_k
+        alpha = RRF_ALPHA if alpha is None else alpha
         N = len(self.chunks)
         d = self.dense(query, N)
         s = self.sparse(query, N)
