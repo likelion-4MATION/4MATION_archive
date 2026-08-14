@@ -17,8 +17,14 @@ import pickle
 import faiss
 import numpy as np
 
+import faq_bf_map as fbm
+
 MODEL_NAME = "dragonkue/BGE-m3-ko"
 INDEX_DIR = "data/index"
+# FAQ 청크 BF의 라우터 산출 레이어(faq_routing_bf.md). 모듈 기준 절대경로 —
+# chatbot은 절대 index_dir + 다른 cwd로 Searcher를 만들므로, 상대경로면 거기서만
+# 조인이 조용히 빠져 eval(cwd=crawler)과 결과가 갈린다.
+BF_MAP_PATH = str(pathlib.Path(__file__).resolve().parent / "data" / "bf_map.jsonl")
 EMB_DIM = 1024   # bge-m3 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
 
 _model = None
@@ -90,15 +96,17 @@ BF_QUERY_KEYWORDS = {
 }
 QBF_MIN_SCORE = 3
 QBF_MARGIN = 2
-BF_DOC_CAP = 1     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
+BF_DOC_CAP = 5     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
 BF_MODE = "soft"
-# bge-m3 재튜닝(2026-07-22): 강한 dense에 맞춰 부스트↓·dense가중↑ (eval_rrf_tune A/B, A안).
-BF_BOOST = 0.005          # 소프트부스트 강도(과보정 방지: 0.02→0.005)
-RRF_ALPHA = 0.6           # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
-RRF_K = 5                 # RRF 상수(낮을수록 상위 랭크 신뢰↑). bge-m3 스윕 최적값(60→5).
-FACET_BOOST = 0.03        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산. eval_facet A/B 채택.
+# eval_anchor_v3(gt_testset_retrieval.jsonl, 1276문항) 그리드서치 재튜닝(2026-08-12):
+# alpha/rrf_k/boost/facet/cap 5축 스윕 결과 hit@1 0.292→0.366, hit@10 0.749→0.831,
+# mrr 0.445→0.509로 뚜렷한 단일 안정 플래토(고립스파이크 아님) 확인 후 채택.
+BF_BOOST = 0.12           # 소프트부스트 강도
+RRF_ALPHA = 0.35          # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
+RRF_K = 2                 # RRF 상수(낮을수록 상위 랭크 신뢰↑)
+FACET_BOOST = 0.02        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산.
 # 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
 # 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
 BF_SHARED_DOCS = {
@@ -229,6 +237,21 @@ class Store:
                 f.write(json.dumps(c, ensure_ascii=False) + "\n")
 
 
+# ── FAQ 청크 BF 조인 레이어 (faq_routing_bf.md I3) ────────────────────────────
+# chunks.jsonl은 건드리지 않고 별도 산출물에서 BF를 조회한다. doc_attachments.json과 같은 패턴.
+def load_bf_map(path: str = BF_MAP_PATH) -> dict[str, str | None]:
+    """qhash → 라우터 산출 BF(또는 None). 파일이 없으면 {} = 조인 비활성(기존 동작 유지)."""
+    p = pathlib.Path(path)
+    if not p.exists():
+        return {}
+    out: dict[str, str | None] = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            out[r["qhash"]] = r.get("bf")
+    return out
+
+
 class Searcher:
     """dense / bm25 / hybrid(RRF) 검색."""
 
@@ -239,6 +262,35 @@ class Searcher:
         self.index = faiss.read_index(str(self.dir / "faiss.index"))
         with open(self.dir / "bm25.pkl", "rb") as f:
             self.bm25 = pickle.load(f)["bm25"]
+        self.bf_map = load_bf_map()
+        # 인덱스 정렬 BF 캐시 — 질의마다 재해시하지 않도록 로드 시 1회만 해석.
+        self.bf_unmapped: list[str] = []
+        self._bf = [self._resolve_bf(c) for c in self.chunks]
+        if self.bf_unmapped:
+            print(f"[bf_map] 경고: 미매핑 FAQ 청크 {len(self.bf_unmapped)}건 — 질문이 바뀌었거나 "
+                  f"bf_map이 청킹보다 오래됨. faq_bf_map.py를 재실행하세요. "
+                  f"예: {self.bf_unmapped[:3]}")
+
+    def _resolve_bf(self, c: dict) -> str | None:
+        """청크의 유효 BF. FAQ/게시판 청크는 bf_map(라우터 산출), 그 외는 문서 상속 태그.
+
+        조인 키는 청크 순번이 아니라 질문 정규화 hash(faq_routing_bf.md I2) — FAQ 항목이
+        증감해 chunk_id가 밀려도 매핑이 따라오고, 질문이 수정되면 미매핑으로 드러난다.
+
+        미매핑·저신뢰(MSP 미달)는 None이며 부모 태그로 롤백하지 않는다(I4). BF_MODE="soft"
+        에서는 부스트를 못 받을 뿐 후보에서 배제되지 않는다. hard 모드에서는 배제되므로,
+        hard로 전환하려면 bf_map 커버리지를 먼저 확인할 것.
+        """
+        if not self.bf_map or not fbm.is_board(c):
+            return c.get("business_function")
+        q = fbm.extract_question(c["text"])
+        if q is None:                      # 추출 실패 — 추측으로 채우지 않음
+            return None
+        h = fbm.qhash(fbm.normalize_q(q))
+        if h not in self.bf_map:
+            self.bf_unmapped.append(c["chunk_id"])
+            return None
+        return self.bf_map[h]
 
     def dense(self, query: str, k: int = 10) -> list[tuple[int, float]]:
         q = embed_texts([query])
@@ -262,8 +314,8 @@ class Searcher:
         if bf is not None:
             allow = BF_SHARED_DOCS.get(bf, set())
             def _keep(i):
-                c = self.chunks[i]
-                return c.get("business_function") == bf or c["parent_doc_id"] in allow
+                # FAQ 청크는 bf_map 조인값, 그 외는 문서 상속 태그(_resolve_bf).
+                return self._bf[i] == bf or self.chunks[i]["parent_doc_id"] in allow
             d = [(i, sc) for i, sc in d if _keep(i)]
             s = [(i, sc) for i, sc in s if _keep(i)]
         rrf: dict[int, float] = {}
@@ -295,7 +347,7 @@ class Searcher:
             facets = query_facets(query) if FACET_BOOST > 0 else set()
             for idx in rrf:
                 c = self.chunks[idx]
-                if c.get("business_function") == bf or c["parent_doc_id"] in allow:
+                if self._bf[idx] == bf or c["parent_doc_id"] in allow:
                     rrf[idx] += boost
                     if facets:
                         hit = sum(1 for t in facets if t in c.get("sub_category", ""))
@@ -337,5 +389,6 @@ class Searcher:
         for idx, score in hits:
             c = dict(self.chunks[idx])
             c["_score"] = round(score, 4)
+            c["_bf"] = self._bf[idx]   # 유효 BF(FAQ는 bf_map 조인값). business_function은 원본 보존.
             out.append(c)
         return out

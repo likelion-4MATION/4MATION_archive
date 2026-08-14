@@ -41,6 +41,7 @@ grep -c "5천만" data/raw/kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn.htm
 | ①' 스모크 | `python run_crawl.py --manifest crawl_manifest.csv --limit 3` | 앞 3건만 |
 | ② 파싱 | `python parser.py` | `data/raw` → `data/parsed/*.json` |
 | ③ 청킹 | `python chunk.py` | `data/parsed` → `data/chunks.jsonl` (11필드 스키마) |
+| ③' FAQ BF 태깅 | `python faq_bf_map.py --router <ckpt>` | `data/chunks.jsonl` → `data/bf_map.jsonl` · `data/bf_map_report.md` |
 | ④⑤ 인덱스 | `python pipeline.py --use-cache --rebuild` | `data/raw` 캐시(무네트워크) → `data/index/` |
 | 평가셋 | `python build_testset.py` | `data/chunks.jsonl` → `data/testset.jsonl` |
 | 채점 | `python eval.py` | testset + index → `data/eval_report.md` |
@@ -88,8 +89,9 @@ python verify_rerun.py run1 run2
 | 레포 포함 | `data/testset.jsonl` · `data/eval_report.md` | 평가셋 52건 · 지표 리포트(D1 델타 병기) |
 | 레포 포함 | `data/crawl_report.json` | 상태별 카운트 · robots 차단 목록(33 ok / 5 blocked, 38건) |
 | 레포 포함 | `link_registry.json` | 소관 밖 라우팅 6건 — **전건 url 충전 완료(H7 해소, 07-13)** |
+| 레포 포함 | `data/bf_map.jsonl` | FAQ 청크 108건의 BF(라우터 산출) — qhash 조인 레이어, `chunks.jsonl` 무수정 |
 | 레포 제외 | `data/raw/*.html` · `data/meta/*.json` | .gitignore(`data/raw/`) — 클론 후 라이브 재수집으로 확보 |
-| 레포 제외 | `data/parsed/*.json` · `data/index/*` | 재생성 가능 산출물 |
+| 레포 제외 | `data/parsed/*.json` · `data/index/*` · `router_moai_embedding_model/` | 재생성 가능 산출물 · 라우터 체크포인트(2.4GB) |
 
 `data/meta/{doc_id}.json` 필드: source_url · business_function · sub_category · page_type · coverage · variant · robots_status · breadcrumb · collected_at · raw/text sha256.
 

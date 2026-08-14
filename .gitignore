@@ -37,6 +37,8 @@ build/
 *.safetensors
 *.h5
 *.onnx
+# 라우터 체크포인트(2.4GB, pytorch_model.bin) — faq_bf_map.py --router 입력. 산출물 bf_map.jsonl만 커밋.
+router_moai_embedding_model/
 wandb/
 mlruns/
 runs/
