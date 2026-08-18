@@ -333,3 +333,186 @@ M9-3 은 **정렬 키만** 교체한다. 게이트(`resolves_to_chunk != None`)�
 terms 는 **정의(one_line/discriminator)**, prompts 는 **값 라벨(phrase)** 증거라 개정 anchor 규칙을
 적용하면 의미가 깨진다(terms: 정의→헤딩, prompts: `본인`→`대리인` 역전). 따라서 **terms/prompts 는
 무수정**(3-2). 개정 규칙은 combos_dpin 에만 적용한다.
+
+### 9-7. 자산별 증거 모델 (K10 · M9-3b)
+
+`pick_anchor` 는 **원 문자열이 없는 자산**에만 적용한다. 다음에 "왜 규칙을 통일하지 않았나" 논쟁이
+반복되지 않도록 여기서 끊는다.
+
+| 자산 | 증거 모델 | 스니펫의 정체 | pick_anchor 적용 |
+|---|---|---|---|
+| `qform_terms_v0.csv` | 정의문 | 원 문자열 존재 (one_line/discriminator) | ✗ |
+| `qform_prompts.csv` | 버튼 라벨 | 원 문자열 존재 (phrase) | ✗ (K7 로 이행 제외) |
+| `qform_combos_dpin.csv` | 없음 | 추출물 (청크에서 뽑음) | ✓ |
+
+3-3 의 26/28 은 불일치가 아니라 규칙이 적용 범위를 벗어났을 때의 정상 반응이다.
+
+### 9-8. H-6 주입 검사 훼손 사고 기록 (M9-3b 2-1)
+
+- **훼손 파일**: `crawler/data/qform_combos_dpin.csv` → 0바이트.
+- **버그 지점**: 인라인 원복 스크립트의 `open(path, "wb").write(open(path, "rb").read().replace(...))`.
+  `wb` 오픈이 파일을 먼저 비워, `rb` 읽기가 빈 파일을 읽는다.
+- **복원**: M9-3 재이행 스크립트 재실행. 복원 후 sha `d4fff0ff…9cd34f23` = **훼손 직전(재이행 후) sha 와 byte 동일**.
+- **결론**: 훼손 직전 상태로 완전 복원(재생성 결정론 + sha 일치로 담보). 하네스가 데이터를 파괴할 수
+  있다는 사실 자체가 인계 자산 — H46 으로 등재했다.
+
+---
+
+## §10. 이행 전건 41스팬 통합표 (M9-4 · 2-1)
+
+> 구 청크 ID / 해석 청크는 청크 ID 말미만 표기(전체 ID 는 §2·§4B·§9 참조). `⚑` = 10자 미만(L1-b 플래그 · 게이트 아님).
+
+| 자산 | 행 | 구 청크 ID | 신 스팬 | 해석 청크 | 일치 | hits | 길이 |
+|---|---|---|---|---|---|---|---|
+| terms | PAY-01/one_line | amtExpln#00 | 예금보험공사가 해당 금융회사를 대신하여 지급하는 금전 | amtExpln#00 | ✅ | 1 | 29 |
+| terms | PAY-01/disc | amtExpln#00 | 보험사고로 인하여 고객의 예금을 지급할 수 없는 경우 | amtExpln#00 | ✅ | 1 | 29 |
+| terms | PAY-02/one_line | amtExpln#00 | 예금자의 신청에 의해 미리 지급하는 금전 | amtExpln#00 | ✅ | 2 | 22 |
+| terms | PAY-02/disc | amtExpln#00 | 예금보험금 지급 이전에 예금보험금 지급한도 내에서 | amtExpln#00 | ✅ | 2 | 27 |
+| terms | PAY-03/one_line | amtExpln#00 | 보호한도 초과 예금 등 채권을 예금자의 청구에 의하여 공사가 매입하고, 그 매입의 대가로 예금자에게 지급하는 금전 | amtExpln#00 | ✅ | 1 | 63 |
+| terms | PAY-03/disc | amtExpln#00 | 향후 파산배당으로 받게 될 예상배당률을 고려하여 | amtExpln#00 | ✅ | 1 | 26 |
+| terms | PAY-04/one_line | eHistInq#00 | 수령한 개산지급금을 초과하는 때에 그 초과금액을 예금자에게 추가로 지급 | eHistInq#00 | ✅ | 3 | 39 |
+| terms | PAY-04/disc | eHistInq#00 | 파산배당금 등으로 회수한 금액에서 소요비용을 공제한 금액이 | eHistInq#00 | ✅ | 3 | 32 |
+| terms | PAY-05/one_line | eHistInq#00 | 남은 자산을 현금화하여 채권자들에게 그 채권액 비율대로 배당하는 금액 | eHistInq#00 | ✅ | 3 | 38 |
+| terms | PAY-05/disc | eHistInq#00 | 금융회사가 파산하는 경우 | eHistInq#00 | ✅ | 3 | 13 |
+| terms | DEBT-01/one_line | AjmtSyst#00 | 파산한 경우 채무자의 연체대출금에 대한 채무조정을 지원 | AjmtSyst#00 | ✅ | 1 | 30 |
+| terms | DEBT-01/disc | AjmtSyst#00 | 파산된 저축은행 등의 주채무자 또는 보증채무자로서 재산상태나 소득수준 등을 감안하여 채무변제를 기대할 수 없다고 판단되는 채무자 | AjmtSyst#00 | ✅ | 2 | 71 |
+| terms | DEBT-02/one_line | cvrySprt#00 | 상환기간의 연장, 분할상환, 이자율 조정,변제기 유예, 채무감면 등의 채무조정 수단을 통해 신용회복을 지원 | cvrySprt#00 | ✅ | 1 | 59 |
+| terms | DEBT-02/disc | cvrySprt#00 | 신용회복위원회(개별 금융회사에 신청하는 것이 아닙니다.)에 구비서류를 지참하여 신청 | cvrySprt#00 | ✅ | 1 | 46 |
+| terms | DEBT-03/one_line | prtPsnRg#00 | 지급불능 상태에 있는 사람이 일정한 소득을 얻고 있을 경우에 3~5년간 일정한 금액을 갚으면 채무를 면제받는 제도 | prtPsnRg#00 | ✅ | 1 | 63 |
+| terms | DEBT-03/disc | prtPsnRg#00 | 매달 월급이나 연금, 사업소득 등 정기적이고, 확실한 수입을 계속하여 얻을 가능성이 있는 사람이어야 합니다 | prtPsnRg#00 | ✅ | 1 | 59 |
+| terms | DEBT-04/one_line | prtPsnBr#00 | 자신의 재산으로 모든 채무를 변제할 수 없는 상태에 빠진 경우에 그 채무의 정리를 위하여 채무자 또는 채권자가 파산신청 | prtPsnBr#00 | ✅ | 1 | 66 |
+| terms | DEBT-04/disc | prtPsnRg#00 | 개인회생절차, 일반회생절차 등을 통하여 충분히 회생을 도모할 수 있다고 인정되는 경우에 개인파산신청을 하게 되면 절차남용으로 각하될 수 있습니다 | prtPsnRg#00 | ✅ | 1 | 80 |
+| terms | DEBT-05/one_line | prtPsnBr#00 | 파산절차를 통하여 변제되지 아니한 나머지 채무에 대한 변제책임을 파산법원의 재판으로 면제 | prtPsnBr#00 | ✅ | 1 | 49 |
+| terms | DEBT-05/disc | prtPsnBr#00 | 개인파산을 신청하는 채무자가 면책을 받기 위해서는 파산신청과 별개로 면책을 신청하여야 하며 | prtPsnBr#00 | ✅ | 1 | 50 |
+| prompts | qualification/본인 | ossDcmnt#00 | 예금자 본인이 찾을 경우 | ossDcmnt#00 | ✅ | 1 | 13 |
+| prompts | qualification/대리인 | ossDcmnt#00 | 대리인이 찾을 경우 | ossDcmnt#00 | ✅ | 1 | 10 |
+| prompts | subject/본인 | ossDcmnt#00 | 예금자 본인이 찾을 경우 | ossDcmnt#00 | ✅ | 1 | 13 |
+| prompts | subject/대리인 | ossDcmnt#00 | 대리인이 찾을 경우 | ossDcmnt#00 | ✅ | 1 | 10 |
+| prompts | subject/군복무자 | ossDcmnt#00 | 예금자 본인이 군복무 중일 경우 | ossDcmnt#00 | ✅ | 1 | 17 |
+| prompts | subject/미성년자 | ossDcmnt#00 | 예금자가 미성년자인 경우 | ossDcmnt#00 | ✅ | 2 | 13 |
+| prompts | subject/사망 예금자 | ossDcmnt#01 | 예금자가 사망한 경우 | ossDcmnt#01 | ✅ | 2 | 11 |
+| prompts | subject/국외거주 또는 유학생 | ossDcmnt#02 | 예금자가 국외거주 외국인, 유학생, 상사주재원인 경우 | ossDcmnt#02 | ✅ | 1 | 29 |
+| combos | DPIN-C01 | amtExpln#00 | 가지급금이란? | amtExpln#00 | ✅ | 1 | 7 ⚑ |
+| combos | DPIN-C01 | AplyProc#00 | 인터넷 신청 시 | AplyProc#00 | ✅ | 1 | 8 ⚑ |
+| combos | DPIN-C02 | ossDcmnt#00 | 대리인이 찾을 경우 | ossDcmnt#00 | ✅ | 1 | 10 |
+| combos | DPIN-C03 | ossDcmnt#00 | 대리인이 찾을 경우 | ossDcmnt#00 | ✅ | 1 | 10 |
+| combos | DPIN-C04 | ossDcmnt#00 | 대리인이 찾을 경우 | ossDcmnt#00 | ✅ | 1 | 10 |
+| combos | DPIN-C05 | ossDcmnt#00 | 대리인이 찾을 경우 | ossDcmnt#00 | ✅ | 1 | 10 |
+| combos | DPIN-C05 | ossDcmnt#01 | 친권자의 도장 | ossDcmnt#01 | ✅ | 1 | 7 ⚑ |
+| combos | DPIN-C06 | ossDcmnt#01 | 친권자의 도장 | ossDcmnt#01 | ✅ | 1 | 7 ⚑ |
+| combos | DPIN-C07 | ossDcmnt#01 | 친권자의 도장 | ossDcmnt#01 | ✅ | 1 | 7 ⚑ |
+| combos | DPIN-C07 | ossDcmnt#02 | 상속인의 도장 | ossDcmnt#02 | ✅ | 1 | 7 ⚑ |
+| combos | DPIN-C08 | ossDcmnt#02 | 상속인의 도장 | ossDcmnt#02 | ✅ | 1 | 7 ⚑ |
+| combos | DPIN-C08 | ossDcmnt#03 | 손해담보 약정서 | ossDcmnt#03 | ✅ | 1 | 8 ⚑ |
+| combos | DPIN-C09 | AplyProc#00 | 인터넷 신청 시 | AplyProc#00 | ✅ | 1 | 8 ⚑ |
+
+**일치 41/41 · 10자 미만 9건(L1-b 플래그)** — terms 20 · prompts DPIN 8 · combos_dpin 13.
+
+---
+
+## §11. 미이행 · 안 깨지는 것 · 폐기 계보 · ver1 보전 (M9-4)
+
+### 11-1. 미이행 명시표 (2-2)
+
+| 자산 | 참조 수 | 사유 |
+|---|---:|---|
+| `qform_combos_msdr.csv` | 39 | 동결. 다음 스프린트 해제 1회에 P16(party 강등)·P18(subject 정규화)·source_status 컬럼과 동시 처리 |
+| `qform_prompts.csv` MSDR | 20 | phrase 가 버튼 라벨. 구조적 불가 (K7) |
+
+**이행 41 / 미이행 59** — 전체 참조 96개 기준 미이행 59개(61%), 그중 MSDR combos 39개가 41%.
+이 정도가 남는 것은 **수용된 상태**다(MSDR은 215 기준, `chunks.jsonl`도 동결이라 내부 정합 유지).
+
+### 11-2. 「안 깨지는 것」 표 (2-3 · M9-0 C·D 실측 근거)
+
+| 대상 | 묶여 있는 키 | 근거 |
+|---|---|---|
+| 조합 테이블 조인 | `source_doc_id` (문서 단위) | 설계상 |
+| 첨부 후단 필터 | `doc_attachments.json` (문서 단위) | 설계상 |
+| `eval.py` hit@k | `gt_docs` (문서 단위) | 설계상 |
+| 첨부 태깅 CSV | 청크 컬럼 0 / 6좌표 조인 | M9-0 C 실측 |
+| `bf_match` 이월 방벽 | 질의 문자열 + 상수표 | M9-0 D 실측 |
+| 앵커 트랙 테스트셋 | 앵커 스팬 | 전제 |
+
+### 11-3. 폐기 규칙 계보 (2-4)
+
+| 단계 | 규칙 | 폐기 사유 |
+|---|---|---|
+| M9-1 | (a) 코퍼스 전체 유일성 → **(b) 쌍해소** | (a) 6/10 실패. 실패 4행은 선언 doc 안 1회였고 충돌은 동일 문구 재게재. 구 chunk_id 도 유일성 보증한 적 없음 → (b)가 구 포맷과 해상도 동일 |
+| M9-2 | 선두 1문장 + 확장 + 상한 120자 | 게이트를 근거 가치의 대리로 씀. `01` 통과(청크 선두가 목록 번호) |
+| M9-3 | 길이 단독 정렬 (M9-2b) | `01` 이 hits=9 로 선택됨(목록 번호 5청크). "가장 짧다" ≠ "가장 특징적". → **hit_docs 우선 정렬**로 교체 |
+
+### 11-4. ver1 실측 계보 보전 확인 (2-5)
+
+41스팬 전건 **구 청크 ID == 해석 청크(일치 41/41)** — 신 스니펫이 구 chunk_id 가 가리켰던 텍스트와
+동일 대상임을 §10 통합표가 증명한다. M9-2·M9-3 폐기 규칙 기록은 삭제하지 않았다(§4B-1·§9-2).
+
+### 11-5. verify_h6_inject.py 미실행 상태 커밋 (2-6 · M5)
+
+`crawler/verify_h6_inject.py` 는 **미실행 상태로 커밋**한다. 실사용 검증은 다음 H-6 사용 시가 첫 기회다.
+검증하려고 파괴 위험을 감수하는 것은 순서가 거꾸로다.
+
+---
+
+## §12. HOLES 3분류 (M9-4 · 3-2)
+
+> H41·H42·H43·H44·H46 은 08-18 일괄 반영 블록 이후 등재분이라 그 블록에서 분류 밖이었다. 아래 표로 편입한다.
+
+**닫힌 것 (19)** — H2 · H4 · H5 · H6 · H6b · H7 · H8 · H9 · H13 · H14 · H15 · H18 · H19 · H21 · H24 · H26 · H37 · H38 · H40
+
+**범위 밖 (6)** — H1(팀·멘토 대기) · H3(외부 csv 대기) · H10 · H11 · H12(실전1 밖) · H43(용어 사전 발동 전 선결)
+
+**열린 것 (21)** — H16 · H17 · H20 · H22 · H23 · H25 · H27 · H28 · H29 · H30 · H31 · H32 · H33 · H34 · H35 · H36 · H39 · H41 · H42 · H44 · H46
+
+---
+
+## §13. M9 최종 상태표 (M9-4 · 4-1)
+
+| 항목 | 값 |
+|---|---|
+| 멀티턴 하니스 지문 | `246d07124d333c9b` (24/24) |
+| 패널 하니스 지문 | `12619f9c100feb6e` (11/11) |
+| 450셋 발동률 | 9건 / 2.0% · 착오송금 10.7% |
+| verify_combos 조인 | MSDR 38 / DPIN 11 |
+| 검증 스크립트 7종(A군) + 모듈 자기검사 4종(B군) | 전건 rc=0 |
+| 동결 8종 sha256 | rag 84247b7c · eval 2d5b07a3 · chain a37b2a77 · e2e 3a9472ca · panel 34d5f435 · msdr 0115fe35 · chunks 6af9517b · doc_attach 183e460f |
+| 원천 chunks.jsonl | 215행 / 6af9517b…9bd381 |
+| HEAD / origin | `7255df89b934…` / `0001985130af…` |
+| 이행 / 미이행 | **41 / 59** |
+| combos_dpin hits 분포 | `{1:13}` (combos_dpin 한정) |
+
+### 13-1. 다음 스프린트 인계 (4-2)
+
+1. AC4·AC5·AC6 스코프 의존 제거 → QFORM_SCOPE 전환 (H39)
+2. MSDR CSV 일괄 개정 (스팬 이행 + P16 + P18 + source_status)
+3. H41 큐 처리 액션
+4. H43 discriminator 재설계 — 용어 사전 발동 전 선결
+5. 증거 모델 재설계 (K10 파생 — terms/prompts 증거 모델)
+6. G13 해소 → DPIN 부스트 오라클 실험
+7. H30 오분류 축 재정의
+8. H35 평가셋 재측정
+
+### 13-2. 미배정 잔여 2건 (4-3)
+
+- 큐 구역 회색 처리 여부 (데모 전 액션)
+- OOS `route=handoff` ↔ 큐폼 상담연결 통합
+
+---
+
+## §14. M10 반영 — 검증 종수 재분류 (M7) · 커밋 순서 (M8)
+
+### 14-1. 검증 종수 재분류 (M7 · 1-1)
+
+"검증 11종" 은 **검증 커버리지를 과대 표기**한다. 검증 스크립트(verify_*) 와 모듈 자기검사(rc=0 은 import 성립에 가깝다)를 구분한다.
+
+| 군 | 종 | 스크립트 |
+|---|---|---|
+| **A군 — 검증 스크립트 7종** | 7 | verify_terms · verify_combos · verify_qform_multiturn · verify_qform_e2e · verify_qform_integration · verify_qform_panel · verify_docs |
+| **B군 — 모듈 자기검사 4종** | 4 | qform_extract · qform_state · qform_config · span_tools |
+
+B군을 빼지 않는다 — 분류만 한다. 이후 보고는 "검증 7종 + 자기검사 4종" 으로 표기한다.
+
+### 14-2. 커밋 순서 위반 기록 (M8 · 0-3)
+
+**docs 커밋이 tool·data 보다 선행했다.** K11 의 tool→data→docs 순서 위반.
+그 결과 docs 가 서술하는 도구·데이터(verify_terms·verify_combos·verify_h6_inject·terms CSV·prompts CSV)가
+미커밋 상태로 남았다. **사후 정리(도구·데이터 커밋)로 해소.**
