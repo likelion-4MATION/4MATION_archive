@@ -70,7 +70,7 @@ def score(items, orders, chunk_text) -> tuple[dict, int]:
             continue
         gold = ev3._get_gt_chunk_ids(it)
         anchors = ev3._get_gt_anchors(it)
-        unanchored = ev3._split_gold_by_anchor(gold, anchors, chunk_text)
+        unanchored, _stale = ev3._split_gold_by_anchor(gold, anchors, chunk_text)
         if not anchors and not unanchored:
             continue
         n += 1

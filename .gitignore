@@ -41,6 +41,8 @@ build/
 router_moai_embedding_model/
 # 리랭커 실험 입력 패키지 — rerank_colab/prepare_inputs.py 재생성 산출물
 rerank_colab/rerank_inputs.zip
+# 그리드서치 전량 결과(29만 행) — tune_params_v2.py로 50초에 재생성. 요약만 커밋.
+crawler/data/tune_v2_*.json
 wandb/
 mlruns/
 runs/

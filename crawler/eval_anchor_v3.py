@@ -161,10 +161,24 @@ def _get_gt_anchors(item: dict) -> list[str]:
 
 
 def _split_gold_by_anchor(gold_ids: list[str], anchors: list[str],
-                          chunk_text: dict[str, str]) -> list[str]:
-    """앵커로 덮이지 않는 gold 청크 — chunk_id 폴백 대상."""
-    return [cid for cid in gold_ids
-            if not any(a in chunk_text.get(cid, "") for a in anchors)]
+                          chunk_text: dict[str, str]) -> tuple[list[str], list[str]]:
+    """(chunk_id 폴백 대상, 코퍼스에 없는 gold) 로 나눈다.
+
+    `gt_chunk_ids`는 **특정 청킹에 대한 좌표**다. 재청킹하면 일부 id가 사라지는데,
+    사라진 id를 필수 조건으로 남기면 `and` 문항이 영구 불가능해진다 — 엄격한 게
+    아니라 판정이 망가진 것이다(앵커를 아무리 채워도 그 id 안에서는 찾을 수 없다).
+    그래서 **코퍼스에 없는 gold는 조건에서 빼고 별도로 센다.** 세는 이유는 판정이
+    앵커에만 의존하는 비율을 감추지 않기 위해서다.
+
+    코퍼스에 있으면서 앵커가 안 덮는 gold는 여전히 chunk_id 폴백으로 요구한다.
+    """
+    fallback, stale = [], []
+    for cid in gold_ids:
+        if cid not in chunk_text:
+            stale.append(cid)
+        elif not any(a in chunk_text[cid] for a in anchors):
+            fallback.append(cid)
+    return fallback, stale
 
 
 def _anchor_found_at_k(anchor: str, retrieved_ids: list[str],
@@ -198,6 +212,7 @@ def _empty_anchor_metrics() -> dict:
     # Recall은 두지 않는다 — 앵커는 '회수 비율'의 분모가 되는 단위가 아니다.
     # 0.000을 찍으면 chunk_level의 recall과 나란히 놓였을 때 오독되므로 아예 뺀다.
     return {"n_scored": 0, "n_missing_span": 0, "n_full_anchor": 0, "n_id_fallback": 0,
+            "n_stale_gold": 0, "n_stale_only": 0,
             **{f"hit@{k}": 0.0 for k in KS}, "mrr": 0.0}
 
 
@@ -396,7 +411,10 @@ def evaluate_retrieval(
 
         if anchor_on:
             anchors = _get_gt_anchors(gt_item)
-            unanchored = _split_gold_by_anchor(gold_ids, anchors, chunk_text)
+            unanchored, stale = _split_gold_by_anchor(gold_ids, anchors, chunk_text)
+            anchor_metrics["n_stale_gold"] += len(stale)
+            if stale and not anchors:
+                anchor_metrics["n_stale_only"] += 1
             if not anchors and not unanchored:
                 # 앵커도 gold도 없으면 판정 근거가 없다 — 미적중으로 세면 라벨 결측이
                 # 검색 실패로 둔갑하므로 분모에서 빼고 건수로만 드러낸다.

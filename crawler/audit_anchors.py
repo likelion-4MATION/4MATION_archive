@@ -63,7 +63,7 @@ def main() -> int:
         rel = ev3._get_relation_label(it)
         gold = ev3._get_gt_chunk_ids(it)
         anchors = ev3._get_gt_anchors(it)
-        una = ev3._split_gold_by_anchor(gold, anchors, nt)
+        una, _stale = ev3._split_gold_by_anchor(gold, anchors, nt)
         s = per_rel[rel]
         s["n"] += 1
         s["gold"] += len(gold)

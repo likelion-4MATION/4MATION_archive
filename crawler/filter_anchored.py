@@ -56,7 +56,7 @@ def main() -> int:
             dropped["앵커 없음"] += 1
             continue
         gold = ev3._get_gt_chunk_ids(r)
-        unanchored = ev3._split_gold_by_anchor(gold, anchors, chunk_text)
+        unanchored, _stale = ev3._split_gold_by_anchor(gold, anchors, chunk_text)
         if args.mode == "full-anchor" and unanchored:
             dropped["gold 일부만 덮임"] += 1
             continue
@@ -76,7 +76,7 @@ def main() -> int:
     # 유지된 문항 중 gold가 일부만 덮인 비율 = 평가 시 chunk_id 폴백 의존도.
     part = sum(1 for r in kept
                if ev3._split_gold_by_anchor(ev3._get_gt_chunk_ids(r),
-                                            ev3._get_gt_anchors(r), chunk_text))
+                                            ev3._get_gt_anchors(r), chunk_text)[0])
     print(f"       answerable {dict(ans)} · relation {dict(rel)}")
     print(f"       gold 일부만 덮인 문항 {part}/{len(kept)} "
           f"(= 평가 시 id 의존도 {part / (len(kept) or 1):.1%})")
