@@ -257,6 +257,44 @@ M5 커밋 블록에 아래 2개가 들어 있다. 스프린트 시작 시점에 
 
 ---
 
+## §5-5. app.py 반영 점검 (M8-b)
+
+`verify_qform_panel.py` 는 `panel_model`/`apply` **순수 함수**를 검증하지 Streamlit 렌더를 검증하지 않는다.
+**얇은 것과 맞는 것은 다르다** — 그래서 `app.py` 가 상태 층에서 무엇을 읽어 무엇을 그리는지 직접 읽었다.
+
+| 화면 요소 | 읽는 상태 필드 | 최종 변경 M | 반영 |
+|---|---|---|---|
+| 되묻기 문구 | `ev["prompt"]` ← `qform_ask.build_question` ← `qform_prompts.csv` | **M7**(DPIN 8행) | ✅ |
+| 선택지 버튼 | `qform_flow.options()` ← `survivors(bf 표)` | **M6-c**(`combos_for`) | ✅ |
+| `[이대로 답변받기]` | `_ESCAPE` → `qform_flow.skip()` | M3 | ✅ |
+| `⏭ 이건 넘어갈게요` | `_PASS` → `qmp.apply("pass")` | M3 | ✅ |
+| 패널 `적용 중` | `panel_model` ← `used_slots(bf)` | **M6-a**(party 유도 제거) | ✅ 착오송금 5축 / 예금보험금 4축 |
+| 패널 `기억만 함` | `state["bf"]` · `last_docs` | M3 | ✅ (`직전 참조 문서`는 회색·표시 전용) |
+| 패널 `대기 중인 용건` | `state["queue"]` | M3 | ⚠ 표시·편집만 (H41) |
+| TTL·만료 표기 | `panel_model["ttl"]` · `state["expired"]` | M3(TTL=3) | ✅ |
+| 트레이스 패널 | `qform_panel.render` | 동결 | ✅ |
+| **슬롯 추출 스코프** | `qform_config.SPEC["QFORM_SCOPE"]` | **M5 신설** | ⛔ **누락 → M8-b 에서 추가** |
+
+**불일치 2건.**
+
+| # | 불일치 | 처리 |
+|---:|---|---|
+| 1 | `QFORM_SCOPE` 가 SPEC 에만 있고 화면에 없었다. `app.py` 는 **`config=` 를 어디에도 주입하지 않아** SPEC 파라미터 전 7종이 모듈 기본값 고정이었다 | **고쳤다.** 사이드바 `슬롯 추출 스코프` 셀렉트박스 + `CONFIG` 를 `start`/`reply`/`edit`/`skip` 4경로에 주입. `qform_flow` 가 `cfg["QFORM_SCOPE"]` 를 `extract(scope=)` 로 넘긴다. **기본값 `msdr` 유지** |
+| 2 | 큐 항목을 **처리하는** 액션이 없다(순서변경·제외만) | **안 고쳤다.** 반영 누락이 아니라 **미구현 기능**이고 "UI 개선 금지" 지시 범위 밖 → `crawler/HOLES.md` **H41** |
+
+토글은 **실제로 먹는다**(화면에만 있는 상태가 아니다):
+
+| 사이드바 선택 | 실측 |
+|---|---|
+| 착오송금 단일 (기본) | `예금보험금 신청 서류 뭐 필요해요?` → 슬롯 0 · 즉시 답변 |
+| 착오송금 + 예금보험금 | → `sub_task=보험금신청` · `qualification` 되묻기 |
+| (허용범위 밖 값 주입) | → `msdr` 복귀 · `_invalid` 1건 기록 |
+
+**무변동 확인** — 패널 지문 `12619f9c100feb6e` · 멀티턴 `246d07124d333c9b` · 450셋 9건 2.0% ·
+검증 10종 exit 0 · **동결 8종 해시 전건 동일**. 변경 코드는 `app.py`·`qform_flow.py`·`qform_memory_panel.py` 3개다.
+
+---
+
 ## §6. 이 스프린트에서 배운 것 (기록)
 
 | # | |

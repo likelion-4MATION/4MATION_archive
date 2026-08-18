@@ -99,6 +99,10 @@ EXAMPLE_CHIPS = [
     ("은닉재산 신고", "은닉재산 신고하면 포상금 얼마나 받나요?"),
 ]
 
+# 슬롯 추출 스코프 라벨 → `qform_config.SPEC["QFORM_SCOPE"]` 허용값. 첫 항목이 기본값이다.
+SCOPE_LABELS = {"착오송금 단일 (기본)": "msdr", "착오송금 + 예금보험금": "msdr+dpin"}
+_SCOPE_DEFAULT_LABEL = next(iter(SCOPE_LABELS))
+
 st.set_page_config(page_title="KDIC 안내 챗봇 PoC", page_icon="💬", layout="wide")
 st.title("💬 KDIC 안내 챗봇 — PoC")
 st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
@@ -132,6 +136,14 @@ with st.sidebar:
         help="슬롯 값을 검색 쿼리에 덧붙입니다. 검색 동작이 바뀌므로 450셋 회귀 수치가 "
              "나오기 전까지는 기본 OFF입니다. 첨부 후단 필터는 토글과 무관하게 항상 동작합니다.",
     )
+    # ver4 M8-b — `QFORM_SCOPE` 는 M5 에서 SPEC 에 신설했는데 화면에 없었다.
+    # **종합 관리자 콘솔이 읽을 자리**라 여기에 노출한다. 기본값은 `msdr`(착오송금 단일) 유지 —
+    # 확장 전환은 `verify_qform_e2e.py`(동결) AC5 fixture 와 충돌해 보류돼 있다(HOLES H39).
+    st.selectbox(
+        "슬롯 추출 스코프", list(SCOPE_LABELS), index=0, key="qform_scope_label",
+        help="msdr=착오송금 단일(기본·현행). msdr+dpin=예금보험금 포함. "
+             "확장은 실측만 끝났고 기본값 전환은 보류 상태입니다(HOLES H39).",
+    )
     st.checkbox("트레이스 패널", value=True, key="show_trace",
                 help="질의 1건이 어느 층에서 어떻게 갈렸는지 보여줍니다.")
     st.caption("첨부 후단 필터는 항상 켜져 있습니다 (슬롯이 비면 자동으로 기존 동작).")
@@ -150,6 +162,9 @@ with st.sidebar:
 
 ASK_MODE = ASK_MODES[st.session_state.get("ask_mode_label", "ⓐ 템플릿 (콜 0)")]
 BOOST = bool(st.session_state.get("boost"))
+# 사이드바 → 정책 오버라이드. `qform_config.resolve()` 가 허용범위 밖 값을 기본값으로 되돌린다.
+CONFIG = {"QFORM_SCOPE": SCOPE_LABELS[st.session_state.get("qform_scope_label",
+                                                          _SCOPE_DEFAULT_LABEL)]}
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -549,7 +564,8 @@ elif followup_q:
 
 if _edit:
     field, value, source, note = _edit
-    ev = qform_flow.edit(flow, field, value, source=source, ask_mode=ASK_MODE)
+    ev = qform_flow.edit(flow, field, value, source=source, ask_mode=ASK_MODE,
+                         config=CONFIG)
     st.session_state.history.append({"role": "user", "text": note})
     if ev["kind"] == "ask":
         st.session_state.needs_regen = False        # 되물으니 재생성 버튼은 필요 없다
@@ -569,7 +585,7 @@ if regen:
 if skip and pending:
     with st.spinner("문서 검색·답변 생성 중…"):
         c0 = chain._calls
-        ev = qform_flow.skip(flow, boost=BOOST)
+        ev = qform_flow.skip(flow, boost=BOOST, config=CONFIG)
         st.session_state.needs_regen = False
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
@@ -579,7 +595,7 @@ if chosen == _ESCAPE and pending:
     st.session_state.history.append({"role": "user", "text": "이대로 답변받기"})
     with st.spinner("처리 중…"):
         c0 = chain._calls
-        ev = qform_flow.skip(flow, boost=BOOST)
+        ev = qform_flow.skip(flow, boost=BOOST, config=CONFIG)
         st.session_state.needs_regen = False
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
@@ -597,7 +613,8 @@ if chosen and pending:
     st.session_state.history.append({"role": "user", "text": chosen})
     with st.spinner("처리 중…"):
         c0 = chain._calls
-        ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE, boost=BOOST)
+        ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE,
+                              boost=BOOST, config=CONFIG)
         st.session_state.needs_regen = False
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
@@ -620,7 +637,7 @@ if q_new or q_reply:
         c0 = chain._calls
         step = qform_flow.reply if q_reply else qform_flow.start
         st.session_state.needs_regen = False
-        ev = step(flow, text, ask_mode=ASK_MODE, boost=BOOST)
+        ev = step(flow, text, ask_mode=ASK_MODE, boost=BOOST, config=CONFIG)
         # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()

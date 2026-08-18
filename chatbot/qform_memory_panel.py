@@ -142,7 +142,7 @@ def cross_bfs(query: str, *, score_fn=None) -> list[str]:
     return [bf for bf, _ in sorted(hit, key=lambda x: -x[1])]
 
 
-def detect_intents(query: str, *, classify_fn=None, score_fn=None) -> dict:
+def detect_intents(query: str, *, classify_fn=None, score_fn=None, scope=None) -> dict:
     """질의에서 의도를 뽑는다. **union 병합을 하지 않기 위한 감지**다(K13).
 
     **`sub_task` 는 절 단위로 `extract()` 를 다시 돌려 모은다.** 새 우선순위를 만들지 않고
@@ -165,7 +165,7 @@ def detect_intents(query: str, *, classify_fn=None, score_fn=None) -> dict:
     sub_tasks: list[str] = []
     per_clause: list[tuple[str, str | None]] = []
     for cl in clauses:
-        st = extract(cl, None).get("sub_task")
+        st = extract(cl, None, scope=scope).get("sub_task")
         per_clause.append((cl, st))
         if st and st not in sub_tasks:
             sub_tasks.append(st)                      # 발화 순서 · 중복 제거

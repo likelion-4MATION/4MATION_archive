@@ -165,7 +165,8 @@ def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = 
     # 게이트에 걸려 슬롯 0개로 죽는 것을 막는다. 이월이 막힌 턴에서는 상속하지 않는다.
     bf = cls_bf if cls_bf is not None else (prev_bf if allow else None)
 
-    slots = extract(query, business_function=bf)
+    # M8-b — 스코프를 **cfg 에서** 받는다. 기본값이 `msdr` 이라 주입이 없으면 현행과 동일하다.
+    slots = extract(query, business_function=bf, scope=cfg.get("QFORM_SCOPE"))
     origin = {f: (SRC_NEW if slots.get(f) else SRC_EMPTY) for f in SLOT_FIELDS}
     slot_turn = {f: turn_no for f in SLOT_FIELDS if slots.get(f)}
 
@@ -211,7 +212,8 @@ def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = 
     # 깨진다. 업무 교차 감지는 화면이 명시로 부른다(`detect_intents(q, classify_fn=…)`).
     if cfg.get("MAX_QUEUE", 0):
         import qform_memory_panel              # 지연 임포트 — 순환 참조 방지
-        intents = qform_memory_panel.detect_intents(query, score_fn=qform_memory_panel.bf_scores)
+        intents = qform_memory_panel.detect_intents(
+            query, score_fn=qform_memory_panel.bf_scores, scope=cfg.get("QFORM_SCOPE"))
         if intents["kind"] == "parallel":
             rest = [st for st in intents["sub_tasks"] if st != state["qform"].get("sub_task")]
             qform_memory_panel.enqueue(
@@ -260,8 +262,10 @@ def reply(state: dict, text: str, *, value: str | None = None,
         # 착오송금으로 명시 — 후속 답변("대리인이요")만으로는 게이트에 걸리기 때문이다.
         # 기본 스코프(msdr)에서는 되묻기 대화의 bf 가 착오송금이라 **동작이 완전히 같다**.
         _bf = state.get("bf")
+        _scope = qform_config.resolve(config).get("QFORM_SCOPE")
         merged = extract(f"{state['base_q']} {text}",
-                         business_function=_bf if (_bf and in_scope(_bf)) else IN_SCOPE_BF)
+                         business_function=_bf if (_bf and in_scope(_bf, _scope)) else IN_SCOPE_BF,
+                         scope=_scope)
         for f in SLOT_FIELDS:
             if not state["qform"].get(f) and merged.get(f):
                 state["qform"][f] = merged[f]
