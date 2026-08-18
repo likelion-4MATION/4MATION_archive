@@ -49,6 +49,10 @@
 
 ## §2. 새 기준선 — 다음 세션은 이것만 보면 된다
 
+> ⛔ **현 상태는 `QFORM_SCOPE=msdr`(착오송금 단일)이다.**
+> 예금보험금 확장은 **조합 테이블·후단 필터·추출 규칙·문구까지 다 서 있지만 기본값은 안 켰다**(H39).
+> **아래 §2-2 가 유효 기준선이고, §2-3 은 토글 ON 조건에서 잰 참고치다.** 둘을 섞어 인용하면 틀린다.
+
 ### 2-1. 잠금값
 
 ```
@@ -75,7 +79,7 @@ HEAD                 d2a7c2053765a00e89b9c6722e6bbc12da3d49d6   (branch Qform_ve
 | `is_definitional()` | True **23건/450** · **되묻기를 실제로 막은 건수 0** |
 | 정책 기본값 | `SLOT_CARRYOVER=True` · `CARRYOVER_TTL=3` · `CARRYOVER_SCOPE=bf_match` · `MAX_ASK_TURNS=2` · **`QFORM_SCOPE=msdr`** · `MAX_QUEUE=3` · `PANEL_EXPIRED=gray` |
 
-### 2-3. 확장 스코프(`msdr+dpin`) 토글 ON 실측 — **참고치**
+### 2-3. ⚠ 참고치 — 확장 스코프(`msdr+dpin`) **토글 ON 조건**에서 잰 값 (기준선 아님)
 
 | | 값 |
 |---|---|
@@ -145,9 +149,30 @@ python3 chatbot/qform_config.py             python3 chatbot/verify_docs.py
 
 ## §5. 다음 스프린트 후보 (재료만 · 판단 없음)
 
+### 5-1. 1순위 — `verify_qform_e2e.py` AC5 fixture 개정, **그 위에서** 스코프 전환
+
+**H39 는 미결이 아니라 발견이다.** `verify_qform_e2e.py` AC5 가 ver2 시점의 스코프를
+fixture 에 **상수로 굳혀 놨다** — `예금보험금은 어떻게 신청하나요?` 를 소관밖 질의로 하드코딩하고
+`되묻기 0 · 슬롯 전부 None` 을 단언한다. 즉 **그 하니스는 스코프 확장을 구조적으로 막는다.
+다음 확장(채무조정·미수령금…) 때마다 같은 자리에서 걸린다.**
+
+순서가 중요하다 — **하니스 개정이 먼저, 전환이 그 다음.** 마지막 마일스톤에서 동결을 열어
+전환을 통과시키는 것은 순서가 거꾸로다(M7 판정 1).
+
+**필요한 재료는 이미 전부 확보돼 있다. 다시 재지 않아도 된다:**
+
+| 재료 | 어디에 |
+|---|---|
+| 토글 ON 정성 판정 (**타당 10 / 불필요 0 / 오발동 0**) | `docs/Qform_ver4_M7_scope_switch.md` §4-3 |
+| 토글 ON 발동 실측 (착오송금 9 · 예금보험금 10 · 타업무 0) | 동 §4-2 |
+| 실패 원인 특정 (AC5 fixture 2개 질의) | 동 §3-2 |
+| 반사실 (`찾` 토큰 2→0) | `docs/Qform_ver4_M6_h37.md` §4-7 · H38 |
+| 오발동 원인 3단계와 해소 순서 (②③①) | `docs/Qform_ver4_M6_h37.md` §0 |
+
+### 5-2. 그 외 후보
+
 | # | 후보 | 착수 조건 | 걸려 있는 것 |
 |---|---|---|---|
-| 1 | **H39 해소 — 스코프 전환** | `verify_qform_e2e.py` 동결 해제 판정(**규칙3 개정**) | 토글 ON 실측은 이미 확보(타당 10/오발동 0). 판정만 남았다 |
 | 2 | **H35 — 평가셋 수정본 재측정** | 평가셋 확정 | K12 합의 잔여분 |
 | 3 | **H32 — 태깅 `ATT-16` 교정** | 유상 태깅 `verified` 검수 트랙 | 좁힘 실적 수치가 바뀐다 |
 | 4 | **G13 — 검색측 업무 재분류** | `rag.py` 동결 해제 | 쿼리 부스트 기본값 결정의 선행 |
@@ -155,6 +180,80 @@ python3 chatbot/qform_config.py             python3 chatbot/verify_docs.py
 | 6 | **H31 — 금액 축 신설** | 슬롯 축 확장 스프린트 | 소액 상속 분기 |
 | 7 | **채무조정 조합 테이블** | 라우팅·용어판별 선행 | A+D+E 동시 |
 | 8 | **`free_text` 패널 노출** | ver3 미구현분 | 이번 범위 밖이었음 |
+
+---
+
+## §5-3. ⚠ M2~M6 문서의 "검증 N종 exit 0" 을 그대로 믿지 마라 (H40)
+
+**무엇이 무효인가.** M2~M6 보고서와 대화 보고에 적힌 **"검증 N종 exit 0"** 주장은 **무효다.**
+그 측정에 쓴 셸 루프가
+
+```bash
+printf "%-30s exit=%s
+" "$(basename $s)" "$?"      # ✗
+```
+
+형태였고, 셸이 `$(basename …)` 를 **먼저 실행**하면서 `$?` 를 basename 의 종료코드(**항상 0**)로
+덮었다. **파이썬 스크립트가 실패해도 `exit=0` 으로 찍혔다.**
+
+**무엇이 유효한가.** 같이 병기한 **stdout 지문은 유효하다** — 스크립트 표준출력에서 직접 grep 한 값이라
+루프 버그의 영향을 받지 않는다:
+
+| 유효 | 예 |
+|---|---|
+| `전체 통과 ✅` / `어긋난 AC ⛔` 문구 | 각 스크립트 말미 |
+| `24/24` · `11/11` 통과 수 | 하니스 |
+| 결과 지문 sha256 | `246d07124d333c9b` · `12619f9c100feb6e` |
+| `전체 450: 9건 발동 (2.0%)` | `qform_state.py` AC4 |
+| 조합 행수·조인 합계 | `verify_combos.py` |
+
+**어떻게 드러났나.** M7 에서 `QFORM_SCOPE` 를 전환하자 `verify_qform_e2e.py` 가 실제로 exit 1 인데
+루프는 0 을 찍었다. 루프를 고쳐 재측정하다 발견했다.
+
+**유효 기준선은 M7 재측정치다.** §2-2 의 값은 아래 형태로 **전건 재측정**한 것이다:
+
+```bash
+n=$(basename "$s"); python3 "$s" >/dev/null 2>&1; rc=$?
+```
+
+→ `crawler/HOLES.md` **H40** · `CLAUDE.md` §5 에 확인법 명문화.
+
+---
+
+## §5-4. 브랜치 최종 점검 (M8-4)
+
+### 동결 8종 최종 해시 (A8-4) — 스프린트 시작 스냅샷과 **전건 동일**
+
+```
+84247b7c0aa6b6ad24ceee384dfccde503c1a54411cf1fca675f50a103b2f3d8  crawler/rag.py
+a37b2a77eed5a5bffdaf042710e9bb082610cca0a156ff7fe7f78ca144065764  chatbot/chain.py
+2d5b07a30db809ec143ef5a64a2ee3d9e0be3ecb762693214e5085b2636e91b3  crawler/eval.py
+3a9472ca2e4a5f8530a37d58e02348c6beff606fee414a7a4ffd0faefac02cec  chatbot/verify_qform_e2e.py
+34d5f43597d90bac5d6a0da1f96c4e068fe6e831769f3044a8d78551c8259756  chatbot/qform_panel.py
+0115fe35b0477484719d349b371c30f9ef3f1a027755a81d53f1984efa9ea7a2  crawler/data/qform_combos_msdr.csv
+6af9517ba0da80db1296b9c7f202b534ae23cd17d8e7746614f7d89d869bd381  crawler/data/chunks.jsonl
+183e460f4b5febf2bb9cd5bef7c08a15110f6fef3a008cad46f7bd584726061c  crawler/data/doc_attachments.json
+```
+
+### 작업 트리에서 확인된 것 3건 — **판정 필요**
+
+| # | 관측 | 왜 문제인가 |
+|---:|---|---|
+| 1 | **`testset/extract.py` (45줄, mtime 08-18 14:32)** | M0 정찰 시점에 **없던 파일**이고 **CC 가 만들지 않았다**(주석 문체·`question`/`gt_anchor_span` 파싱 = 사람 손 스크립트). 손대지 않았다. 커밋할지 여부는 작성자 판단 |
+| 2 | **`CLAUDE.md` §2 '미커밋' 목록이 기계로 강제되지 않는다** | `.gitignore` 에 `.claude/`·`backup/` 만 있고 `CLAUDE.md`·`task_assignment`·`논의정리` 는 없다. **실수로 `git add` 하면 그대로 들어간다** |
+| 3 | **`docs/Qform_ver4_논의정리_0817_v4.md` 는 이미 추적 중이다** | §2 는 이 파일을 '미커밋'으로 적었는데 스프린트 시작 시점 `git status` 에 untracked 로 안 떴다 = **이미 레포에 있다.** 문서와 실제가 어긋난다 |
+
+### ⚠ 앞선 커밋 블록에 들어간 미추적 문서 2건
+
+M5 커밋 블록에 아래 2개가 들어 있다. 스프린트 시작 시점에 **untracked** 였으므로
+그대로 실행하면 **처음으로 레포에 들어간다.** §2 '미커밋' 정책과 충돌할 수 있어 짚어 둔다.
+
+| 파일 | 시작 시점 상태 | M5 에서 한 일 |
+|---|---|---|
+| `docs/QformSprintDemo_task_assignment.md` | **untracked** | 첨부 수치 기준 병기 한 줄 추기 |
+| `docs/Qform_ver3_task_assignment.md` | **untracked** | 동일 |
+
+**커밋 여부는 현욱 판정.** 빼려면 해당 `git add` 두 줄만 지우면 된다 — 추기 내용은 로컬에 남는다.
 
 ---
 
