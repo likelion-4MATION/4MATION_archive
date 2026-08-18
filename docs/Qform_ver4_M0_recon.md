@@ -567,3 +567,35 @@ qform_combos_msdr.csv
 ```
 
 **M1로 넘어가지 않는다.** 보고 후 대기 (CLAUDE.md §0-2).
+
+---
+
+## §9. 판정 결과 (2026-08-18 · 현욱) — 사후 추기
+
+M0 §7-3에 올린 [판정 필요] 4건에 대한 회신. **이 절만 사후 추기이며 위 본문은 무수정이다.**
+
+| # | 항목 | 판정 | 후속 |
+|---:|---|---|---|
+| 1 | 발동률 재측정 대상 | **(A) `crawler/data/testset_natural_450.jsonl`** 확정. 단 M4 리포트에 `testset/gt_natural450.jsonl` sha256 **병기**. `qform_state.py`는 이 건으로 수정하지 않음 | M4-AC2 |
+| 2 | CLAUDE.md §2 동결 목록 | **경로 정정** `crawler/rag.py` · `crawler/eval.py`. 추가로 **`chatbot/qform_panel.py` 동결 편입** — T6 트레이스 패널은 이번 스프린트 무변경 | 즉시 적용 |
+| 3 | M3 메모리 패널 위치 | **(B) 신규 파일 `chatbot/qform_memory_panel.py`.** `qform_panel.py`에 얹지 않음 | M3에서 수행 |
+| 4 | M2 착수 기준 | 확장 1순위를 **"단일 문서 내 고유 첨부 수"**로 읽는다. **예금보험금 확장 성립.** M2 예정대로 진행 | M2 착수 가능 |
+
+부기 — 선행 문서 파일명은 `docs/Qform_ver4_논의정리_0817_v4.md`가 맞다(§7-2 #4 확정).
+
+### 9-1. 판정 2 적용 후 동결 목록 (이번 스프린트 유효본)
+
+```
+crawler/rag.py                          검색
+chatbot/chain.py                        생성. 4필드 계약의 주인
+crawler/eval.py                         문서단위 hit@3 기준선의 주인
+chatbot/verify_qform_e2e.py             ver2 기준선 검증 자산
+chatbot/qform_panel.py                  T6 트레이스 패널 — 이번 스프린트 무변경  ← 신규 편입
+crawler/data/qform_combos_msdr.csv      착오송금 조합 14행
+crawler/data/chunks.jsonl               코퍼스 215청크
+crawler/data/doc_attachments.json       문서단위 첨부
+```
+
+⚠ **디스크상 `CLAUDE.md`는 아직 정정 전이다.** mtime `2026-08-18 02:49:58`, §2 동결 블록이
+여전히 `chatbot/rag.py`·`chatbot/eval.py`로 적혀 있고 `chatbot/qform_panel.py`가 없다.
+**CC는 판정 내용을 기준으로 동작하며, 파일 본문은 손대지 않았다**(수정 주체 = 현욱).
