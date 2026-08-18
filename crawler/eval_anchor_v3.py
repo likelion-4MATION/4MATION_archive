@@ -250,12 +250,17 @@ def _metric_values(gold_ids: list[str], retrieved_ids: list[str], relation: str)
     }
 
 
+# hit 누산은 KS 전체를 돈다. hit@30/hit@50이 빠져 있어 chunk/doc 레벨에서 항상
+# 0.0000으로 찍혔고, "top-50에도 없음"으로 오독될 수 있었다(리랭커 헤드룸 산정 시 실제로 걸림).
+_HIT_KEYS = tuple(f"hit@{k}" for k in KS) + ("mrr",)
+
+
 def _add_metrics(metrics: dict, values: dict, gold_ids: list[str]) -> None:
     """문항 하나의 결과를 집계 메트릭에 더한다."""
     metrics["n_evaluated"] += 1
     unique_gold_count = len(set(gold_ids))
     metrics["total_gold"] += unique_gold_count
-    for key in ("hit@1", "hit@3", "hit@5", "hit@10", "mrr"):
+    for key in _HIT_KEYS:
         metrics[key] += values[key]
     for k in RECALL_KS:
         metrics[f"recalled_gold@{k}"] += values[f"recalled_gold@{k}"]
@@ -266,7 +271,7 @@ def _finalize_metrics(metrics: dict) -> dict:
     """Hit/MRR/MacroRecall은 문항 기준, (micro)Recall은 gold chunk occurrence 기준으로 정규화한다."""
     if metrics["n_evaluated"]:
         denominator = metrics["n_evaluated"]
-        for key in ("hit@1", "hit@3", "hit@5", "hit@10", "mrr"):
+        for key in _HIT_KEYS:
             metrics[key] /= denominator
         for k in RECALL_KS:
             metrics[f"macro_recall@{k}"] /= denominator
@@ -369,7 +374,7 @@ def evaluate_retrieval(
         # n_evaluated is incremented above to preserve the explicit
         # answerable=true denominator, including an invalid no-gold label.
         chunk_metrics["total_gold"] += len(set(gold_ids))
-        for key in ("hit@1", "hit@3", "hit@5", "hit@10", "mrr"):
+        for key in _HIT_KEYS:
             chunk_metrics[key] += values[key]
         for k in RECALL_KS:
             chunk_metrics[f"recalled_gold@{k}"] += values[f"recalled_gold@{k}"]
