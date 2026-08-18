@@ -34,6 +34,7 @@ for _p in (_BASE / "chatbot", _BASE / "crawler"):
 
 import qform_trace  # noqa: E402  (rag 상수 로더 — 검색 스택 없는 환경도 통과시킨다)
 import attachments  # noqa: E402
+import qform_ask
 import qform_config  # noqa: E402
 import qform_flow  # noqa: E402
 import qform_state  # noqa: E402
@@ -196,12 +197,16 @@ check("C5", "AC2-3", "법인→미성년자(신규)",
       f"{c5[0]['slots']['subject']}→{c5[1]['slots']['subject']}"
       f"({c5[1]['origin']['subject']})", ok_c5)
 
-# C6 — TTL 초과. 기본 TTL=2 → 설정 후 2턴까지 살고 3번째 후속에서 끊긴다.
+# C6 — TTL 초과. **ver4 개정(K6): 기본 TTL 2 → 3.**
+#      설정 후 3턴까지 살고 4번째 후속에서 끊긴다. 원소 4개 하드코딩을 TTL 기반으로 바꿨다 —
+#      값이 또 바뀌어도 대본이 아니라 기대 시퀀스가 따라오게 하려는 것이다(M3-7).
+#      개정 범위: 기대값 생성 + 출력 문구 + 이 주석. **대본(후속 턴 수)만 TTL 에 맞춰 늘렸다.**
 FU = ("그럼 준비물은요?", [])
-_, c6 = run([CONFIRM, FU, FU, FU], force_answer=True)
+_TTL = qform_config.CARRYOVER_TTL
+_, c6 = run([CONFIRM] + [FU] * (_TTL + 1), force_answer=True)
 seq6 = [rec["origin"].get("subject") for rec in c6]
-ok_c6 = seq6 == [qform_flow.SRC_NEW, qform_flow.SRC_CARRY,
-                 qform_flow.SRC_CARRY, qform_flow.SRC_EMPTY]
+ok_c6 = seq6 == ([qform_flow.SRC_NEW] + [qform_flow.SRC_CARRY] * _TTL
+                 + [qform_flow.SRC_EMPTY])
 check("C6", "AC2-4", f"TTL={qform_config.CARRYOVER_TTL} 후 만료",
       " → ".join(s or "-" for s in seq6), ok_c6)
 
@@ -259,29 +264,49 @@ for sid, q in CTR_Q.items():
 # ══════════════════════════════════════════════════════════════════════════
 # E — 슬롯 칩 수정 (T6)
 # ══════════════════════════════════════════════════════════════════════════
-# E1 — 해제하면 되묻기가 **다시 뜬다**. 안 뜨면 "보이지만 고칠 수 없다"가 그대로다.
+# E1 — **ver4 개정(K4·K11).** X 는 "그만 물어봐"가 아니라 **메모리 오염 차단**이다.
+#      지우자마자 다시 물으면 "이 값을 다음 용건으로 끌고 가지 마라"는 의도와 정면 충돌한다.
+#      개정 전 기대값: 해제 → 되묻기 즉시 재발동.
+#      개정 후 기대값: **아무 것도 묻지 않음.** 값만 None, asked·ask_turn 무변동, answer() 0회.
+#      E1 이 지키려던 성질("패널에서 만진 것이 상태에 실제로 반영된다")은 그대로다 —
+#      바뀐 것은 반영의 즉시 결과가 재질문이냐 침묵이냐뿐이다. (개정 범위: 판정식·문구·주석)
 CALLS.clear()
 st_e, _ = run([CONFIRM], force_answer=True)
 before_e = dict(st_e["qform"])
 turn_before, asked_before = st_e["ask_turn"], list(st_e["asked"])
 ans_before = len(CALLS)
 ev_e = qform_flow.edit(st_e, "subject", None)
-ok_e1 = (ev_e["kind"] == "ask" and ev_e["slot"] == "subject"
-         and st_e["qform"]["subject"] is None and before_e["subject"] == "법인")
-check("E1", "AC6-1", "해제→되묻기 재발동",
-      f"subject {before_e['subject']}→{st_e['qform']['subject']} · {ev_e['kind']}"
-      f"({ev_e.get('slot')})", ok_e1)
+ok_e1 = (ev_e["kind"] == "ready" and st_e["pending_slot"] is None
+         and st_e["qform"]["subject"] is None and before_e["subject"] == "법인"
+         and len(CALLS) == ans_before)
+check("E1", "AC6-1", "해제→침묵 (재질문 0)",
+      f"subject {before_e['subject']}→{st_e['qform']['subject']} · {ev_e['kind']} · "
+      f"pending={st_e['pending_slot']} · answer() {len(CALLS) - ans_before}회", ok_e1)
 
-# E2 — 해제한 슬롯이 `asked` 에서 빠지고, **상한에 닿아 있던 대화가 다시 물을 수 있다.**
-#      해제 직전 ask_turn 은 상한(2)이었다. `edit` 이 턴을 하나 무르지 않으면
-#      `_try_ask` 가 상한에 걸려 None 을 내고, 해제해도 영영 안 물어본다.
-#      (해제 후 곧바로 재질문이 나가며 ask_turn 이 다시 +1 되므로 최종값은 2 다)
-ok_e2 = ("subject" in asked_before and "subject" not in st_e["asked"]
-         and turn_before == MAX_ASK and st_e["pending_slot"] == "subject"
-         and st_e["ask_turn"] <= MAX_ASK)
-check("E2", "AC6-2", "asked 정리 · 상한서 재질문",
-      f"asked {asked_before}→{st_e['asked']} · 턴 {turn_before}(상한)→{st_e['ask_turn']} · "
-      f"pending={st_e['pending_slot']}", ok_e2)
+# E2 — **ver4 개정(K4·K11).** 개정 전에는 "해제하면 asked 가 정리되고 상한에 닿은 대화가
+#      되살아난다"를 검사했다. K4 로 X 가 `asked`·`ask_turn` 을 건드리지 않게 되어 그 기대는
+#      무효다. **"상한에 닿은 대화가 되살아난다"는 성질은 pass 미사용 슬롯의 정상 경로로
+#      이관한다** — 즉 X 이후에도 `asked`·`ask_turn` 이 보존되고, 새 용건(새 질의)이 오면
+#      되묻기 판정이 정상으로 다시 돈다. 되살아나는 자리가 '해제 직후'에서 '다음 질의'로 옮겼다.
+ok_e2 = (asked_before == st_e["asked"]                  # asked 무변동
+         and turn_before == st_e["ask_turn"] == MAX_ASK  # ask_turn 무름 없음
+         and "subject" in st_e["asked"])                 # 되묻기로 채운 이력은 남아 있다
+# 새 질의에서 판정이 정상으로 다시 도는지 — **`CALLS` 를 오염시키지 않도록 별도 스텁**을 쓴다.
+# (E3 가 `edit()` 이후의 answer() 호출 수를 세므로 여기서 run() 을 쓰면 E3 가 깨진다)
+_silent = lambda q, qf: {"text": "", "sources": [], "confidence": 0.0, "route": "rag",
+                         "checks": {"ok": True, "flags": []}, "attachments": [],
+                         "_meta": {"latency_ms": 0}}
+st_e2 = qform_flow.new_state()
+qform_flow.start(st_e2, Q_DOC, classify_fn=classify_query_bf, answer_fn=_silent)
+qform_flow.reply(st_e2, "대리인이 신청해요", answer_fn=_silent)
+qform_flow.reply(st_e2, "법인이요", answer_fn=_silent)
+qform_flow.edit(st_e2, "subject", None)                       # X — 침묵
+qform_flow.start(st_e2, "미성년자 자녀 대신 신청 서류 알려주세요",
+                 classify_fn=classify_query_bf, answer_fn=_silent)
+ok_e2 &= st_e2["qform"]["subject"] == "미성년자"                 # 새 용건은 정상 판정
+check("E2", "AC6-2", "asked·턴 보존 · 되살아남은 다음 질의로 이관",
+      f"asked {asked_before}→{st_e['asked']} · 턴 {turn_before}→{st_e['ask_turn']} · "
+      f"다음 질의 subject={st_e2['qform']['subject']}", ok_e2)
 
 # E3 — `edit()` 은 answer() 를 부르지 않는다. 칩을 만질 때마다 예산이 새면 안 된다.
 ok_e3 = len(CALLS) == ans_before and "chain" not in sys.modules
@@ -301,10 +326,14 @@ check("E4", "AC6-5", "ready→명시 재답변",
       f"{ev_r['kind']} · 자동생성 0회 · answer_now 후 {len(CALLS) - n_before}회", ok_e4)
 
 # E5 — 해제한 슬롯을 **버튼으로 다시 고를 수 있다**(T5 선택지가 살아 있는가).
+# ver4: X 는 침묵하므로 `pending_slot` 이 없다 → `options()` 는 빈 리스트가 정상이다.
+# "해제한 값을 다시 고를 수 있는가"는 조합 테이블 생존값으로 직접 확인한다(렌더가 읽는 원천).
 opts_e = qform_flow.options(st_e)
-ok_e5 = bool(opts_e) and "법인" in opts_e
-check("E5", "AC6-2", "해제 후 선택지 복구",
-      f"{len(opts_e)}개 · 법인 포함={'법인' in opts_e}", ok_e5)
+surv_vals = qform_ask.survivor_values("subject", qform_state.survivors(st_e["qform"]))
+ok_e5 = opts_e == [] and "법인" in surv_vals
+check("E5", "AC6-2", "해제 후 선택지 복구 (생존값 기준)",
+      f"options={len(opts_e)}개(침묵) · 생존 subject값 {len(surv_vals)}개 · "
+      f"법인 포함={'법인' in surv_vals}", ok_e5)
 
 # ══════════════════════════════════════════════════════════════════════════
 # AC4-1 — HCX 콜 0 확인

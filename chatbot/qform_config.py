@@ -13,19 +13,23 @@ DB·원격 설정 로딩은 이번 범위 밖이며, `resolve()` 가 그 주입�
 호환: `qform_flow.MAX_ASK_TURNS` 는 **별칭으로 유지**한다(`verify_docs.py` 가 읽는다).
 
     from qform_config import resolve
-    cfg = resolve({"CARRYOVER_TTL": 3})     # 검증 + 기본값 병합
-    cfg["CARRYOVER_TTL"]                    # 3
-    resolve({"CARRYOVER_TTL": 99})          # 허용범위 밖 → 기본값 2 로 되돌리고 통과
+    cfg = resolve({"CARRYOVER_TTL": 4})     # 검증 + 기본값 병합
+    cfg["CARRYOVER_TTL"]                    # 4
+    resolve({"CARRYOVER_TTL": 99})          # 허용범위 밖 → 기본값 3 으로 되돌리고 통과
 """
 from __future__ import annotations
 
 # ── 기본값 (task_assignment T2 표) ──────────────────────────────────────────
 SLOT_CARRYOVER = True          # 슬롯 이월 사용 여부
-CARRYOVER_TTL = 2              # 슬롯이 설정된 후 몇 턴까지 유효한가
+CARRYOVER_TTL = 3              # 슬롯이 설정된 후 몇 턴까지 유효한가 (K6: 2→3)
 CARRYOVER_SCOPE = "bf_match"   # 업무 전환 시 정책
 MAX_ASK_TURNS = 2              # 되묻기 상한 (qform_flow 에서 이관)
 
+MAX_QUEUE = 3                  # '대기 중인 용건' 큐 최대 길이 (K13)
+PANEL_EXPIRED = "gray"         # TTL 만료 항목 처리 — 회색 잔류 / 즉시 삭제
+
 SCOPE_VALUES = ("bf_match", "global", "off")
+EXPIRED_VALUES = ("gray", "drop")
 
 # 콘솔이 읽을 메타. 라벨·허용값·설명이 코드와 한 곳에 있어야 UI 가 값을 창작하지 않는다.
 SPEC: dict[str, dict] = {
@@ -46,6 +50,18 @@ SPEC: dict[str, dict] = {
     "MAX_ASK_TURNS": {
         "label": "되묻기 상한", "type": "int", "default": MAX_ASK_TURNS, "range": (1, 3),
         "help": "한 질의에서 되물을 수 있는 최대 턴 수. 상한에 닿으면 미채움이어도 진행한다.",
+    },
+    # ── ver4 M3 메모리 패널 파라미터 ────────────────────────────────────────
+    "MAX_QUEUE": {
+        "label": "대기 용건 최대", "type": "int", "default": MAX_QUEUE, "range": (0, 5),
+        "help": ("다중 의도에서 '대기 중인 용건' 구역에 쌓아 둘 최대 개수. "
+                 "0 이면 큐를 쓰지 않는다(ver3 동작)."),
+    },
+    "PANEL_EXPIRED": {
+        "label": "만료 항목 처리", "type": "enum", "default": PANEL_EXPIRED,
+        "values": EXPIRED_VALUES,
+        "help": ("gray=TTL 만료 항목을 회색으로 남긴다(기본) · drop=화면에서 지운다. "
+                 "조용한 삭제는 '아무것도 안 했는데 사라졌다'로 읽혀 기본값이 gray 다."),
     },
 }
 
@@ -105,8 +121,9 @@ if __name__ == "__main__":
         print(f"  {k:18} {str(s['default']):10} {allowed:28} {s['label']}")
 
     print("\n── AC. 기본값이 명세서 표와 일치 ──")
-    WANT = {"SLOT_CARRYOVER": True, "CARRYOVER_TTL": 2,
-            "CARRYOVER_SCOPE": "bf_match", "MAX_ASK_TURNS": 2}
+    WANT = {"SLOT_CARRYOVER": True, "CARRYOVER_TTL": 3,
+            "CARRYOVER_SCOPE": "bf_match", "MAX_ASK_TURNS": 2,
+            "MAX_QUEUE": 3, "PANEL_EXPIRED": "gray"}
     got = {k: v for k, v in resolve().items() if k != "_invalid"}
     ok_def = got == WANT
     print(f"  {got}\n  기대 {WANT}  → {'OK' if ok_def else 'DIFF ⛔'}")
@@ -115,11 +132,13 @@ if __name__ == "__main__":
 
     print("\n── AC. 허용범위 밖 값은 기본값 복귀 (예외 없음) ──")
     CASES = [
-        ({"CARRYOVER_TTL": 99}, "CARRYOVER_TTL", 2),
-        ({"CARRYOVER_TTL": 0}, "CARRYOVER_TTL", 2),
+        ({"CARRYOVER_TTL": 99}, "CARRYOVER_TTL", 3),
+        ({"CARRYOVER_TTL": 0}, "CARRYOVER_TTL", 3),
         ({"CARRYOVER_SCOPE": "무엇"}, "CARRYOVER_SCOPE", "bf_match"),
         ({"MAX_ASK_TURNS": 9}, "MAX_ASK_TURNS", 2),
         ({"SLOT_CARRYOVER": "예"}, "SLOT_CARRYOVER", True),
+        ({"MAX_QUEUE": 99}, "MAX_QUEUE", 3),
+        ({"PANEL_EXPIRED": "숨김"}, "PANEL_EXPIRED", "gray"),
         ({"없는키": 1}, None, None),
     ]
     ok_clamp = True

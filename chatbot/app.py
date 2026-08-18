@@ -39,6 +39,7 @@ sys.path.insert(0, str(ROOT / "crawler"))
 import chain
 import qform_flow
 import qform_followup
+import qform_memory_panel as qmp
 import qform_panel
 import qform_state
 import qform_trace
@@ -300,6 +301,10 @@ def render_ask(turn: dict) -> None:
     st.caption(f"남은 후보 {turn['remaining']}개 · 건너뛰어도 답변합니다 · {tag}")
 
 
+_ESCAPE = "\x00escape"      # 렌더 층 내부 신호. 슬롯 값이 아니다(조합 테이블 밖으로 안 나간다)
+_PASS = "\x00pass"
+
+
 def render_options(opts: list[str], key_prefix: str) -> str | None:
     """되묻기 선택지 버튼 (T5 B1). 클릭된 값을 돌려준다.
 
@@ -326,7 +331,80 @@ def render_options(opts: list[str], key_prefix: str) -> str | None:
         with st.expander(f"다른 선택지 보기 ({len(tail)}개)"):
             for i in range(0, len(tail), 3):
                 _row(tail[i:i + 3], f"t{i}")
+    # K9 — 빠른 답변은 키 조합이 아니라 **버튼**. 탈출구 로직은 ver2부터 구현·검증돼 있어
+    # (verify_qform_e2e.py AC3) 여기서 하는 일은 **입구를 하나 더 여는 렌더링 변경**이다.
+    # K5 — ⏭ pass 는 "이 슬롯은 답하지 않겠다". X(오염 차단)와 역할이 다르다.
+    c1, c2 = st.columns(2)
+    if c1.button("이대로 답변받기", key=f"opt-{key_prefix}-escape", width="stretch"):
+        picked = _ESCAPE
+    if c2.button("⏭ 이건 넘어갈게요", key=f"opt-{key_prefix}-pass", width="stretch"):
+        picked = _PASS
     return picked
+
+
+_TERMS_CACHE: dict | None = None
+
+
+def term_caption(value: str) -> str | None:
+    """선택지 값이 용어 사전의 `term` 이면 **`one_line` 전문**을 캡션으로 돌려준다.
+
+    M1 판정 3 — **버튼 라벨 = `term` · 캡션 = `one_line` 전문.** `one_line` 은 코퍼스
+    축자 문장이라 **자르지 않는다**(줄이는 순간 창작이다). 화면에서 줄이는 것은
+    말줄임이 아니라 캡션으로 내리는 것으로 해결한다.
+    현재 조합 테이블의 슬롯 값(본인·대리인·법인…)과 용어 사전의 term(예금보험금·
+    가지급금…)은 교집합이 없어 이 경로는 **아직 발동하지 않는다** — D 되묻기를 구현하지
+    않기로 했기 때문이다(08-18 M1 판정 1). 배선만 두고 재측정 대상으로 남긴다.
+    """
+    global _TERMS_CACHE
+    if _TERMS_CACHE is None:
+        import csv
+        try:
+            with (ROOT / "crawler" / "data" / "qform_terms_v0.csv").open(encoding="utf-8-sig") as fh:
+                _TERMS_CACHE = {r["term"]: r["one_line"] for r in csv.DictReader(fh)}
+        except Exception:
+            _TERMS_CACHE = {}
+    return _TERMS_CACHE.get(value)
+
+
+def render_memory_panel(flow: dict, key_prefix: str = "mem") -> tuple | None:
+    """메모리 패널 3구역 (ver4 M3). **렌더만 한다** — 모델·조작은 `qform_memory_panel`.
+
+    반환: 클릭된 조작 `(op, kwargs)` 또는 None. 호출자가 `qmp.apply()` 로 넘긴다.
+    `answer()` 는 어느 경로로도 호출되지 않는다(A3-2).
+    """
+    model = qmp.panel_model(flow)
+    action = None
+    st.subheader("기억")
+    st.caption(f"이월 유효 {model['ttl']}턴 · 만료 항목은 회색으로 남습니다")
+    for zone in model["zones"]:
+        st.markdown(f"**{zone['name']}**")
+        if not zone["items"]:
+            st.caption("(없음)")
+            continue
+        for i, it in enumerate(zone["items"]):
+            val = it.get("value")
+            shown = ", ".join(val) if isinstance(val, list) else (val or "—")
+            line = f"{it['label']} · {shown}"
+            if it["status"] != qmp.ST_ACTIVE:
+                st.caption(f"~~{line}~~  ({it['status']})")     # 회색 잔류 — 삭제하지 않는다
+            else:
+                st.write(line)
+            st.caption(f"고치면 → {it['effect']}" + ("" if it["actionable"] else "  (표시 전용)"))
+            cap = term_caption(shown)
+            if cap:
+                st.caption(cap)                                  # M1 판정 3 · one_line 전문
+            if not it["actionable"]:
+                continue
+            cols = st.columns(len(it["ops"]) or 1)
+            for col, op in zip(cols, it["ops"]):
+                label = {"edit": "✏️", "clear": "❌", "pass": "⏭",
+                         "move": "✏️ 순서", "drop": "❌"}[op]
+                if col.button(label, key=f"{key_prefix}-{zone['name']}-{i}-{op}"):
+                    if op in ("move", "drop"):
+                        action = (op, {"index": it["index"], "delta": -1})
+                    else:
+                        action = (op, {"field": it["field"]})
+    return action
 
 
 def render_chips(key_prefix: str, per_row: int = 3) -> str | None:
@@ -443,6 +521,13 @@ if right is not None:
     with right:
         qform_panel.render([t["trace"] for t in st.session_state.history if t.get("trace")])
 
+# ver4 M3 — 메모리 패널. 사이드바에 둔다(우측은 T6 트레이스 패널이 쓴다 · 동결).
+_panel_action = None
+if st.session_state.history:
+    with st.sidebar:
+        st.divider()
+        _panel_action = render_memory_panel(flow)
+
 # 대화가 시작되면 칩은 사이드바로 옮긴다 — 본문을 차지하지 않으면서 항상 닿는다.
 if st.session_state.history:
     with st.sidebar:
@@ -489,6 +574,24 @@ if skip and pending:
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
+if chosen == _ESCAPE and pending:
+    # K9 [이대로 답변받기] — ver2 탈출구(`skip`)를 버튼으로 한 번 더 연 것이다.
+    st.session_state.history.append({"role": "user", "text": "이대로 답변받기"})
+    with st.spinner("처리 중…"):
+        c0 = chain._calls
+        ev = qform_flow.skip(flow, boost=BOOST)
+        st.session_state.needs_regen = False
+        record(ev, build_trace(ev, chain._calls - c0))
+    st.rerun()
+
+if chosen == _PASS and pending:
+    # K5 ⏭ pass — 이 슬롯은 답하지 않겠다. `asked` 에 기록해 재질문을 막는다.
+    # **`answer()` 를 부르지 않는다.** X(오염 차단)와 달리 여기서 대화가 멈춘다.
+    _slot = flow.get("pending_slot")
+    st.session_state.history.append({"role": "user", "text": "이건 넘어갈게요"})
+    qmp.apply(flow, "pass", field=_slot)
+    st.rerun()
+
 if chosen and pending:
     # 버튼 경로 — `value=` 로 값을 직접 주입한다. 자연어 추출을 경유하지 않는다.
     st.session_state.history.append({"role": "user", "text": chosen})
@@ -497,6 +600,12 @@ if chosen and pending:
         ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE, boost=BOOST)
         st.session_state.needs_regen = False
         record(ev, build_trace(ev, chain._calls - c0))
+    st.rerun()
+
+if _panel_action:
+    # 패널 조작은 전부 `qmp.apply()` 한 곳으로 들어간다. **answer() 를 부르지 않는다**(A3-2).
+    _op, _kw = _panel_action
+    qmp.apply(flow, _op, **_kw)
     st.rerun()
 
 # 예시 칩은 되묻기 중이어도 **새 질의**다 — 사용자가 다른 걸 물으려고 누른 것이다.
