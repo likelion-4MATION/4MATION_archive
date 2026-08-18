@@ -23,6 +23,31 @@ from __future__ import annotations
 
 IN_SCOPE_BF = "착오송금 반환 신청"
 
+# ver4 M5 — 스코프 파라미터화. **기본값은 착오송금 단일이라 ver1~ver4 현행과 완전 동일하다.**
+# 확장(`msdr+dpin`)은 `qform_config.QFORM_SCOPE` 토글로만 켠다 — 쿼리 부스트를 G13 때문에
+# 기본 OFF 로 둔 것과 같은 패턴이다. **배관은 깔되 밸브는 측정 후에 연다.**
+# 규칙을 추가하지 않았다 — 지금 있는 결정론 규칙이 예금보험금에 어떻게 작동하는지 재는 것이 목적이다.
+SCOPE_SETS = {
+    "msdr": (IN_SCOPE_BF,),
+    "msdr+dpin": (IN_SCOPE_BF, "예금보험금 안내"),
+}
+
+
+def scope_bfs(scope=None) -> tuple:
+    """현재 스코프의 허용 업무 튜플. `scope=None` 이면 `qform_config` 기본값을 읽는다."""
+    if scope is None:
+        try:
+            import qform_config
+            scope = qform_config.QFORM_SCOPE
+        except Exception:
+            scope = "msdr"
+    return SCOPE_SETS.get(scope, SCOPE_SETS["msdr"])
+
+
+def in_scope(bf, scope=None) -> bool:
+    """`bf` 가 슬롯 추출 대상인가. `None`(불명)은 게이트를 통과시킨다 — 기존 동작."""
+    return bf is None or bf in scope_bfs(scope)
+
 # ── 조합 테이블 허용값 (출력 자기검증용. '공통'은 테이블 와일드카드라 추출 안 함) ──
 ALLOWED = {
     "party": {"송금인", "수취인"},
@@ -127,10 +152,12 @@ _METHOD_RULES = {
 _UNSET = object()
 
 
-def extract(query: str, business_function=_UNSET) -> dict:
+def extract(query: str, business_function=_UNSET, *, scope=None) -> dict:
     """자연어 → 슬롯 dict. LLM 호출 0. 못 잡으면 해당 키 None.
 
     business_function: 업무 판정값(str) · 불명 확정(None) · 미지정(생략 → 폴백 계산).
+    scope: 슬롯 추출 스코프 override(`"msdr"` / `"msdr+dpin"`). None 이면 `qform_config` 기본값.
+        **기본값은 `msdr` 이라 이 인자를 안 주면 ver4 M4 까지와 동작이 완전히 같다.**
     """
     hits: dict[str, list[str]] = {}
     out = {"party": None, "sub_task": None, "qualification": None,
@@ -145,7 +172,7 @@ def extract(query: str, business_function=_UNSET) -> dict:
         except Exception:
             bf = None  # rag 로드 실패 → 아래 도메인 어휘 게이트가 대신 막는다
     out["_bf"] = bf
-    if bf is not None and bf != IN_SCOPE_BF:
+    if not in_scope(bf, scope):
         out["_scope"] = "out"
         return out
     out["_scope"] = "in"

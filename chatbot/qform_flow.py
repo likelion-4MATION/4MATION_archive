@@ -43,7 +43,7 @@ for _p in (_BASE / "chatbot", _BASE / "crawler"):
 import qform_ask  # noqa: E402
 import qform_config  # noqa: E402
 import qform_state  # noqa: E402
-from qform_extract import IN_SCOPE_BF, extract, is_definitional  # noqa: E402
+from qform_extract import IN_SCOPE_BF, extract, in_scope, is_definitional  # noqa: E402
 
 # D2: 되묻기 상한. **값의 주인은 `qform_config` 로 옮겼고(ver3 T2) 이 이름은 별칭이다.**
 # `verify_docs.py` 가 `qform_flow.MAX_ASK_TURNS` 를 읽으므로 이름을 없애지 않는다.
@@ -255,7 +255,12 @@ def reply(state: dict, text: str, *, value: str | None = None,
             origin[slot] = SRC_NEW
             slot_turn[slot] = turn_no
     else:
-        merged = extract(f"{state['base_q']} {text}", business_function=IN_SCOPE_BF)
+        # 스코프 안이면 **상태의 업무를 그대로** 쓴다(M5 확장 대비). 스코프 밖이면 기존처럼
+        # 착오송금으로 명시 — 후속 답변("대리인이요")만으로는 게이트에 걸리기 때문이다.
+        # 기본 스코프(msdr)에서는 되묻기 대화의 bf 가 착오송금이라 **동작이 완전히 같다**.
+        _bf = state.get("bf")
+        merged = extract(f"{state['base_q']} {text}",
+                         business_function=_bf if (_bf and in_scope(_bf)) else IN_SCOPE_BF)
         for f in SLOT_FIELDS:
             if not state["qform"].get(f) and merged.get(f):
                 state["qform"][f] = merged[f]

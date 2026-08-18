@@ -1,5 +1,7 @@
 # Qform ver4 — 연휴 스프린트 논의 정리
 
+> ⚠ **[추기 2026-08-18]** 이 문서의 첨부 수치는 **파일 엔트리 기준**이다. canonical 환산은 `docs/Qform_ver4_M4_regression.md` A4-7 가드 표 참조.
+
 > **v3** · 2026-08-17 · **성격** 세션 논의 정리 (착수 전 · 명세 아님)
 > **선행** `docs/QFORM_ARCH_설계스펙.md` rev.5 · `docs/SprintDemoV3_결과공유.md` · `docs/복잡도유형_도메인분석_v0.md`
 > **결정 번호** `K` 시리즈 — 기존 `D1~D5`(ver1) · `F1~F8`(ver3) · `G13`(갭)과 충돌 회피용

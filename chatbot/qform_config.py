@@ -25,11 +25,13 @@ CARRYOVER_TTL = 3              # 슬롯이 설정된 후 몇 턴까지 유효한
 CARRYOVER_SCOPE = "bf_match"   # 업무 전환 시 정책
 MAX_ASK_TURNS = 2              # 되묻기 상한 (qform_flow 에서 이관)
 
+QFORM_SCOPE = "msdr"           # 슬롯 추출 스코프 (ver4 M5). 기본 = 착오송금 단일 = 현행
 MAX_QUEUE = 3                  # '대기 중인 용건' 큐 최대 길이 (K13)
 PANEL_EXPIRED = "gray"         # TTL 만료 항목 처리 — 회색 잔류 / 즉시 삭제
 
 SCOPE_VALUES = ("bf_match", "global", "off")
 EXPIRED_VALUES = ("gray", "drop")
+SCOPE_SET_VALUES = ("msdr", "msdr+dpin")
 
 # 콘솔이 읽을 메타. 라벨·허용값·설명이 코드와 한 곳에 있어야 UI 가 값을 창작하지 않는다.
 SPEC: dict[str, dict] = {
@@ -50,6 +52,14 @@ SPEC: dict[str, dict] = {
     "MAX_ASK_TURNS": {
         "label": "되묻기 상한", "type": "int", "default": MAX_ASK_TURNS, "range": (1, 3),
         "help": "한 질의에서 되물을 수 있는 최대 턴 수. 상한에 닿으면 미채움이어도 진행한다.",
+    },
+    # ── ver4 M5 슬롯 추출 스코프 ────────────────────────────────────────────
+    "QFORM_SCOPE": {
+        "label": "슬롯 추출 스코프", "type": "enum", "default": QFORM_SCOPE,
+        "values": SCOPE_SET_VALUES,
+        "help": ("msdr=착오송금 단일(**기본 · ver1~ver4 현행과 완전 동일**) · "
+                 "msdr+dpin=착오송금+예금보험금. **배관은 깔되 밸브는 측정 후에 연다** — "
+                 "기본값 변경은 450셋 발동률 판정 사항이다(M5)."),
     },
     # ── ver4 M3 메모리 패널 파라미터 ────────────────────────────────────────
     "MAX_QUEUE": {
@@ -123,7 +133,7 @@ if __name__ == "__main__":
     print("\n── AC. 기본값이 명세서 표와 일치 ──")
     WANT = {"SLOT_CARRYOVER": True, "CARRYOVER_TTL": 3,
             "CARRYOVER_SCOPE": "bf_match", "MAX_ASK_TURNS": 2,
-            "MAX_QUEUE": 3, "PANEL_EXPIRED": "gray"}
+            "QFORM_SCOPE": "msdr", "MAX_QUEUE": 3, "PANEL_EXPIRED": "gray"}
     got = {k: v for k, v in resolve().items() if k != "_invalid"}
     ok_def = got == WANT
     print(f"  {got}\n  기대 {WANT}  → {'OK' if ok_def else 'DIFF ⛔'}")
@@ -139,6 +149,7 @@ if __name__ == "__main__":
         ({"SLOT_CARRYOVER": "예"}, "SLOT_CARRYOVER", True),
         ({"MAX_QUEUE": 99}, "MAX_QUEUE", 3),
         ({"PANEL_EXPIRED": "숨김"}, "PANEL_EXPIRED", "gray"),
+        ({"QFORM_SCOPE": "전업무"}, "QFORM_SCOPE", "msdr"),
         ({"없는키": 1}, None, None),
     ]
     ok_clamp = True
