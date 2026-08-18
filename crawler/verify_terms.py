@@ -34,7 +34,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import span_tools as st
+
 BASE = Path(__file__).resolve().parent
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
 TERMS = BASE / "data" / "qform_terms_v0.csv"
 CHUNKS = BASE / "data" / "chunks.jsonl"
 
@@ -60,11 +64,13 @@ def load():
         c = json.loads(line)
         chunks[c["chunk_id"]] = c
         docs.add(c["parent_doc_id"])
-    return rows, chunks, docs
+    # T-AC3 는 `span_tools` 형태(chunk_id -> {text, parent_doc_id})를 쓴다
+    raw = st.load_chunks(CHUNKS)
+    return rows, chunks, docs, raw
 
 
 def main() -> int:
-    rows, chunks, docs = load()
+    rows, chunks, docs, raw = load()
     fails: list[str] = []
     print(f"소스: terms={len(rows)}행 · chunks={len(chunks)}청크 / {len(docs)}문서\n")
 
@@ -95,21 +101,41 @@ def main() -> int:
     if doc_missing:
         fails.append("T-AC2 doc 미실재")
 
-    # ── T-AC3. 축자성 — 완전 부분문자열 ─────────────────────────────────────
-    print("\n── T-AC3. 축자성 (one_line ⊂ 근거[0] · discriminator ⊂ 근거 어느 하나) ──")
-    print(f"  {'term_id':9} {'term':14} {'one_line':>9} {'discriminator':>14}  판정")
+    # ── T-AC3. 축자성 — **스팬 기준** (ver4 M9-1b 개정) ─────────────────────
+    #
+    # 개정 전: `evidence_chunks_v0[0]` 청크 텍스트에 `one_line` 이 부분문자열로 있는가.
+    # 개정 후: `evidence_spans` 의 각 `(doc_id, 스니펫)` 이 **선언 문서 안에서 정확히 1회**
+    #          나오는가(`span_tools.resolves_to_chunk` 가 None 이 아님).
+    #
+    # 왜 옮겼나 — 앵커 트랙이 **청크 사이즈를 동적으로 스윕**한다. `chunk_id` 는 고정
+    # 식별자가 아니라 실험 파라미터의 함수라, 재청킹되면 `#00` 이 통째로 재배치되고
+    # 이 검사가 조용히 다른 텍스트를 대조하게 된다. `(doc_id, 스니펫)` 은 둘 다 청킹 불변이다.
+    #
+    # **청크 경계를 넘어가면 통과하지 않는다** — `occurrences_in_doc` 이 청크 단위로 세므로,
+    # 문서 텍스트에는 있는데 어느 단일 청크에도 온전히 없으면 0회가 되어 실패한다.
+    # 구 포맷과 해상도는 같다: 코퍼스 전체 유일성은 구 `chunk_id` 도 보증한 적이 없다.
+    print("\n── T-AC3. 축자성 (evidence_spans · 선언 문서 안에서 정확히 1회) ──")
+    print(f"  {'term_id':9} {'term':14} {'스팬':>4} {'해소':>4} {'구 컬럼 기준':>10}  판정")
     bad_verbatim = 0
+    legacy_bad = 0
     for r in rows:
+        spans = st.parse_spans(r.get("evidence_spans", ""))
+        resolved = [st.resolves_to_chunk(d, sn, raw) for d, sn in spans]
+        ok_new = bool(spans) and all(c is not None for c in resolved)
+
+        # 3-3 — 개정 전(구 컬럼) 판정을 같이 낸다. 회귀 비교용이며 통과 조건은 아니다.
         ev = toks(r["evidence_chunks_v0"])
         head = chunks.get(ev[0], {}).get("text", "") if ev else ""
-        ok_one = bool(r["one_line"]) and r["one_line"] in head
-        ok_disc = bool(r["discriminator"]) and any(
-            r["discriminator"] in chunks.get(c, {}).get("text", "") for c in ev)
-        hit = ok_one and ok_disc
-        bad_verbatim += (not hit)
-        print(f"  {r['term_id']:9} {r['term']:14} {str(ok_one):>9} {str(ok_disc):>14}  "
-              f"{'OK' if hit else 'DIFF ⛔ 창작 의심'}")
+        ok_old = (bool(r["one_line"]) and r["one_line"] in head
+                  and bool(r["discriminator"])
+                  and any(r["discriminator"] in chunks.get(c, {}).get("text", "") for c in ev))
+        legacy_bad += (not ok_old)
+        bad_verbatim += (not ok_new)
+        print(f"  {r['term_id']:9} {r['term']:14} {len(spans):4} "
+              f"{sum(1 for c in resolved if c):4} {str(ok_old):>10}  "
+              f"{'OK' if ok_new else 'DIFF ⛔ 창작 의심'}")
     print(f"  창작 검출 {bad_verbatim}건  (기대 0)  {'OK' if not bad_verbatim else 'DIFF ⛔'}")
+    print(f"  [참고] 개정 전 기준 위반 {legacy_bad}건 — 두 기준이 같은 판정을 내는지 병기")
     if bad_verbatim:
         fails.append("T-AC3 축자성 위반")
 

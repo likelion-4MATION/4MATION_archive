@@ -32,7 +32,11 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+import span_tools as st
+
 BASE = Path(__file__).resolve().parent
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
 COMBOS_MSDR = BASE / "data" / "qform_combos_msdr.csv"
 COMBOS_DPIN = BASE / "data" / "qform_combos_dpin.csv"
 COMBOS = COMBOS_MSDR          # 하위호환 별칭
@@ -85,6 +89,17 @@ TABLES = [
 ]
 
 
+def read_rows(path) -> list[dict]:
+    """조합 CSV 로더. **`#` 로 시작하는 줄은 주석**으로 보고 건너뛴다.
+
+    `qform_combos_dpin.csv` 머리에 `party` 미사용 사유가 주석으로 적혀 있다(08-18 판정 1).
+    MSDR 파일에는 주석이 없어 이 함수는 그쪽에서 무동작이다 — 동결 파일 무변경.
+    """
+    with path.open(encoding="utf-8-sig") as fh:
+        lines = [ln for ln in fh if not ln.lstrip().startswith("#")]
+    return list(csv.DictReader(lines))
+
+
 def toks(s: str) -> set[str]:
     """다중값(;) → 토큰 집합. 공란 제거."""
     return {t.strip() for t in (s or "").split(";") if t.strip()}
@@ -111,9 +126,10 @@ def joins(combo: dict, att: dict) -> bool:
     return True
 
 
-def check_table(spec: dict, atts: list, chunk_ids: set, doc_ids: set) -> tuple[bool, list]:
+def check_table(spec: dict, atts: list, chunk_ids: set, doc_ids: set,
+                raw_chunks: dict) -> tuple[bool, list]:
     """한 조합 테이블에 대해 AC1~AC4 를 돌린다. (통과여부, 행) 반환."""
-    combos = list(csv.DictReader(spec["path"].open(encoding="utf-8-sig")))
+    combos = read_rows(spec["path"])
     ok = True
     print(f"\n{'═' * 78}")
     print(f"■ {spec['name']}  —  {spec['path'].name}  ({len(combos)}행)")
@@ -158,17 +174,54 @@ def check_table(spec: dict, atts: list, chunk_ids: set, doc_ids: set) -> tuple[b
           f"{'OK' if not bad_ns else 'DIFF'}")
     ok = ok and not bad_ns
 
-    # ── AC2. evidence chunk_id 실재 ───────────────────────────
-    print("\n── AC2. evidence_chunks_v0 chunk_id 실재 ──")
-    ev_total = ev_miss = 0
-    for row in combos:
-        for ev in (e.strip() for e in row["evidence_chunks_v0"].split("|") if e.strip()):
-            ev_total += 1
-            if ev not in chunk_ids:
-                ev_miss += 1
-                print(f"     ✗ {row['combo_id']} 미실재 chunk_id: {ev}")
-    print(f"  앵커 {ev_total}개 중 미실재 {ev_miss}건  (기대 0)  {'OK' if ev_miss == 0 else 'DIFF'}")
-    ok = ok and ev_miss == 0
+    # ── AC2. 근거 실재 — **스팬 기준으로 격상** (ver4 M9-2b) ──────────────
+    #
+    # 현행(ver1~M9-2): `evidence_chunks_v0` 의 chunk_id 가 chunks.jsonl 에 **있는가**.
+    #   → 청크 ID 존재만 본다. **텍스트를 대조하지 않는다.**
+    # 개정(M9-2b): `evidence_spans` 의 각 `(doc_id, 스니펫)` 이 **선언 문서 안에 정확히 1회**
+    #   있는가(`span_tools.resolves_to_chunk != None`). **텍스트 실재 대조로 격상**(M9-0 판정 4).
+    #
+    # 왜 — 앵커 트랙이 청크 사이즈를 스윕한다. `chunk_id` 는 실험 파라미터의 함수라
+    # 재청킹되면 ID 가 재배치되고 이 검사가 조용히 다른 텍스트를 통과시킨다.
+    #
+    # **정본은 신 컬럼 단독이다(K2).** 구 컬럼 판정은 참고 출력이며 **종료코드에 반영하지 않는다** —
+    # 재청킹으로 구 기준이 전부 실패해도 이 스크립트는 통과해야 한다.
+    # `evidence_spans` 가 없는 표(MSDR·동결)는 **구 검사로 폴백**하고 그 사실을 출력한다.
+    has_spans = any((row.get("evidence_spans") or "").strip() for row in combos)
+    print("\n── AC2. 근거 실재 " + ("(evidence_spans · 선언 문서 내 정확히 1회) ──"
+                                  if has_spans else "(evidence_chunks_v0 · 폴백) ──"))
+    if not has_spans:
+        print("  ⚠ 이 표에는 `evidence_spans` 가 없다 → **구 검사(chunk_id 실재)로 폴백**한다.")
+        print("    (동결 자산이라 이행 대상이 아니다 — 다음 스프린트 동결 해제 시 처리)")
+        ev_total = ev_miss = 0
+        for row in combos:
+            for ev in (e.strip() for e in row["evidence_chunks_v0"].split("|") if e.strip()):
+                ev_total += 1
+                if ev not in chunk_ids:
+                    ev_miss += 1
+                    print(f"     ✗ {row['combo_id']} 미실재 chunk_id: {ev}")
+        print(f"  앵커 {ev_total}개 중 미실재 {ev_miss}건  (기대 0)  "
+              f"{'OK' if ev_miss == 0 else 'DIFF'}")
+        ok = ok and ev_miss == 0
+    else:
+        sp_total = sp_miss = 0
+        for row in combos:
+            for doc_id, snip in st.parse_spans(row.get("evidence_spans", "")):
+                sp_total += 1
+                if st.resolves_to_chunk(doc_id, snip, raw_chunks) is None:
+                    sp_miss += 1
+                    print(f"     ✗ {row['combo_id']} 미해소 스팬: {doc_id}::{snip[:30]}")
+        print(f"  스팬 {sp_total}개 중 미해소 {sp_miss}건  (기대 0)  "
+              f"{'OK' if sp_miss == 0 else 'DIFF'}")
+        ok = ok and sp_miss == 0
+        # 구 컬럼 — **참고 출력만.** 종료코드에 반영하지 않는다(K2)
+        old_total = old_miss = 0
+        for row in combos:
+            for ev in (e.strip() for e in row["evidence_chunks_v0"].split("|") if e.strip()):
+                old_total += 1
+                old_miss += (ev not in chunk_ids)
+        print(f"  [참고] 구 컬럼 chunk_id {old_total}개 중 미실재 {old_miss}건 "
+              f"— 종료코드 미반영(재청킹 시 여기부터 깨진다)")
 
     # ── AC3. source_doc_id 실재 ───────────────────────────────
     print("\n── AC3. source_doc_id doc_id 실재 ──")
@@ -217,12 +270,13 @@ def main() -> int:
             chunk_ids.add(d["chunk_id"])
             doc_ids.add(d["parent_doc_id"])
 
+    raw_chunks = st.load_chunks(CHUNKS)      # 스팬 검사용 (chunk_id -> text/parent_doc_id)
     print(f"소스: attachments={len(atts)}행 · chunks={len(chunk_ids)}청크 / {len(doc_ids)}문서")
 
     ok = True
     tables = {}
     for spec in TABLES:
-        t_ok, rows = check_table(spec, atts, chunk_ids, doc_ids)
+        t_ok, rows = check_table(spec, atts, chunk_ids, doc_ids, raw_chunks)
         tables[spec["prefix"]] = rows
         ok = ok and t_ok
 
