@@ -274,7 +274,8 @@ if __name__ == "__main__":
     print(f"  되물은 슬롯 종류: {sorted(asked_slots)}  → method 없음: {'OK' if ac3 else 'DIFF'}")
 
     # ── AC4. 450셋 되묻기 발동률 (오발동 지표, 낮을수록 정상) ────────────────
-    print("\n── AC4. 450셋 되묻기 발동률 (오발동 지표) ──")
+    print(f"\n── AC4. 450셋 되묻기 발동률 (오발동 지표) · QFORM_SCOPE="
+          f"{__import__('qform_config').QFORM_SCOPE} ──")
     rows = [json.loads(l) for l in (_BASE / "crawler" / "data" / "testset_natural_450.jsonl").open(encoding="utf-8")]
     fire = fire_ms = 0
     ms_total = 0
@@ -282,7 +283,9 @@ if __name__ == "__main__":
         slots = extract(r["question"], r["business_function"])
         is_ms = r["business_function"] == "착오송금 반환 신청"
         ms_total += is_ms
-        if next_question(slots) is not None:
+        # ver4 M7 — **업무의 표로 판정한다.** MSDR 표에만 대고 재면 예금보험금 질의가
+        # 생존 0행이 되어 발동률이 구조적으로 과소 측정된다(스코프 전환 전에는 동일했다).
+        if next_question(slots, combos=combos_for(r["business_function"])) is not None:
             fire += 1
             fire_ms += is_ms
     print(f"  전체 450: {fire}건 발동 ({fire/len(rows)*100:.1f}%)")

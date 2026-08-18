@@ -25,7 +25,12 @@ CARRYOVER_TTL = 3              # 슬롯이 설정된 후 몇 턴까지 유효한
 CARRYOVER_SCOPE = "bf_match"   # 업무 전환 시 정책
 MAX_ASK_TURNS = 2              # 되묻기 상한 (qform_flow 에서 이관)
 
-QFORM_SCOPE = "msdr"           # 슬롯 추출 스코프 (ver4 M5). 기본 = 착오송금 단일 = 현행
+QFORM_SCOPE = "msdr"           # 슬롯 추출 스코프.
+# ⚠ M7 전환 시도 → **동결 파일이 막았다.** `chatbot/verify_qform_e2e.py` AC5 가
+#   `예금보험금은 어떻게 신청하나요?` 를 **소관밖 fixture 로 하드코딩**하고 큐폼 미개입을
+#   단언한다(ver2 기준선). 스코프를 넓히면 그 질의가 스코프 안으로 들어와 AC5 가 깨진다.
+#   그 파일은 규칙3 동결(어떤 이유로도 수정 금지)이라 CC 가 손댈 수 없다.
+#   → `crawler/HOLES.md` H39. 전환은 동결 해제 판정 후.
 MAX_QUEUE = 3                  # '대기 중인 용건' 큐 최대 길이 (K13)
 PANEL_EXPIRED = "gray"         # TTL 만료 항목 처리 — 회색 잔류 / 즉시 삭제
 
@@ -57,9 +62,9 @@ SPEC: dict[str, dict] = {
     "QFORM_SCOPE": {
         "label": "슬롯 추출 스코프", "type": "enum", "default": QFORM_SCOPE,
         "values": SCOPE_SET_VALUES,
-        "help": ("msdr=착오송금 단일(**기본 · ver1~ver4 현행과 완전 동일**) · "
-                 "msdr+dpin=착오송금+예금보험금. **배관은 깔되 밸브는 측정 후에 연다** — "
-                 "기본값 변경은 450셋 발동률 판정 사항이다(M5)."),
+        "help": ("msdr=착오송금 단일(**현 기본**) · msdr+dpin=착오송금+예금보험금. "
+                 "M7 전환은 `verify_qform_e2e.py`(동결) AC5 fixture 와 충돌해 보류됐다 "
+                 "→ HOLES H39. 토글로는 지금도 켤 수 있다."),
     },
     # ── ver4 M3 메모리 패널 파라미터 ────────────────────────────────────────
     "MAX_QUEUE": {
