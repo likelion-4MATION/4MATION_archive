@@ -112,7 +112,8 @@ def options(state: dict) -> list[str]:
     if not slot:
         return []
     slots = state.get("qform") or {}
-    vals = qform_ask.survivor_values(slot, qform_state.survivors(slots))
+    vals = qform_ask.survivor_values(
+        slot, qform_state.survivors(slots, qform_state.combos_for(state.get("bf"))))
     rows = qform_ask.rows_for(slot, slots.get("sub_task"))
     covered = {r["value"] for r in rows}
     return [r["value"] for r in rows if r["value"] in vals] + sorted(vals - covered)
@@ -306,13 +307,15 @@ def _try_ask(state: dict, *, ask_mode: str, llm_call, cfg: dict) -> dict | None:
         state["pending_slot"] = None
         return None
 
-    nq = (qform_state.next_question(state["qform"], exclude=set(state.get("asked") or ()))
+    combos = qform_state.combos_for(state.get("bf"))   # M6-c — 업무의 표를 본다
+    nq = (qform_state.next_question(state["qform"], exclude=set(state.get("asked") or ()),
+                                    combos=combos)
           if state["ask_turn"] < cfg["MAX_ASK_TURNS"] else None)
     if nq is None:
         state["pending_slot"] = None
         return None
 
-    surv = qform_state.survivors(state["qform"])
+    surv = qform_state.survivors(state["qform"], combos)
     ask = qform_ask.build_question(nq["slot"], state["qform"], surv,
                                    mode=ask_mode, llm_call=llm_call)
     state["ask_turn"] += 1

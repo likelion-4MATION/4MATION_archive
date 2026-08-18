@@ -96,6 +96,20 @@ _SUBTASK_RULES = [
     ("이체수수료환급", "any", ["이체수수료", "이체 수수료"]),
     ("이체수수료환급", "and", (["수수료"], ["환급", "돌려", "환불"])),
     ("이체수수료환급", "any", ["환급"]),  # 착오송금 게이트 안에서 환급=수수료환급
+    # ── 보험금신청 (ver4 M6-c · 예금보험금) ──────────────────────────────────
+    # **착오송금 규칙을 복사해 값만 바꾼 것이 아니다.** 두 축을 코퍼스에서 bottom-up 으로 뽑았다:
+    #   ① 업무 앵커 `보험금` — `DpsmIbamtExpln`·`DpsmIbamtAplyPossDcmnt`·`DpsmIbamtAplyProc`
+    #      전면에 등장하고, **450셋 착오송금 84건에는 0회**다(실측). 고정밀 판별자다.
+    #   ② 행위 어휘 — `DpsmIbamtAplyPossDcmnt`+`DpsmIbamtAplyProc` **본문에 실재하는 것만** 썼다.
+    #      신청10 · 수령10 · 증명30 · 도장14 · 동의서10 · 위임장7 · 발급3 · 제출3 · 찾4 · 청구1 ·
+    #      서류1 · 구비1. (`신분증` 은 0회라 **넣지 않았다** — 코퍼스에 없으면 안 쓴다, 규칙1)
+    #
+    # `반환신청` **앞에** 둔다. 그래야 `예금보험금 신청 서류` 가 `서류` 어휘를 타고
+    # 착오송금 전용 `반환신청` 으로 떨어지는 M5 오발동(13건)이 여기서 갈린다.
+    # 앵커가 `보험금` 이라 착오송금 질의는 이 규칙을 탈 수 없다(84건 중 0건 — 실측).
+    ("보험금신청", "and", (["보험금"],
+                       ["신청", "청구", "수령", "찾", "증명", "도장", "위임장", "동의서",
+                        "서류", "구비", "제출", "발급"])),
     # 반환신청 = 구비서류 intent OR 신청방법(채널+행위) intent
     ("반환신청", "any", ["서류", "구비", "준비물", "챙기", "챙겨", "제출", "들고", "가지고",
                      "가져", "필요한 게", "필요한가", "뭐 필요", "뭐가 필요", "인증서"]),
@@ -221,17 +235,22 @@ def extract(query: str, business_function=_UNSET, *, scope=None) -> dict:
     #   subject=None 이면 survivors 가 C03~C08 6행으로 남아 T3 가 되묻는다.
     #   되묻지 못하고 종료돼도 첨부는 6→7건으로 **넓어질 뿐** 좁아지지 않아 안전하다.
 
-    # 4) party. sub_task 정의상 확정 → 없으면 방향 어휘.
-    if out["sub_task"] in _SUBTASK_PARTY:
-        out["party"] = _SUBTASK_PARTY[out["sub_task"]]
-        hits["party"] = [f"⟵sub_task:{out['sub_task']}"]
-    else:
-        for label, kws in _PARTY_RULES:
-            m = _hits_any(qn, kws)
-            if m:
-                out["party"] = label
-                hits["party"] = m
-                break
+    # 4) party. **근거 어휘가 질의에 있을 때만 채운다** (ver4 M6-a).
+    #
+    # ver3 까지는 `sub_task` 에서 유도했다(`반환신청 → 송금인`). 그 배선이 M2 판정 1과
+    # 정면 충돌한다 — 예금보험금은 `party` 축 자체를 안 쓰기로 했는데, 추출기가
+    # `sub_task` 오분류를 타고 **착오송금 전용 축을 자동으로 박아** 넣었다(M5 오발동 6/6).
+    # 스코프와 무관하게 틀린 배선이라 제거한다.
+    #
+    # 유도가 하던 일은 survivors 에 없다 — `sub_task` 가 이미 행 집합을 확정하고,
+    # 같은 `sub_task` 행은 party 가 전부 같기 때문이다(실측: 발동 9건·첨부 건수 무변동).
+    # 남은 소비처는 쿼리 부스트 직렬화(기본 OFF)와 패널 표시뿐이다.
+    for label, kws in _PARTY_RULES:
+        m = _hits_any(qn, kws)
+        if m:
+            out["party"] = label
+            hits["party"] = m
+            break
 
     # 5) method. 다중 허용.
     chans = [c for c in _METHOD_ORDER if _hits_any(qn, _METHOD_RULES[c])]

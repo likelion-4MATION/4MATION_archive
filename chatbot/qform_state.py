@@ -37,11 +37,46 @@ import qform_ask  # noqa: E402  (문구 생성 위임 — 이 파일은 판정�
 
 SLOT_FIELDS = ("party", "sub_task", "qualification", "subject", "method")
 
-# schema §3-2 되묻기 게이트: (슬롯, 발동 조건). 순서 = 우선순위.
-_ASK_GATES = [
-    ("qualification", lambda s: s.get("sub_task") == "반환신청"),
-    ("subject", lambda s: s.get("qualification") == "대리인"),
-]
+# schema §3-2 되묻기 게이트 — **ver4 M6-b: 업무명·sub_task 값 하드코딩을 걷어냈다.**
+#
+# ver3 까지는 `("qualification", lambda s: s.get("sub_task") == "반환신청")` 이었다.
+# 실측해 보면 그 조건은 **MSDR 에서 아무것도 막은 적이 없다** — 조합 테이블에서
+# 생존 2행 이상이 되는 `sub_task` 가 `반환신청` 뿐이라 `len(surv) <= 1` 조기 종료와
+# 완전히 중복이다. 반면 DPIN(`보험금신청`, 생존 8행 · qual 2갈래 · subject 7갈래)에서는
+# **좁힐 여지가 MSDR `반환신청` 과 똑같은데 업무명 하드코딩 하나 때문에 영영 안 물었다.**
+# 그래서 오분류된 `반환신청` 경로에서만 발동했다(M5 오발동 6/6).
+#
+# 이제 게이트 조건은 **데이터에서 나온다**:
+#   ① `_NEVER_ASK` — 어떤 경로에서도 안 묻는 슬롯 (스키마 §3-2. 슬롯 이름 정책이지
+#      업무·sub_task 값이 아니다)
+#   ② `_ASK_ORDER` — 선행 관계. 앞 슬롯이 **아직 미정이고 생존 행을 실제로 가르면**
+#      뒤 슬롯은 아직 묻지 않는다. "자격을 정해야 피대리인 유형이 의미가 있다"는 관계를
+#      값 하드코딩 없이 표현한다
+#   ③ 나머지는 기존 그대로 — 생존 행을 실제로 가르는 슬롯만( `_distinct > 1` ), 아직 안 물은 것만
+_NEVER_ASK = ("party", "method")
+_ASK_ORDER = ("qualification", "subject")
+
+# 하위호환 별칭 — `docs/ARCH_통합_v0.md` §3 실배선표와 `verify_docs.py` AC2 가 이 이름을 읽는다.
+_ASK_GATES = [(slot, None) for slot in _ASK_ORDER]
+
+
+def _eligible_slots(slots: dict, surv: list[dict], done) -> list[str]:
+    """되물을 수 있는 슬롯. **조건이 전부 조합 테이블에서 나온다**(M6-b)."""
+    out = []
+    for i, slot in enumerate(_ASK_ORDER):
+        if slot in _NEVER_ASK or slots.get(slot) is not None or slot in done:
+            continue
+        if _distinct(surv, slot) <= 1:          # 이 슬롯으로는 안 갈린다
+            continue
+        # 선행 슬롯이 **아직 값이 없고** 생존 행을 가르는 동안에는 뒤 슬롯을 묻지 않는다.
+        # `done`(물어봤지만 못 채움)을 예외로 두면 안 된다 — ver3 의 `qualification=='대리인'`
+        # 조건이 담고 있던 것이 "자격이 정해지기 전에 피대리인 유형을 묻지 않는다"이고,
+        # 물어만 보고 못 채운 상태는 정해진 것이 아니다. 예외를 두면 R1(재질문 0)이 깨진다.
+        blocked = any(slots.get(p) is None and _distinct(surv, p) > 1
+                      for p in _ASK_ORDER[:i])
+        if not blocked:
+            out.append(slot)
+    return out
 
 
 def _load_combos() -> list[dict]:
@@ -50,6 +85,30 @@ def _load_combos() -> list[dict]:
 
 
 _COMBOS = _load_combos()
+
+# ver4 M6-c — 업무별 조합 테이블. 되묻기 판정이 **그 업무의 표**를 보게 한다.
+# 기본(bf 불명·미등재)은 MSDR 이라 ver1~M6-b 와 동작이 완전히 같다.
+_COMBOS_DPIN_CSV = _BASE / "crawler" / "data" / "qform_combos_dpin.csv"
+
+
+def _load_csv(path) -> list[dict]:
+    try:
+        with path.open(encoding="utf-8-sig") as fh:
+            lines = [ln for ln in fh if not ln.lstrip().startswith("#")]
+        return list(csv.DictReader(lines))
+    except (FileNotFoundError, OSError):
+        return []
+
+
+_COMBOS_BY_BF = {
+    "착오송금 반환 신청": _COMBOS,
+    "예금보험금 안내": _load_csv(_COMBOS_DPIN_CSV),
+}
+
+
+def combos_for(bf=None) -> list[dict]:
+    """업무별 조합 테이블. 모르는 업무·불명이면 MSDR(기존 동작)."""
+    return _COMBOS_BY_BF.get(bf) or _COMBOS
 
 
 def _toks(v) -> set[str]:
@@ -93,7 +152,8 @@ def _partition_max(rows: list[dict], field: str) -> int:
     return max(cnt.values()) if cnt else len(rows)
 
 
-def next_question(slots: dict, exclude: set | None = None) -> dict | None:
+def next_question(slots: dict, exclude: set | None = None,
+                  combos: list[dict] | None = None) -> dict | None:
     """되묻기 **판정**. None 이면 되묻지 않고 바로 검색.
 
     슬롯 선택까지가 이 함수의 책임이고, 문구는 `qform_ask.build_question()` 이 만든다.
@@ -113,23 +173,19 @@ def next_question(slots: dict, exclude: set | None = None) -> dict | None:
     # D2: sub_task 미채움이면 되묻지 않는다 (단문 오발동 방지)
     if slots.get("sub_task") is None:
         return None
-    surv = survivors(slots)
+    surv = survivors(slots, combos)
     if len(surv) <= 1:
         return None
 
     # 되물을 수 있는 슬롯: 게이트 통과 & 아직 None & surv 를 실제로 가르는 것
     # & 아직 안 물어본 것 (exclude — 재질문 차단)
     done = exclude or ()
-    eligible = [
-        slot for slot, gate in _ASK_GATES
-        if gate(slots) and slots.get(slot) is None and _distinct(surv, slot) > 1
-        and slot not in done
-    ]
+    eligible = _eligible_slots(slots, surv, done)
     if not eligible:
         return None  # 더 좁힐 수단 없음 → 진행
 
-    # 가장 고르게 쪼개는 슬롯 (max 그룹 최소화), 동점은 우선순위(_ASK_GATES 순서)
-    order = {slot: i for i, (slot, _) in enumerate(_ASK_GATES)}
+    # 가장 고르게 쪼개는 슬롯 (max 그룹 최소화), 동점은 우선순위(`_ASK_ORDER` 순서)
+    order = {slot: i for i, slot in enumerate(_ASK_ORDER)}
     slot = min(eligible, key=lambda s: (_partition_max(surv, s), order[s]))
 
     ask = qform_ask.build_question(slot, slots, surv)   # 문구 생성은 전적으로 위임
