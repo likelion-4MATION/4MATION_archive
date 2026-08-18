@@ -31,9 +31,11 @@ sys.path.insert(0, str(OUT_DIR.parent / "crawler"))
 import rag                          # noqa: E402
 import eval_anchor_v3 as ev3        # noqa: E402
 
-DEPTH = 50
-SETS = {"430": "../final_testset/gt_natural430.jsonl",
-        "355": "../final_testset/gt_natural355.jsonl"}
+DEPTH = 30          # 리랭크 깊이 상한. depth 10/30 스윕을 덮는다(50은 미포함)
+# 앵커 보강 GT를 쓴다 — 재청킹으로 깨진 id 폴백을 수기 앵커로 메운 판(DECISIONS 08-18 ③).
+# 원본 GT를 쓰면 id 의존도가 높아 리랭킹 효과가 라벨 결측에 묻힌다.
+SETS = {"430": "../final_testset/gt_natural430_anchored.jsonl",
+        "355": "../final_testset/gt_natural355_anchored.jsonl"}
 
 
 def main() -> int:
@@ -43,9 +45,14 @@ def main() -> int:
     params = dict(RRF_ALPHA=rag.RRF_ALPHA, RRF_K=rag.RRF_K, BF_BOOST=rag.BF_BOOST,
                   FACET_BOOST=rag.FACET_BOOST, BF_DOC_CAP=rag.BF_DOC_CAP,
                   QBF_MSP_MIN=rag.QBF_MSP_MIN, EMBED_MODEL=rag.MODEL_NAME, DEPTH=DEPTH)
+    clens = sorted(len(c["text"]) for c in chunks)
     meta = {"params": params, "baseline": {},
             "corpus_sha256": hashlib.sha256(chunks_path.read_bytes()).hexdigest(),
-            "n_chunks": len(chunks)}
+            "n_chunks": len(chunks),
+            # 청크가 커졌으므로(최대 2,613자) 리랭커 max_length 절단이 새 변수다.
+            "chunk_len": {"min": clens[0], "median": clens[len(clens) // 2],
+                          "p90": clens[int(len(clens) * .9)], "max": clens[-1],
+                          "over_800": sum(1 for x in clens if x > 800)}}
 
     staged: dict[str, str] = {"chunks.jsonl": chunks_path.read_text(encoding="utf-8")}
     for name, gt_path in SETS.items():
@@ -63,8 +70,14 @@ def main() -> int:
                for c in cands]
         res = ev3.evaluate_retrieval(gt, ret, chunks, score="both")
         a, b = res["anchor_level"], res["chunk_on_anchor_subset"]
+        import collections as _c
         meta["baseline"][name] = {
             "n_scored": a["n_scored"],
+            "n_id_fallback": a["n_id_fallback"], "n_stale_gold": a.get("n_stale_gold", 0),
+            "relation": dict(_c.Counter(ev3._get_relation_label(r) for r in gt
+                                        if r.get("answerable") is True)),
+            "relation_hit5": {k: round(v["hit@5"], 6)
+                              for k, v in res["anchor_relation_metrics"].items()},
             "anchor": {k: round(a[k], 6) for k in
                        ("hit@1", "hit@3", "hit@5", "hit@10", "hit@30", "hit@50", "mrr")},
             "chunk_id": {k: round(b[k], 6) for k in
