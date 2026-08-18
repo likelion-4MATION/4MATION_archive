@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""큐폼 조합 테이블(qform_combos_msdr.csv) 재현 가능 검증 스크립트 — T1.
+"""큐폼 조합 테이블 재현 가능 검증 스크립트 — T1(MSDR) + ver4 M2(DPIN).
+
+검증 대상 2종:
+  `data/qform_combos_msdr.csv`  착오송금 반환 신청 14행 — **ver1 실측 근거. 판정치 무변동이 회귀 기준**
+  `data/qform_combos_dpin.csv`  예금보험금 안내 9행 — ver4 M2 신설
+
+네임스페이스는 **파일 분리 + `combo_id` prefix**로 담보한다(§9-7 결정). MSDR 은 `C01~C14`,
+DPIN 은 `DPIN-C01~`. 두 파일의 `combo_id` 교집합이 0인지 AC5 가 검사한다.
 
 출력 4종 (task_assignment.md T1 수용 기준):
   AC1. 14행 · 유상 스키마 허용값 위반 0건 (제도안내/팩스는 T1-b 예외)
@@ -26,7 +33,9 @@ from collections import Counter
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
-COMBOS = BASE / "data" / "qform_combos_msdr.csv"
+COMBOS_MSDR = BASE / "data" / "qform_combos_msdr.csv"
+COMBOS_DPIN = BASE / "data" / "qform_combos_dpin.csv"
+COMBOS = COMBOS_MSDR          # 하위호환 별칭
 CHUNKS = BASE / "data" / "chunks.jsonl"
 TAGGING = BASE / "yesom_분기분석" / "attachment_tagging_template.csv"
 
@@ -50,12 +59,30 @@ T1B_WHITELIST = {("sub_task", "제도안내"), ("method", "팩스")}
 
 COORD_FIELDS = ("business_function", "party", "sub_task", "qualification", "subject", "method")
 
-EXPECTED_JOIN = {
+EXPECTED_JOIN = {          # MSDR — ver1 실측. **이 값이 바뀌면 회귀다**
     "C01": 0, "C02": 5, "C03": 6, "C04": 4, "C05": 4, "C06": 5,
     "C07": 4, "C08": 4, "C09": 1, "C10": 1, "C11": 1, "C12": 1,
     "C13": 1, "C14": 1,
 }
 EXPECTED_OUTCOME = {"정보": 1, "서류": 8, "서류;정보": 5}
+
+# DPIN — ver4 M2 신설. 재료는 `DpsmIbamtAplyPossDcmnt` 단일 문서의 canonical 첨부 5건
+# (ATT-15~19). 좁힘은 5 → 1~3건이다.
+EXPECTED_JOIN_DPIN = {
+    "DPIN-C01": 0, "DPIN-C02": 1, "DPIN-C03": 2, "DPIN-C04": 1, "DPIN-C05": 2,
+    "DPIN-C06": 1, "DPIN-C07": 3, "DPIN-C08": 1, "DPIN-C09": 0,
+}
+EXPECTED_OUTCOME_DPIN = {"정보": 2, "서류": 3, "서류;정보": 4}
+
+# 조합 테이블 행 수 경고등 (task_assignment M2-3). 넘으면 작성을 멈추고 판정 에스컬레이션.
+ROW_WARN = 15
+
+TABLES = [
+    {"name": "MSDR · 착오송금 반환 신청", "path": COMBOS_MSDR, "prefix": "C",
+     "rows": 14, "outcome": EXPECTED_OUTCOME, "join": EXPECTED_JOIN},
+    {"name": "DPIN · 예금보험금 안내", "path": COMBOS_DPIN, "prefix": "DPIN-C",
+     "rows": 9, "outcome": EXPECTED_OUTCOME_DPIN, "join": EXPECTED_JOIN_DPIN},
+]
 
 
 def toks(s: str) -> set[str]:
@@ -84,30 +111,20 @@ def joins(combo: dict, att: dict) -> bool:
     return True
 
 
-def main() -> int:
-    # utf-8-sig: BOM 이 첫 컬럼 헤더에 붙는 경우 제거 (attachment_id KeyError 방지)
-    combos = list(csv.DictReader(COMBOS.open(encoding="utf-8-sig")))
-    atts = list(csv.DictReader(TAGGING.open(encoding="utf-8-sig")))
-
-    chunk_ids: set[str] = set()
-    doc_ids: set[str] = set()
-    with CHUNKS.open(encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            d = json.loads(line)
-            chunk_ids.add(d["chunk_id"])
-            doc_ids.add(d["parent_doc_id"])
-
+def check_table(spec: dict, atts: list, chunk_ids: set, doc_ids: set) -> tuple[bool, list]:
+    """한 조합 테이블에 대해 AC1~AC4 를 돌린다. (통과여부, 행) 반환."""
+    combos = list(csv.DictReader(spec["path"].open(encoding="utf-8-sig")))
     ok = True
-    print(f"소스: combos={len(combos)}행 · attachments={len(atts)}행 · "
-          f"chunks={len(chunk_ids)}청크 / {len(doc_ids)}문서\n")
+    print(f"\n{'═' * 78}")
+    print(f"■ {spec['name']}  —  {spec['path'].name}  ({len(combos)}행)")
+    print("═" * 78)
 
-    # ── AC1. 14행 · 스키마 위반 ────────────────────────────────
+    # ── AC1. 행수 · 스키마 위반 ────────────────────────────────
     print("── AC1. 행수 · 유상 스키마 허용값 위반 ──")
-    row_ok = len(combos) == 14
-    print(f"  행수: {len(combos)}  (기대 14)  {'OK' if row_ok else 'DIFF'}")
+    row_ok = len(combos) == spec["rows"]
+    print(f"  행수: {len(combos)}  (기대 {spec['rows']})  {'OK' if row_ok else 'DIFF'}")
+    warn = len(combos) > ROW_WARN
+    print(f"  경고등 {ROW_WARN}행: {'초과 ⚠ 판정 에스컬레이션' if warn else '이내'}")
     violations = []
     t1b_used = set()
     for row in combos:
@@ -124,14 +141,22 @@ def main() -> int:
     for cid, f, tok in violations:
         print(f"     ✗ {cid} {f}={tok!r}")
     print(f"  T1-b 예외값 사용: {sorted(t1b_used)}")
-    row_pass = row_ok and not violations
-    ok = ok and row_pass
+    ok = ok and row_ok and not violations and not warn
 
-    # ── outcome 분포 (D4 부수 확인) ───────────────────────────
+    # ── outcome 분포 (D4) ─────────────────────────────────────
     oc = Counter(r["outcome"].strip() for r in combos)
-    oc_ok = dict(oc) == EXPECTED_OUTCOME
-    print(f"  outcome 분포: {dict(oc)}  (기대 {EXPECTED_OUTCOME})  {'OK' if oc_ok else 'DIFF'}")
+    oc_ok = dict(oc) == spec["outcome"]
+    print(f"  outcome 분포: {dict(oc)}  (기대 {spec['outcome']})  {'OK' if oc_ok else 'DIFF'}")
     ok = ok and oc_ok
+
+    # ── 네임스페이스 prefix ───────────────────────────────────
+    bad_ns = [r["combo_id"] for r in combos if not r["combo_id"].startswith(spec["prefix"])]
+    if spec["prefix"] == "C":     # MSDR 은 DPIN- 로 시작하면 안 된다
+        bad_ns = [c for c in bad_ns] + [r["combo_id"] for r in combos
+                                        if r["combo_id"].startswith("DPIN-")]
+    print(f"  combo_id 네임스페이스(`{spec['prefix']}`) 위반: {len(bad_ns)}건  (기대 0)  "
+          f"{'OK' if not bad_ns else 'DIFF'}")
+    ok = ok and not bad_ns
 
     # ── AC2. evidence chunk_id 실재 ───────────────────────────
     print("\n── AC2. evidence_chunks_v0 chunk_id 실재 ──")
@@ -159,7 +184,7 @@ def main() -> int:
 
     # ── AC4. 유상 태깅 조인 ───────────────────────────────────
     print("\n── AC4. 유상 태깅과 조인 (combo별 매칭 첨부 수) ──")
-    print(f"  {'combo':6} {'실측':>4} {'기대':>4}  판정  매칭 attachment_id")
+    print(f"  {'combo':9} {'실측':>4} {'기대':>4}  판정  매칭 attachment_id")
     join_ok = True
     total = 0
     for row in combos:
@@ -167,14 +192,50 @@ def main() -> int:
         matched = [a["attachment_id"] for a in atts if joins(row, a)]
         n = len(matched)
         total += n
-        exp = EXPECTED_JOIN.get(cid)
+        exp = spec["join"].get(cid)
         good = n == exp
         join_ok = join_ok and good
-        print(f"  {cid:6} {n:>4} {exp if exp is not None else '?':>4}  "
+        print(f"  {cid:9} {n:>4} {exp if exp is not None else '?':>4}  "
               f"{'OK' if good else 'DIFF':4} {','.join(matched) if matched else '-'}")
-    exp_total = sum(EXPECTED_JOIN.values())
-    print(f"  {'합계':4} {total:>4} {exp_total:>4}  {'OK' if total == exp_total else 'DIFF'}")
+    exp_total = sum(spec["join"].values())
+    print(f"  {'합계':7} {total:>4} {exp_total:>4}  {'OK' if total == exp_total else 'DIFF'}")
     ok = ok and join_ok and total == exp_total
+    return ok, combos
+
+
+def main() -> int:
+    atts = list(csv.DictReader(TAGGING.open(encoding="utf-8-sig")))
+
+    chunk_ids: set[str] = set()
+    doc_ids: set[str] = set()
+    with CHUNKS.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            d = json.loads(line)
+            chunk_ids.add(d["chunk_id"])
+            doc_ids.add(d["parent_doc_id"])
+
+    print(f"소스: attachments={len(atts)}행 · chunks={len(chunk_ids)}청크 / {len(doc_ids)}문서")
+
+    ok = True
+    tables = {}
+    for spec in TABLES:
+        t_ok, rows = check_table(spec, atts, chunk_ids, doc_ids)
+        tables[spec["prefix"]] = rows
+        ok = ok and t_ok
+
+    # ── AC5. 네임스페이스 무충돌 (파일 분리 + prefix 로 담보) ──
+    print(f"\n{'═' * 78}")
+    print("── AC5. combo_id 네임스페이스 무충돌 ──")
+    ids = [set(r["combo_id"] for r in rows) for rows in tables.values()]
+    clash = ids[0] & ids[1] if len(ids) == 2 else set()
+    print(f"  MSDR {len(ids[0])}개 · DPIN {len(ids[1])}개 · 교집합 {len(clash)}건  (기대 0)  "
+          f"{'OK' if not clash else 'DIFF'}")
+    if clash:
+        print(f"     ✗ 충돌: {sorted(clash)}")
+    ok = ok and not clash
 
     print("\n" + ("전체 통과 ✅" if ok else "실패 — 표/태깅 중 하나가 바뀐 것. 멈추고 보고 ⛔"))
     return 0 if ok else 1

@@ -1,0 +1,10 @@
+combo_id,business_function,party,sub_task,qualification,subject,method,outcome,source_doc_id,evidence_chunks_v0
+DPIN-C01,예금보험금 안내,,제도안내,,공통,온라인;방문,정보,kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn;kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn#00|kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn#00
+DPIN-C02,예금보험금 안내,,보험금신청,본인,본인,방문,서류,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00
+DPIN-C03,예금보험금 안내,,보험금신청,대리인,대리인,방문,서류,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00
+DPIN-C04,예금보험금 안내,,보험금신청,대리인,군복무자,방문,서류;정보,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00
+DPIN-C05,예금보험금 안내,,보험금신청,대리인,미성년자,방문,서류,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00|kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#01
+DPIN-C06,예금보험금 안내,,보험금신청,본인,미성년자,방문,서류;정보,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#01
+DPIN-C07,예금보험금 안내,,보험금신청,대리인,사망 예금자,방문,서류;정보,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#01|kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#02
+DPIN-C08,예금보험금 안내,,보험금신청,대리인,국외거주 또는 유학생,방문,서류;정보,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#02|kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#03
+DPIN-C09,예금보험금 안내,,보험금신청,본인;대리인,공통,온라인,정보,kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn,kdic-www-sp-dpstrprot-DpsmIbamtAplyProc-selectScrn#00
