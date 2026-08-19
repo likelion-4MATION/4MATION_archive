@@ -90,3 +90,10 @@ corpus/
 # local files
 .claude/
 backup/
+
+# ===== 관리자 콘솔 런타임 상태 =====
+# 설정 오버라이드·첨부 오버레이·잡 기록·업로드·백업은 기기별 상태다. 코드만 커밋한다.
+admin/data/*
+!admin/data/.gitkeep
+# 마운트 환경에서 git이 남긴 잠금 파일 치우는 자리(삭제 권한이 없어 옮겨만 둔다)
+_to_delete/
