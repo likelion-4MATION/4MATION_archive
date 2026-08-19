@@ -59,9 +59,17 @@ def embed_texts(texts: list[str]) -> np.ndarray:
 
 
 def chunk_embed_text(chunk: dict) -> str:
-    """검색 임베딩 입력 — 제목 맥락을 본문 앞에 덧붙임."""
+    """검색 임베딩 입력 — deterministic anchor([업무][페이지주제] 제목) + 본문.
+
+    LLM 생성 없이 기존 메타데이터(business_function/page_type)만으로 청크의
+    semantic identity를 명시해 업무 내 유사 청크 간 변별을 돕는다.
+    """
+    bf = chunk.get("business_function", "")
+    topic = chunk.get("page_type", "")
     title = chunk.get("page_title", "")
-    return f"{title}\n{chunk['text']}" if title else chunk["text"]
+    anchor = "".join(f"[{p}]" for p in (bf, topic) if p)
+    head = f"{anchor} {title}".strip()
+    return f"{head}\n{chunk['text']}" if head else chunk["text"]
 
 
 # ── 질의 업무 분류 (하드 필터용, 결정론적 키워드) ─────────────────────────
@@ -90,7 +98,7 @@ BF_QUERY_KEYWORDS = {
 }
 QBF_MIN_SCORE = 3
 QBF_MARGIN = 2
-BF_DOC_CAP = 1     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
+BF_DOC_CAP = 5     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
 BF_MODE = "soft"
