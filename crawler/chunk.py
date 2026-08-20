@@ -145,17 +145,24 @@ def _blocks(text: str) -> list[tuple[str, str]]:
 
 
 def split_generic(text: str) -> list[str]:
+    """표 블록도 텍스트처럼 CHUNK_SIZE까지 인접 블록과 합친다.
+
+    '표는 중간분할 금지'는 지키되(하드분할 루프는 text 블록에만 적용), 작은 표 조각들이
+    (아코디언 섹션마다 미니 표 하나씩 있는 페이지처럼) 무조건 단독 청크로 끊기지 않도록
+    먼저 cur에 합칠 수 있는지 시도한다. 합쳐서 CHUNK_SIZE를 넘으면 표는 그대로(더 쪼개지
+    않고) 단독 청크로 플러시, 텍스트는 기존처럼 오버랩+하드분할한다.
+    """
     chunks, cur = [], ""
     for kind, blk in _blocks(text):
-        if kind == "table":
-            if cur.strip():
-                chunks.append(cur.strip())
-            chunks.append(blk)          # 표 단독 청크 (중간분할 금지)
-            cur = ""
-            continue
         cand = (cur + "\n" + blk).strip() if cur else blk
         if len(cand) <= CHUNK_SIZE:
             cur = cand
+            continue
+        if kind == "table":
+            if cur.strip():
+                chunks.append(cur.strip())
+            chunks.append(blk)          # 표 단독 청크 (중간분할 금지, 크기 초과 허용)
+            cur = ""
         else:
             if cur.strip():
                 chunks.append(cur.strip())
