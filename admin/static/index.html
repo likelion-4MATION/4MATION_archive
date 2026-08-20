@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KDIC 챗봇 관리자 콘솔</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <h1>KDIC 챗봇 관리자 콘솔</h1>
+  <span class="badge" id="bCorpus">코퍼스 확인 중…</span>
+  <span class="badge" id="bPreset">—</span>
+  <span class="badge" id="bGuard">—</span>
+  <span class="badge warn" id="bInsured" style="display:none">부보금융회사 명단 갱신 필요</span>
+  <span style="flex:1"></span>
+  <span class="badge" id="bRepo">—</span>
+</header>
+
+<div class="wrap">
+<div>
+  <div class="tabs">
+    <div class="tab on" data-p="p1">① 답변 품질</div>
+    <div class="tab" data-p="p2">② 응답 속도·비용</div>
+    <div class="tab" data-p="p3">③ 되묻기</div>
+    <div class="tab" data-p="p4">④ 최신성 가드</div>
+    <div class="tab" data-p="p5">⑤ 첨부문서</div>
+    <div class="tab lock" data-p="p6">⑥ 고급 🔒</div>
+    <div class="tab lock" data-p="p7">⑦ 문서 처리 🔒</div>
+  </div>
+
+  <!-- ① 답변 품질 -->
+  <div class="pane on" id="p1">
+    <div class="card">
+      <h2>검색 방식</h2>
+      <div class="sub">아래 세 가지는 모두 검증된 조합입니다. 개별 숫자는 ⑥ 고급 탭에서만 바꿉니다.</div>
+      <div class="presets" id="presetBox"></div>
+      <div class="hint">세 방식의 차이는 최대 <b>1.6%p</b>로 크지 않습니다. 특별한 이유가 없으면 기본값을 권장합니다.</div>
+    </div>
+    <div class="card"><h2>답변 생성</h2><div id="f1"></div></div>
+  </div>
+
+  <!-- ② 속도·비용 -->
+  <div class="pane" id="p2">
+    <div class="card">
+      <h2>응답 속도</h2>
+      <div class="sub">검색 방식(①탭)은 속도에 영향이 거의 없습니다. 속도를 바꾸는 건 아래 항목들입니다.</div>
+      <div id="f2"></div>
+      <div class="note" id="latNote"></div>
+    </div>
+  </div>
+
+  <!-- ③ 되묻기 -->
+  <div class="pane" id="p3">
+    <div class="card">
+      <h2>되묻기 (큐폼)</h2>
+      <div class="sub">"누가 신청하시나요?"처럼 답변 전에 조건을 확인해 필요한 서류만 골라 안내합니다.</div>
+      <div id="f3"></div>
+      <div class="note">적용 업무를 확장하기 전에 개발자 확인이 필요합니다 — 검증 스크립트 3곳이 현재 설정을 전제로 작성돼 있습니다.</div>
+    </div>
+  </div>
+
+  <!-- ④ 최신성 가드 -->
+  <div class="pane" id="p4">
+    <div class="card">
+      <h2>최신성 가드</h2>
+      <div class="sub">법이 바뀌었는데 안내 문서가 아직 옛 기준일 때 답변을 정정합니다. 원본 문서는 수정하지 않습니다.</div>
+      <div id="f4"></div>
+      <table style="margin-top:14px" id="guardTbl"></table>
+      <div class="hint" id="guardHint"></div>
+    </div>
+    <div class="card form">
+      <h2 id="gFormTitle">가드 추가</h2>
+      <div class="sub">자유 서술이 아니라 항목별로 입력합니다. 잘못 쓰면 AI가 엉뚱하게 동작할 수 있어 형식을 고정했습니다.</div>
+      <input type="hidden" id="gId">
+      <div class="grid2">
+        <div><label>제목 <small>목록에서 알아볼 이름 (40자)</small><input type="text" id="gTitle" maxlength="40"></label></div>
+        <div><label>유형 <small>정정: 옛 값을 새 값으로 / 보충: 없는 내용 추가 / 금지: 상담 연결</small>
+          <span class="seg" id="gKind"></span></label></div>
+      </div>
+      <label>발동 조건 키워드 <small>이 단어가 나올 때만 적용됩니다. 쉼표로 구분. 좁힐수록 안전합니다</small>
+        <input type="text" id="gTriggers" placeholder="보호한도, 5천만원, 예금자보호"></label>
+      <label>적용 업무 <small>해당 업무 질문에만 적용</small><div class="chips" id="gBiz"></div></label>
+      <div class="grid2" id="gValRow">
+        <div><label>기존 값 <small>문서에 남아 있는 옛 값</small><input type="text" id="gOld" maxlength="30"></label></div>
+        <div><label>정정 값 <small>바꿀 값</small><input type="text" id="gNew" maxlength="30"></label></div>
+      </div>
+      <label>안내 문장 <small>답변에 그대로 들어갑니다 (<span id="gLen">0</span>/200자)</small>
+        <textarea id="gStmt" rows="2" maxlength="200"></textarea></label>
+      <label>근거 <small>답변에 출처로 함께 표시됩니다 (60자)</small>
+        <input type="text" id="gSrc" maxlength="60"></label>
+      <div class="grid2">
+        <div><label>적용 시작일<input type="date" id="gStart"></label></div>
+        <div><label>적용 종료일 <small>비우면 무기한. 만료 7일 전 알림</small><input type="date" id="gEnd"></label></div>
+      </div>
+      <div id="gErr"></div>
+      <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ghost" id="gPreview">미리보기</button>
+        <button class="btn" id="gSave">초안으로 저장</button>
+        <button class="btn ghost" id="gClear">새로 작성</button>
+      </div>
+      <div id="gPrev"></div>
+    </div>
+  </div>
+
+  <!-- ⑤ 첨부문서 -->
+  <div class="pane" id="p5">
+    <div class="card">
+      <h2>첨부문서 관리</h2>
+      <div class="sub" id="attSub">—</div>
+      <div id="attNote"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn warn sm" id="btnFetchFiles">첨부 파일 다시 받기</button>
+        <button class="btn ghost sm" id="attClean">정제 필요 항목 일괄 정리</button>
+        <button class="btn ghost sm" id="attToggleDirty">정제 필요만 보기</button>
+      </div>
+      <div id="attFetchNote"></div>
+      <input type="file" id="repFile" style="display:none">
+      <div id="attTbl" style="margin-top:12px"></div>
+      <div class="hint">원본 <code>crawler/data/doc_attachments.json</code> 과
+        <code>crawler/data/files/</code> 는 건드리지 않습니다. 고친 표시명과 교체본은 별도 파일에
+        쌓이므로 <b>재크롤링을 해도 유지</b>됩니다.<br>
+        <b>내려받기</b>는 크롤러가 이미 받아 둔 원본 파일을 그대로 내려줍니다.
+        <b>교체</b>는 새 파일을 올려 그 자리를 대신하게 하고, 원본은 지우지 않아 언제든 되돌릴 수 있습니다.</div>
+    </div>
+
+    <div class="card form">
+      <h2>첨부 직접 추가</h2>
+      <div class="sub">크롤링으로 못 가져온 서식이나 외부 자료를 관리자가 직접 올립니다.</div>
+      <div class="grid2">
+        <div><label>표시명 <small>사용자에게 보이는 이름 (40자)</small>
+          <input type="text" id="axLabel" maxlength="40"></label></div>
+        <div><label>연결할 문서 <small>비우면 '관리자 추가'로 묶입니다</small>
+          <select id="axDoc"></select></label></div>
+      </div>
+      <label>종류<span class="seg" id="axKind">
+        <span class="on" data-v="file">파일 업로드</span><span data-v="url">외부 링크</span></span></label>
+      <div id="axFileRow"><label>파일 <small>pdf·hwp·docx·xlsx 등 · 최대 30MB</small>
+        <input type="file" id="axFile"></label><div id="axUp"></div></div>
+      <div id="axUrlRow" style="display:none"><label>주소
+        <input type="text" id="axUrl" placeholder="https://…"></label></div>
+      <label>메모 <small>관리용 (사용자에게 안 보임)</small>
+        <input type="text" id="axNote" maxlength="100"></label>
+      <div id="axErr"></div>
+      <div style="margin-top:12px"><button class="btn" id="axSave">추가</button></div>
+    </div>
+
+    <div class="card form">
+      <h2>타기관 안내 사전</h2>
+      <div class="sub">소관이 아닌 질문에 안내할 기관·연락처입니다. 여기에 없는 주제는 자동으로 일반 거절 문구로 내려갑니다.</div>
+      <table id="linkTbl"></table>
+      <div class="grid2" style="margin-top:14px">
+        <div><label>기관·제도 이름<input type="text" id="lkTitle" maxlength="40"></label></div>
+        <div><label>담당 기관<input type="text" id="lkOrg" maxlength="40"></label></div>
+      </div>
+      <div class="grid2">
+        <div><label>주소<input type="text" id="lkUrl" placeholder="https://…"></label></div>
+        <div><label>전화번호<input type="text" id="lkPhone" placeholder="1600-5500"></label></div>
+      </div>
+      <label>발동 키워드 <small>이 단어가 나오면 이 안내처를 제시합니다. 쉼표로 구분</small>
+        <input type="text" id="lkKw" placeholder="워크아웃, 신용회복"></label>
+      <label>적용 업무 <small>비우면 전 업무</small><div class="chips" id="lkBiz"></div></label>
+      <label>메모<input type="text" id="lkNote" maxlength="120"></label>
+      <input type="hidden" id="lkId">
+      <div id="lkErr"></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn" id="lkSave">저장</button>
+        <button class="btn ghost" id="lkClear">새로 작성</button>
+      </div>
+      <div class="hint">주소·전화번호는 <b>크롤링 원문에 실재하는 값</b>만 넣으세요. 답변에 그대로 나갑니다.</div>
+    </div>
+  </div>
+
+  <!-- ⑥ 고급 -->
+  <div class="pane" id="p6">
+    <div class="card">
+      <h2>고급 설정 🔒 <span class="badge" id="advLock">잠김</span></h2>
+      <div class="sub">개발자 확인 후 잠금 해제. 값을 바꾸면 "검증된 프리셋 아님" 배지가 상시 표시됩니다.</div>
+      <button class="btn ghost sm" id="advToggle">잠금 해제</button>
+      <div id="f6" style="margin-top:8px"></div>
+      <div class="note bad">
+        이 5개 값(RRF_ALPHA·RRF_K·BF_BOOST·FACET_BOOST·BF_DOC_CAP)은 8,064개 조합을 전수 탐색해 고른 <b>한 세트</b>입니다.
+        하나만 바꾸면 검증되지 않은 조합이 됩니다. 또한 <b>현재 코퍼스와 한 세트</b>라 재빌드 후에는 재튜닝이 필요합니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑦ 문서 처리 -->
+  <div class="pane" id="p7">
+    <div class="card">
+      <h2>문서 처리 (재빌드 필요) 🔒</h2>
+      <div class="sub">이 탭의 값만 저장 즉시 반영되지 않습니다. 문서를 다시 잘라 전체를 재계산해야 합니다.</div>
+      <div class="note bad">
+        값을 바꾸면 <b>세 가지가 함께 무효화</b>됩니다 —
+        ① 검색 프리셋 3종(개발자 재튜닝 필요) ② 검색 인덱스 전체 ③ 되묻기 조합 테이블의 근거 연결.
+        <b>오른쪽 [한 번에 실행]</b>을 쓰면 검증 → 빌드 → 재검증 순으로 처리하며,
+        1단계 검증이 현재보다 나쁘면 빌드 전에 멈추고 확인을 요청합니다.
+      </div>
+      <div id="preflight"></div>
+    </div>
+    <div class="split">
+      <div class="card" style="margin:0">
+        <h2>파라미터</h2>
+        <div class="sub">값을 움직이면 오른쪽에 예상 결과가 바로 나옵니다.</div>
+        <div id="f7"></div>
+        <div class="hint" id="crawlHint"></div>
+      </div>
+      <div class="card" style="margin:0">
+        <h2>예상 결과 <span class="badge" id="evTag">현재 설정</span></h2>
+        <div class="sub">평가셋 TEST 430문항 · 지표 = 앵커 hit@5</div>
+        <table id="cmpTbl"></table>
+        <div id="evNote"></div>
+        <div class="hint" id="evSrc"></div>
+        <div class="hint">검증·재빌드 버튼은 <b>오른쪽 고정 패널</b>로 옮겼습니다.
+          어느 탭에서 무엇을 바꾸든 거기서 한 번에 실행할 수 있습니다.</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>현재 코퍼스 상태</h2>
+      <div class="kpi" id="corpusKpi"></div>
+      <div class="hint">최대 길이가 상한을 넘는 것은 정상입니다 — <b>표는 쪼개지 않고 통째로 유지</b>합니다. 상한은 표가 아닌 본문에만 적용됩니다.</div>
+    </div>
+    <div class="split">
+      <div class="card" style="margin:0">
+        <h2>측정 근거 — 겹치는 분량</h2>
+        <div class="sub">세 가지 값을 모두 돌려본 결과 (표 유지 OFF 조건)</div>
+        <table id="evOv"></table>
+        <div class="hint">겹치는 내용이 많아지면 서로 다른 조각이 같은 문장으로 경쟁해 순위가 흐려집니다.</div>
+      </div>
+      <div class="card" style="margin:0">
+        <h2>측정 근거 — 표 처리</h2>
+        <div class="sub">단일 변경으로 가장 큰 개선이었습니다</div>
+        <table id="evTbl"></table>
+        <div class="hint">여러 업권이 한 표에 있는 문서는 쪼개는 순간 답이 조각납니다. <b>복합 조건 +51%p.</b></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>지금 서비스 중인 조합</h2>
+      <div class="sub">위 두 표는 <b>과거 A/B 기록</b>입니다. 실제 운영 값은 여기를 보세요.</div>
+      <div id="evLive"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 우측 -->
+<div>
+  <div class="card sticky" id="chgCard">
+    <h2>변경 사항 <span class="badge" id="chgBadge">변경 없음</span></h2>
+    <div class="sub" id="chgSub">설정을 바꾸면 여기에 예상 결과가 표시됩니다.</div>
+    <div id="chgList" class="chglist"></div>
+    <table id="projTbl"></table>
+    <div class="hint" id="accSrc"></div>
+    <div id="chgNote"></div>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn ghost" id="btnReset" disabled>되돌리기</button>
+      <button class="btn" id="btnSave" disabled>저장</button>
+    </div>
+    <button class="btn ghost sm" id="btnGolden" style="width:100%;margin-top:8px">기준 설정으로 되돌리기</button>
+    <div class="hint" id="goldenHint"></div>
+    <div class="hint">정확도는 <b>실측값</b>(평가셋 TEST 430문항)입니다. 응답시간·콜 수는 경로 실측치로 계산하며, 비용은 추정입니다.</div>
+
+    <div class="runbox">
+      <div class="runhead"><b>실행</b><span class="badge" id="runBadge">대기</span></div>
+      <div class="sub" id="runSub">저장하지 않은 변경이 있으면 실행 직전에 자동으로 저장합니다.</div>
+      <div class="runmain">
+        <button class="btn warn" id="btnCrawl">원문 재수집</button>
+        <button class="btn" id="btnChain">한 번에 실행</button>
+      </div>
+      <div class="note" id="planNote"></div>
+      <label class="chk"><input type="checkbox" id="chkGuard" checked>
+        <span>1단계 검증이 현재보다 나쁘면 멈추고 확인받기</span></label>
+      <div class="runbtns">
+        <button class="btn ghost sm" id="btnEval">① 테스트셋 검증</button>
+        <button class="btn ghost sm" id="btnApply">② 적용 &amp; 재빌드</button>
+        <button class="btn ghost sm" id="btnVerify">③ 재검증</button>
+      </div>
+      <div id="jobBox"></div>
+      <div class="hint" id="runHint"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>데이터 신선도</h2>
+    <div id="fresh"></div>
+  </div>
+
+  <div class="card">
+    <h2>업무별 질의 분포</h2>
+    <table id="bizTbl"></table>
+    <div class="hint" id="bizHint"></div>
+  </div>
+
+  <div class="card">
+    <h2>최신성 가드</h2>
+    <div id="guardStat"></div>
+  </div>
+
+  <div class="card">
+    <h2>운영 상태</h2>
+    <div id="health"></div>
+  </div>
+
+  <div class="card">
+    <h2>변경 이력</h2>
+    <table id="histTbl"></table>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

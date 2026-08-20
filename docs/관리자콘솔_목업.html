@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KDIC 챗봇 관리자 콘솔 — 목업</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+    --tx:#e6e9ef; --tx2:#9aa3b2; --tx3:#6b7280;
+    --ac:#5b8def; --ok:#3fb950; --warn:#d29922; --bad:#f85149;
+    --chip:#232833;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;
+    font-size:14px;line-height:1.6}
+  header{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;
+    align-items:center;gap:16px;flex-wrap:wrap;background:var(--panel)}
+  header h1{font-size:16px;margin:0;font-weight:600}
+  .badge{font-size:11px;padding:3px 9px;border-radius:99px;background:var(--chip);color:var(--tx2)}
+  .badge.ok{background:rgba(63,185,80,.15);color:var(--ok)}
+  .badge.warn{background:rgba(210,153,34,.15);color:var(--warn)}
+  .wrap{display:grid;grid-template-columns:1fr 400px;gap:20px;padding:20px 24px;max-width:1480px}
+  @media(max-width:1100px){.wrap{grid-template-columns:1fr}}
+  .tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+  .tab{padding:8px 15px;border-radius:8px;background:var(--panel);color:var(--tx2);
+    cursor:pointer;border:1px solid var(--line);font-size:13px;user-select:none}
+  .tab.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+  .tab.lock{opacity:.55}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    padding:18px 20px;margin-bottom:16px}
+  .card h2{font-size:14px;margin:0 0 4px;font-weight:600}
+  .card .sub{font-size:12px;color:var(--tx3);margin-bottom:14px}
+  .row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;
+    padding:13px 0;border-top:1px solid var(--line)}
+  .row:first-of-type{border-top:none}
+  .row .lab{flex:1;min-width:0}
+  .row .lab b{font-weight:600;display:block;font-size:13px}
+  .row .lab small{color:var(--tx3);font-size:11.5px;display:block;margin-top:3px}
+  .ctl{flex-shrink:0;text-align:right}
+  .presets{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:6px}
+  .preset{border:1px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;
+    background:var(--panel2)}
+  .preset.on{border-color:var(--ac);background:rgba(91,141,239,.12)}
+  .preset b{display:block;font-size:13px;margin-bottom:3px}
+  .preset small{color:var(--tx3);font-size:11px;line-height:1.5;display:block}
+  .preset .num{margin-top:8px;font-size:11px;color:var(--tx2);
+    font-family:ui-monospace,Menlo,monospace}
+  .sw{width:44px;height:24px;border-radius:99px;background:#39404e;position:relative;
+    cursor:pointer;display:inline-block;transition:.15s}
+  .sw.on{background:var(--ac)}
+  .sw::after{content:"";position:absolute;width:18px;height:18px;border-radius:99px;
+    background:#fff;top:3px;left:3px;transition:.15s}
+  .sw.on::after{left:23px}
+  input[type=range]{width:180px;accent-color:var(--ac)}
+  .val{font-family:ui-monospace,Menlo,monospace;font-size:12px;color:var(--ac);
+    min-width:34px;display:inline-block;text-align:right}
+  input[type=text],input[type=date]{background:var(--panel2);color:var(--tx);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12.5px;font-family:inherit}
+  select{background:var(--panel2);color:var(--tx);border:1px solid var(--line);
+    border-radius:7px;padding:6px 9px;font-size:12.5px;font-family:inherit}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg span{padding:6px 12px;cursor:pointer;font-size:12px;background:var(--panel2);color:var(--tx2)}
+  .seg span.on{background:var(--ac);color:#fff}
+  .kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .k{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px}
+  .k .t{font-size:11px;color:var(--tx3)}
+  .k .v{font-size:20px;font-weight:650;margin-top:3px;font-family:ui-monospace,Menlo,monospace}
+  .k .d{font-size:11px;color:var(--tx3);margin-top:2px}
+  .bar{height:7px;border-radius:99px;background:var(--panel2);overflow:hidden;margin-top:7px}
+  .bar i{display:block;height:100%;background:var(--ac)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line)}
+  th{color:var(--tx3);font-weight:500;font-size:11px}
+  td.n{font-family:ui-monospace,Menlo,monospace;text-align:right}
+  .note{border-left:3px solid var(--warn);background:rgba(210,153,34,.08);
+    padding:10px 13px;border-radius:0 8px 8px 0;font-size:12px;color:var(--tx2);margin-top:12px}
+  .note.bad{border-color:var(--bad);background:rgba(248,81,73,.08)}
+  .dot{width:7px;height:7px;border-radius:99px;display:inline-block;margin-right:6px}
+  .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+  .pane{display:none} .pane.on{display:block}
+  .hint{font-size:11.5px;color:var(--tx3);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+  .imp{color:var(--warn);font-weight:600}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  @media(max-width:900px){.split{grid-template-columns:1fr}}
+  .btn{background:var(--ac);color:#fff;border:none;border-radius:8px;padding:9px 16px;
+    font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:600}
+  .btn.ghost{background:var(--panel2);color:var(--tx2);border:1px solid var(--line)}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .job{background:linear-gradient(135deg,rgba(91,141,239,.18),rgba(91,141,239,.06));
+    border:1px solid var(--ac);border-radius:12px;padding:16px 20px;margin-bottom:16px}
+  .jobhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .spin{display:inline-block;width:12px;height:12px;border:2px solid rgba(255,255,255,.25);
+    border-top-color:#fff;border-radius:99px;animation:sp .8s linear infinite;vertical-align:-1px;margin-right:6px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .steps{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+  .steps span{font-size:11px;padding:3px 9px;border-radius:99px;background:rgba(255,255,255,.07);color:var(--tx3)}
+  .steps span.now{background:var(--ac);color:#fff}
+  .steps span.done{background:rgba(63,185,80,.2);color:var(--ok)}
+  .sticky{position:sticky;top:12px;z-index:5;border-color:var(--ac)}
+  .chglist{margin:2px 0 12px}
+  .chglist div{font-size:12px;padding:5px 0;border-bottom:1px dashed var(--line);color:var(--tx2)}
+  .chglist div:last-child{border-bottom:none}
+  .chglist b{color:var(--tx)}
+  .chglist .arw{color:var(--ac);font-family:ui-monospace,monospace}
+  .chglist .rb{color:var(--warn);font-size:10.5px;margin-left:4px}
+  .tag{font-size:9.5px;padding:2px 6px;border-radius:99px;background:var(--chip);color:var(--tx3)}
+  .tag.ok{background:rgba(63,185,80,.16);color:var(--ok)}
+  .tag.warn{background:rgba(210,153,34,.16);color:var(--warn)}
+  .tag.bad{background:rgba(248,81,73,.16);color:var(--bad)}
+  .warnbox{border:1px solid var(--warn);background:rgba(210,153,34,.1);border-radius:10px;
+    padding:14px 16px;font-size:12.5px;color:var(--tx2);margin-top:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>KDIC 챗봇 관리자 콘솔</h1>
+  <span class="badge">목업 · 실제 동작 아님</span>
+  <span class="badge ok">검증된 프리셋 사용 중</span>
+  <span class="badge">코퍼스 181청크 / 38문서</span>
+  <span class="badge warn">부보금융회사 명단 갱신 필요 (2026 2분기)</span>
+  <span class="badge ok">최신성 가드 4건 적용 중</span>
+</header>
+
+<div class="wrap">
+<div>
+  <div class="tabs">
+    <div class="tab on" data-p="p1">① 답변 품질</div>
+    <div class="tab" data-p="p2">② 응답 속도·비용</div>
+    <div class="tab" data-p="p3">③ 되묻기</div>
+    <div class="tab" data-p="p6">④ 최신성 가드</div>
+    <div class="tab" data-p="p5">⑤ 첨부문서</div>
+    <div class="tab lock" data-p="p4">⑥ 고급 🔒</div>
+    <div class="tab lock" data-p="p7">⑦ 문서 처리 🔒</div>
+  </div>
+
+  <!-- ① 답변 품질 -->
+  <div class="pane on" id="p1">
+    <div class="card">
+      <h2>검색 방식</h2>
+      <div class="sub">아래 세 가지는 모두 검증된 조합입니다. 개별 숫자를 직접 바꾸려면 ⑥ 고급 탭이 필요합니다.</div>
+      <div class="presets">
+        <div class="preset on" data-k="preset" data-v="accuracy"><b>정확도 우선</b><small>표준적인 질문에서 가장 정확합니다</small><div class="num">정확도 .905 · 안정성 .860</div></div>
+        <div class="preset" data-k="preset" data-v="balanced"><b>균형</b><small>질문 유형이 골고루 섞일 때 가장 안정적입니다</small><div class="num">정확도 .895 · 안정성 .866</div></div>
+        <div class="preset" data-k="preset" data-v="diverse"><b>다양성 우선</b><small>한 문서에 몰리지 않고 여러 문서를 보여줍니다</small><div class="num">정확도 .889 · 안정성 .860</div></div>
+      </div>
+      <div class="hint">세 방식의 차이는 최대 <b>1.6%p</b>로 크지 않습니다. 특별한 이유가 없으면 기본값(정확도 우선)을 권장합니다.</div>
+    </div>
+
+    <div class="card">
+      <h2>답변 생성</h2>
+      <div class="row">
+        <div class="lab"><b>답변에 참고할 문서 수</b>
+          <small>많을수록 근거가 늘지만 응답이 느려지고 비용이 올라갑니다</small></div>
+        <div class="ctl"><input type="range" min="1" max="5" value="3" data-k="k" oninput="this.nextElementSibling.textContent=this.value"><span class="val">3</span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>답변 길이 상한</b>
+          <small>짧으면 빠르고 저렴하지만 답변이 잘릴 수 있습니다</small></div>
+        <div class="ctl"><input type="range" min="256" max="1024" step="128" value="512" data-k="maxTok" oninput="this.nextElementSibling.textContent=this.value"><span class="val">512</span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>답변 일관성</b>
+          <small>왼쪽일수록 같은 질문에 항상 같은 답, 오른쪽일수록 표현이 다양해집니다</small></div>
+        <div class="ctl"><input type="range" min="0" max="10" value="2" data-k="temp" oninput="this.nextElementSibling.textContent=(this.value/10).toFixed(1)"><span class="val">0.2</span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>링크 검사 엄격도</b>
+          <small>엄격: 출처 목록에 없는 링크는 모두 경고 표시 (권장)</small></div>
+        <div class="ctl"><span class="seg" data-k="strict"><span class="on" data-v="엄격">엄격</span><span data-v="완화">완화</span></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ② 속도·비용 -->
+  <div class="pane" id="p2">
+    <div class="card">
+      <h2>응답 속도</h2>
+      <div class="sub">검색 방식(①탭)은 속도에 영향이 거의 없습니다. 속도를 바꾸는 건 아래 항목들입니다.</div>
+      <div class="row">
+        <div class="lab"><b>소관 밖 질문 즉시 안내</b>
+          <small>예금보험공사 업무가 아닌 질문은 문서를 찾지 않고 바로 안내합니다 — <b class="imp">가장 큰 속도 개선</b></small></div>
+        <div class="ctl"><span class="sw on" data-k="earlyBlock"></span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>타기관 연락처 안내</b>
+          <small>워크아웃·보이스피싱·휴면계좌 등은 담당기관 연락처까지 안내합니다</small></div>
+        <div class="ctl"><span class="sw on" data-k="linkRoute"></span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>되묻기 문장 생성 방식</b>
+          <small>정해진 문구: 추가 비용 0 / AI 생성: 자연스럽지만 되물을 때마다 비용 발생</small></div>
+        <div class="ctl"><span class="seg" data-k="askMode"><span class="on" data-v="템플릿">정해진 문구</span><span data-v="LLM">AI 생성</span></span></div>
+      </div>
+      <div class="note">
+        현재 설정 기준 예상 응답시간 — 소관 밖 <b>약 1.3초</b> / 일반 답변 <b>약 5.0초</b>.
+        "소관 밖 질문 즉시 안내"를 끄면 모든 질문이 5초대가 됩니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- ③ 되묻기 -->
+  <div class="pane" id="p3">
+    <div class="card">
+      <h2>되묻기 (큐폼)</h2>
+      <div class="sub">"누가 신청하시나요?"처럼 답변 전에 조건을 확인하는 기능입니다. 필요한 서류만 골라서 안내할 수 있습니다.</div>
+      <div class="row">
+        <div class="lab"><b>적용 업무</b>
+          <small>착오송금만 / 착오송금 + 예금보험금</small></div>
+        <div class="ctl"><select data-k="qscope"><option>착오송금만</option><option>착오송금 + 예금보험금</option></select></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>되묻기 최대 횟수</b>
+          <small>이 횟수에 닿으면 조건이 다 안 채워져도 답변합니다</small></div>
+        <div class="ctl"><input type="range" min="1" max="3" value="2" data-k="askTurns" oninput="this.nextElementSibling.textContent=this.value"><span class="val">2</span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>앞 대화 조건 기억</b>
+          <small>앞 질문에서 확인한 조건을 다음 질문에도 적용합니다</small></div>
+        <div class="ctl"><span class="sw on" data-k="carry"></span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>조건 기억 유효 턴</b>
+          <small>기억한 조건을 몇 번의 대화까지 유지할지</small></div>
+        <div class="ctl"><input type="range" min="1" max="5" value="3" data-k="ttl" oninput="this.nextElementSibling.textContent=this.value"><span class="val">3</span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>업무가 바뀌면</b>
+          <small>다른 업무 질문으로 넘어갈 때 기억한 조건 처리 방법</small></div>
+        <div class="ctl"><select data-k="cscope"><option>기억 지움</option><option>그대로 유지</option><option>기억 안 함</option></select></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>대기 용건 최대 개수</b>
+          <small>한 문장에 용건이 여러 개일 때 쌓아둘 개수. 0이면 기능을 끕니다</small></div>
+        <div class="ctl"><input type="range" min="0" max="5" value="3" data-k="queue" oninput="this.nextElementSibling.textContent=this.value"><span class="val">3</span></div>
+      </div>
+      <div class="row">
+        <div class="lab"><b>만료된 항목 표시</b>
+          <small>회색으로 남김 (권장) / 화면에서 지움</small></div>
+        <div class="ctl"><span class="seg" data-k="expired"><span class="on" data-v="회색">회색으로 남김</span><span data-v="삭제">지움</span></span></div>
+      </div>
+      <div class="note">
+        적용 업무를 확장하기 전에 개발자 확인이 필요합니다 — 검증 스크립트 3곳이 현재 설정을 전제로 작성돼 있습니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- ④ 고급 -->
+  <div class="pane" id="p4">
+    <div class="card">
+      <h2>고급 설정 🔒</h2>
+      <div class="sub">개발자 확인 후 잠금 해제. 값을 바꾸면 "검증된 프리셋 아님" 배지가 상시 표시됩니다.</div>
+      <table>
+        <tr><th>파라미터</th><th>현재값</th><th>범위</th><th>의미</th></tr>
+        <tr><td>RRF_ALPHA</td><td class="n">0.65</td><td class="n">0.5–1.0</td><td>의미검색 비중</td></tr>
+        <tr><td>RRF_K</td><td class="n">4</td><td class="n">0–8</td><td>순위 결합 상수</td></tr>
+        <tr><td>BF_BOOST</td><td class="n">0.06</td><td class="n">0–0.20</td><td>같은 업무 문서 가산점</td></tr>
+        <tr><td>FACET_BOOST</td><td class="n">0.05</td><td class="n">0–0.30</td><td>질문 유형 일치 가산점</td></tr>
+        <tr><td>BF_DOC_CAP</td><td class="n">5</td><td class="n">1–10</td><td>문서당 최대 청크 수</td></tr>
+        <tr><td>BF_MODE</td><td class="n">soft</td><td>soft/hard</td><td>업무 신호 반영 방식</td></tr>
+        <tr><td>QBF_MSP_MIN</td><td class="n">0.70</td><td class="n">0.5–0.95</td><td>업무 분류기 신뢰 임계값</td></tr>
+        <tr><td>CALL_BUDGET</td><td class="n">70</td><td>—</td><td>세션당 LLM 콜 상한</td></tr>
+        <tr><td>임베딩 모델</td><td class="n">BGE-m3-ko</td><td>—</td><td>변경 시 인덱스 재생성 필요</td></tr>
+      </table>
+      <div class="note bad">
+        이 5개 값(RRF_ALPHA·RRF_K·BF_BOOST·FACET_BOOST·BF_DOC_CAP)은 8,064개 조합을 전수 탐색해 고른 <b>한 세트</b>입니다.
+        하나만 바꾸면 검증되지 않은 조합이 됩니다. 또한 <b>현재 코퍼스(181청크)와 한 세트</b>라서, 크롤링을 다시 하면 재튜닝이 필요합니다.
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ④ 최신성 가드 -->
+  <div class="pane" id="p6">
+    <div class="card">
+      <h2>최신성 가드</h2>
+      <div class="sub">법이 바뀌었는데 안내 문서가 아직 옛 기준일 때, 답변을 정정하는 규칙입니다. 원본 문서는 수정하지 않습니다.</div>
+      <div class="row">
+        <div class="lab"><b>가드 기능 사용</b><small>끄면 아래 항목이 모두 적용되지 않습니다</small></div>
+        <div class="ctl"><span class="sw on" data-k="guardOn"></span></div>
+      </div>
+      <table style="margin-top:12px">
+        <tr><th>제목</th><th>유형</th><th>정정</th><th>발동</th><th>상태</th></tr>
+        <tr><td>예금보호한도 1억원 상향</td><td>정정</td><td class="n">5천만원 → 1억원</td><td class="n">318회</td><td><span class="dot ok"></span>승인됨</td></tr>
+        <tr><td>착오송금 반환지원 한도</td><td>정정</td><td class="n">5천만원 → 1억원</td><td class="n">74회</td><td><span class="dot ok"></span>승인됨</td></tr>
+        <tr><td>공시이율 (2026-07)</td><td>정정</td><td class="n">2.27 / 0.67 / 2.50%</td><td class="n">12회</td><td><span class="dot warn"></span>8/31 만료</td></tr>
+        <tr><td>부보금융회사 284개사</td><td>보충</td><td class="n">—</td><td class="n">0회</td><td><span class="dot bad"></span>미발동 · 조건 확인</td></tr>
+      </table>
+      <div class="hint"><b>발동 0회</b>인 항목은 발동 조건 키워드가 잘못 설정됐을 가능성이 높습니다. 정리 대상입니다.</div>
+    </div>
+
+    <div class="card">
+      <h2>가드 추가 / 수정</h2>
+      <div class="sub">자유 서술이 아니라 항목별로 입력합니다. 잘못 쓰면 AI가 엉뚱하게 동작할 수 있어 형식을 고정했습니다.</div>
+      <div class="row"><div class="lab"><b>제목</b><small>목록에서 알아볼 이름 (40자)</small></div>
+        <div class="ctl"><input type="text" value="예금보호한도 1억원 상향" style="width:230px"></div></div>
+      <div class="row"><div class="lab"><b>유형</b>
+        <small>정정: 옛 값을 새 값으로 / 보충: 문서에 없는 내용 추가 / 금지: 답하지 않고 상담 연결</small></div>
+        <div class="ctl"><span class="seg"><span class="on">정정</span><span>보충</span><span>금지</span></span></div></div>
+      <div class="row"><div class="lab"><b>발동 조건 (키워드)</b><small>이 단어가 나올 때만 적용됩니다. 좁힐수록 안전합니다</small></div>
+        <div class="ctl"><input type="text" value="보호한도, 5천만원, 예금자보호" style="width:230px"></div></div>
+      <div class="row"><div class="lab"><b>적용 업무</b><small>해당 업무 질문에만 적용</small></div>
+        <div class="ctl"><select><option>예금자보호제도 외 2개 선택됨</option><option>전체 업무</option></select></div></div>
+      <div class="row"><div class="lab"><b>기존 값 → 정정 값</b><small>문서에 남아 있는 옛 값과 바꿀 값</small></div>
+        <div class="ctl"><input type="text" value="5천만원" style="width:100px"> → <input type="text" value="1억원" style="width:100px"></div></div>
+      <div class="row"><div class="lab"><b>안내 문장</b><small>답변에 그대로 들어갑니다 (2문장·200자)</small></div>
+        <div class="ctl"><input type="text" value="예금보호한도는 2025년 9월 1일부터 1인당 1억원입니다." style="width:300px"></div></div>
+      <div class="row"><div class="lab"><b>근거</b><small>답변에 출처로 함께 표시됩니다</small></div>
+        <div class="ctl"><input type="text" value="예금자보호법 시행령 개정 (2025-09-01 시행)" style="width:300px"></div></div>
+      <div class="row"><div class="lab"><b>적용 기간</b><small>종료일을 비우면 무기한. 만료 7일 전 알림</small></div>
+        <div class="ctl"><input type="date" value="2025-09-01"> ~ <input type="date"></div></div>
+      <div class="note">
+        <b>저장 전 미리보기</b> — 샘플 질문 3개에 대해 적용 전/후 답변을 비교한 뒤 승인 요청됩니다. 승인 전에는 실제 서비스에 반영되지 않습니다.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>미리보기</h2>
+      <div class="sub">질문: "예금자 보호 한도가 5천만원 맞죠?"</div>
+      <table>
+        <tr><th style="width:50%">적용 전 (현재)</th><th>적용 후</th></tr>
+        <tr>
+          <td style="vertical-align:top;color:var(--bad)">네, 예금자 1인당 보호 한도는 5천만원입니다. [출처3]</td>
+          <td style="vertical-align:top;color:var(--ok)">아닙니다. 예금보호한도는 2025년 9월 1일부터 1인당 1억원입니다. <b>[관리자 정정]</b><br>
+              원금과 소정이자를 합하여 금융회사별로 1인당 1억원까지 보호됩니다. [출처1]<br><br>
+              <small style="color:var(--tx3)">※ 안내 문서 일부에 이전 기준(5천만원)이 남아 있을 수 있습니다.<br>
+              근거: 예금자보호법 시행령 개정 (2025-09-01 시행)</small></td>
+        </tr>
+      </table>
+      <div class="hint"><b>[관리자 정정]</b> 표시는 <b>[출처N]</b>과 구분됩니다 — 문서에서 온 내용인지 관리자가 넣은 내용인지 사용자가 알 수 있어야 합니다.</div>
+    </div>
+  </div>
+
+  <!-- ⑤ 첨부문서 -->
+  <div class="pane" id="p5">
+    <div class="card">
+      <h2>첨부문서 현황</h2>
+      <div class="sub">6개 문서 · 첨부 46건 · 고유 양식 24종</div>
+      <table>
+        <tr><th>업무 / 문서</th><th>양식</th><th>형식</th><th>상태</th></tr>
+        <tr><td>착오송금 — 착오송금인 구비서류</td><td class="n">11종</td><td>hwp+pdf</td><td><span class="dot ok"></span>정상</td></tr>
+        <tr><td>착오송금 — 수취인 구비서류</td><td class="n">2종</td><td>hwp+pdf</td><td><span class="dot ok"></span>정상</td></tr>
+        <tr><td>착오송금 — 방문접수</td><td class="n">1종</td><td>hwp+pdf</td><td><span class="dot warn"></span>중복(신청서양식)</td></tr>
+        <tr><td>예금보험금 — 신청 구비서류</td><td class="n">5종</td><td>hwp+pdf</td><td><span class="dot ok"></span>정상</td></tr>
+        <tr><td>예금자보호 — 부보금융회사 명단</td><td class="n">2종</td><td>xlsx/docx</td><td><span class="dot bad"></span>미색인 · 분기 갱신</td></tr>
+        <tr><td>채무조정 — 부채증명원/금융거래정보</td><td class="n">5종</td><td>hwp</td><td><span class="dot ok"></span>정상</td></tr>
+      </table>
+      <div class="note bad">
+        <b>부보금융회사 목록</b>(2026년 2분기)은 엑셀 파일 내용이 검색에 반영되지 않았습니다.
+        따라서 "○○은행이 보호대상인가요?" 같은 개별 회사명 질문은 현재 답변할 수 없습니다. 갱신 주기는 <b>분기</b>입니다.
+      </div>
+      <div class="note">
+        첨부 표시명 일부에 표 파싱 잔여물이 섞여 있습니다(예: "대리인 | 공통 서류 | 대리인 확인용 신분증…").
+        사용자 화면에 노출되기 전에 정제가 필요합니다.
+      </div>
+    </div>
+  </div>
+
+  <!-- ⑦ 문서 처리 -->
+  <div class="pane" id="p7">
+
+    <div id="jobBanner" class="job" style="display:none">
+      <div class="jobhead">
+        <span><span class="spin"></span> <b id="jobTitle">재빌드 진행 중</b></span>
+        <span id="jobPct" class="val">0%</span>
+      </div>
+      <div class="bar"><i id="jobBar" style="width:0%"></i></div>
+      <div class="steps" id="jobSteps"></div>
+      <div class="hint" style="border-top-color:rgba(255,255,255,.12)">
+        진행 중에는 다른 탭의 설정 저장이 잠깁니다. 챗봇 서비스는 <b>기존 인덱스로 정상 동작</b>합니다.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>문서 처리 (재빌드 필요) 🔒</h2>
+      <div class="sub">이 탭의 값만 저장 즉시 반영되지 않습니다. 문서를 다시 잘라 전체를 재계산해야 합니다.</div>
+      <div class="note bad">
+        값을 바꾸면 <b>세 가지가 함께 무효화</b>됩니다 —
+        ① 검색 프리셋 3종(개발자 재튜닝 필요) ② 검색 인덱스 전체 ③ 되묻기 조합 테이블의 근거 연결.
+        <b>A/B 평가를 실행하기 전에는 적용 버튼이 활성화되지 않습니다.</b>
+      </div>
+    </div>
+
+    <div class="split">
+      <!-- 좌: 파라미터 -->
+      <div class="card" style="margin:0">
+        <h2>파라미터</h2>
+        <div class="sub">값을 움직이면 오른쪽에 예상 결과가 바로 나옵니다.</div>
+        <div class="row">
+          <div class="lab"><b>조각 크기 상한</b>
+            <small>크면 맥락이 풍부하지만 관련 없는 내용이 섞이고, 작으면 정확하지만 맥락이 끊깁니다</small></div>
+          <div class="ctl"><input id="pSize" data-k="size" type="range" min="400" max="1200" step="100" value="800"><span class="val" id="vSize">800</span></div>
+        </div>
+        <div class="row">
+          <div class="lab"><b>조각끼리 겹치는 분량</b>
+            <small class="imp">늘려도 정확해지지 않는다는 것이 측정으로 확인됐습니다. 100자 권장</small></div>
+          <div class="ctl"><input id="pOv" data-k="ov" type="range" min="0" max="300" step="50" value="100"><span class="val" id="vOv">100</span></div>
+        </div>
+        <div class="row">
+          <div class="lab"><b>최소 조각 길이</b>
+            <small>이보다 짧은 조각은 앞 조각에 합칩니다</small></div>
+          <div class="ctl"><input id="pMin" data-k="min" type="range" min="20" max="150" step="10" value="60"><span class="val" id="vMin">60</span></div>
+        </div>
+        <div class="row">
+          <div class="lab"><b>표 통째로 유지</b>
+            <small class="imp">끄지 마세요 — 여러 업권을 비교하는 질문의 정확도가 0.82에서 0.31로 떨어집니다</small></div>
+          <div class="ctl"><span class="sw on" id="pTbl" data-k="tbl"></span></div>
+        </div>
+        <div class="row">
+          <div class="lab"><b>표 사이 본문 흡수 한도</b>
+            <small>"표 → 설명 → 표" 구조에서 몇 줄까지 함께 묶을지</small></div>
+          <div class="ctl"><input id="pGap" data-k="gap" type="range" min="0" max="30" value="12"><span class="val" id="vGap">12</span></div>
+        </div>
+        <div class="row">
+          <div class="lab"><b>원문도 다시 수집</b>
+            <small>KDIC 홈페이지에서 문서를 새로 받아옵니다. 끄면 저장된 원문으로 다시 자르기만 합니다</small></div>
+          <div class="ctl"><span class="sw" id="pCrawl" data-k="crawl"></span></div>
+        </div>
+        <div class="hint" id="crawlHint">현재: <b>저장된 원문 재사용</b> — 홈페이지 접속 없이 다시 자르기만 합니다 (약 2분).</div>
+      </div>
+
+      <!-- 우: 비교 결과 -->
+      <div class="card" style="margin:0">
+        <h2>예상 결과 <span class="badge" id="evTag">현재 설정</span></h2>
+        <div class="sub">평가셋 TEST 430문항 · 지표 = 앵커 hit@5</div>
+        <table id="cmpTbl">
+          <tr><th>항목</th><th style="text-align:right">현재</th><th style="text-align:right">변경 후</th><th style="text-align:right">차이</th></tr>
+          <tr><td>조각 수</td><td class="n" id="c0">181</td><td class="n" id="c1">181</td><td class="n" id="c2">—</td></tr>
+          <tr><td>전체 정확도</td><td class="n" id="a0">0.8977</td><td class="n" id="a1">0.8977</td><td class="n" id="a2">—</td></tr>
+          <tr><td>단일 조건 질문</td><td class="n" id="s0">0.9081</td><td class="n" id="s1">0.9081</td><td class="n" id="s2">—</td></tr>
+          <tr><td>복합 조건 질문</td><td class="n" id="d0">0.8182</td><td class="n" id="d1">0.8182</td><td class="n" id="d2">—</td></tr>
+        </table>
+        <div id="evNote" class="note" style="display:none"></div>
+        <div class="hint" id="evSrc">현재 적용 중인 설정입니다. 값을 바꾸면 비교가 표시됩니다.</div>
+        <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="btnEval">A/B 평가 실행</button>
+          <button class="btn ghost" id="btnApply" disabled>적용 &amp; 재빌드</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>현재 코퍼스 상태</h2>
+      <div class="kpi">
+        <div class="k"><div class="t">조각 수</div><div class="v">181</div><div class="d">문서 38개</div></div>
+        <div class="k"><div class="t">평균 길이</div><div class="v">387<span style="font-size:12px">자</span></div><div class="d">중앙값 283자</div></div>
+        <div class="k"><div class="t">최대 길이</div><div class="v">2,613<span style="font-size:12px">자</span></div><div class="d">표 유지 규칙 적용분</div></div>
+        <div class="k"><div class="t">최소 길이</div><div class="v">64<span style="font-size:12px">자</span></div><div class="d">60자 미만 0개</div></div>
+      </div>
+      <div class="hint">최대 길이가 상한(800자)을 넘는 것은 정상입니다 — <b>표는 쪼개지 않고 통째로 유지</b>합니다. 상한은 표가 아닌 본문에만 적용됩니다.</div>
+    </div>
+
+    <div class="split">
+      <div class="card" style="margin:0">
+        <h2>측정 근거 — 겹치는 분량</h2>
+        <div class="sub">세 가지 값을 모두 돌려본 결과 (표 유지 OFF 조건)</div>
+        <table>
+          <tr><th>겹침</th><th style="text-align:right">조각</th><th style="text-align:right">정확도</th><th>판정</th></tr>
+          <tr><td>100자</td><td class="n">215</td><td class="n" style="color:var(--ok)">0.8946</td><td>최고</td></tr>
+          <tr><td>200자</td><td class="n">218</td><td class="n">0.8892</td><td>−0.5%p</td></tr>
+          <tr><td>300자</td><td class="n">222</td><td class="n" style="color:var(--bad)">0.8811</td><td>−1.4%p</td></tr>
+        </table>
+        <div class="hint">겹치는 내용이 많아지면 서로 다른 조각이 같은 문장으로 경쟁해 순위가 흐려집니다.</div>
+      </div>
+
+      <div class="card" style="margin:0">
+        <h2>측정 근거 — 표 처리</h2>
+        <div class="sub">단일 변경으로 가장 큰 개선이었습니다</div>
+        <table>
+          <tr><th>설정</th><th style="text-align:right">조각</th><th style="text-align:right">단일</th><th style="text-align:right">복합</th></tr>
+          <tr><td>표 쪼갬 (구)</td><td class="n">215</td><td class="n">0.8946</td><td class="n" style="color:var(--bad)">0.3091</td></tr>
+          <tr><td><b>표 유지 (현재)</b></td><td class="n">181</td><td class="n" style="color:var(--ok)">0.9081</td><td class="n" style="color:var(--ok)"><b>0.8182</b></td></tr>
+        </table>
+        <div class="hint">보호대상 금융상품표처럼 여러 업권이 한 표에 있는 문서는 쪼개는 순간 답이 조각납니다. <b>복합 조건 +51%p.</b></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 우측 대시보드 -->
+<div>
+<div class="card sticky" id="chgCard">
+    <h2>변경 사항 <span class="badge" id="chgBadge">변경 없음</span></h2>
+    <div class="sub" id="chgSub">설정을 바꾸면 여기에 예상 결과가 표시됩니다.</div>
+
+    <div id="chgList" class="chglist"></div>
+
+    <table style="margin-top:6px">
+      <tr><th>지표</th><th style="text-align:right">현재</th><th style="text-align:right">변경 후</th><th style="width:52px"></th></tr>
+      <tr><td>정확도 <small style="color:var(--tx3)">hit@5</small></td>
+          <td class="n" id="mAcc0">0.9081</td><td class="n" id="mAcc1">0.9081</td>
+          <td class="n"><span class="tag ok" id="mAccT">측정</span></td></tr>
+      <tr><td>LLM 콜 / 질의</td>
+          <td class="n" id="mCall0">1.72</td><td class="n" id="mCall1">1.72</td>
+          <td class="n"><span class="tag" id="mCallT">계산</span></td></tr>
+      <tr><td>평균 응답시간</td>
+          <td class="n" id="mLat0">4.0초</td><td class="n" id="mLat1">4.0초</td>
+          <td class="n"><span class="tag" id="mLatT">계산</span></td></tr>
+      <tr><td>비용 / 질의</td>
+          <td class="n" id="mCost0">₩9.7</td><td class="n" id="mCost1">₩9.7</td>
+          <td class="n"><span class="tag warn" id="mCostT">추정</span></td></tr>
+    </table>
+
+    <div id="chgNote" class="note" style="display:none"></div>
+
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button class="btn ghost" id="btnReset" disabled>되돌리기</button>
+      <button class="btn" id="btnSave" disabled>저장</button>
+    </div>
+    <div class="hint" id="chgHint">
+      정확도는 <b>실측값</b>(평가셋 TEST 430문항)입니다. 응답시간·콜 수는 경로 실측치로 계산하며,
+      비용은 추정입니다.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>오늘 현황</h2>
+    <div class="sub">2026-08-19 · 예시 수치</div>
+    <div class="kpi">
+      <div class="k"><div class="t">질의 수</div><div class="v">1,284</div><div class="d">어제 대비 +8%</div></div>
+      <div class="k"><div class="t">LLM 비용</div><div class="v">₩12,400</div><div class="d">질의당 ₩9.7</div></div>
+      <div class="k"><div class="t">응답시간 p50</div><div class="v">3.1<span style="font-size:12px">초</span></div><div class="d">p95 6.8초</div></div>
+      <div class="k"><div class="t">질의당 콜</div><div class="v">1.72</div><div class="d">분류1 + 생성0.72</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>경로별 분해</h2>
+    <table>
+      <tr><th>경로</th><th>비율</th><th>평균시간</th><th>콜</th></tr>
+      <tr><td>일반 답변</td><td class="n">72%</td><td class="n">4.96초</td><td class="n">2</td></tr>
+      <tr><td>소관 밖 안내</td><td class="n">18%</td><td class="n">1.32초</td><td class="n">1</td></tr>
+      <tr><td>타기관 안내</td><td class="n">6%</td><td class="n">1.30초</td><td class="n">1</td></tr>
+      <tr><td>상담 연결</td><td class="n">4%</td><td class="n">1.28초</td><td class="n">1</td></tr>
+    </table>
+    <div class="hint">소관 밖 조기차단으로 전체 평균이 <b>약 1.4초</b> 단축되고 있습니다.</div>
+  </div>
+
+  <div class="card">
+    <h2>답변 품질</h2>
+    <div class="row"><div class="lab"><b>검증 경고 발생률</b><small>링크·출처·수치 불일치</small></div>
+      <div class="ctl"><span class="val" style="color:var(--ok)">3.2%</span></div></div>
+    <div class="bar"><i style="width:3.2%;background:var(--ok)"></i></div>
+    <div class="row"><div class="lab"><b>"확인되지 않는 내용" 답변</b><small>급증하면 검색 실패 신호</small></div>
+      <div class="ctl"><span class="val" style="color:var(--warn)">11.4%</span></div></div>
+    <div class="bar"><i style="width:11.4%;background:var(--warn)"></i></div>
+    <div class="row"><div class="lab"><b>사용자 👎 비율</b><small>오답 신고 포함</small></div>
+      <div class="ctl"><span class="val">2.1%</span></div></div>
+    <div class="bar"><i style="width:2.1%"></i></div>
+    <div class="hint">"관련 문서 유사도"는 참고용 표시입니다. 이 값으로 답변을 차단하거나 통과시키지 않습니다.</div>
+  </div>
+
+  <div class="card">
+    <h2>업무별 질의 분포</h2>
+    <table>
+      <tr><td>예금자보호제도</td><td class="n">18.7%</td></tr>
+      <tr><td>착오송금 반환 신청</td><td class="n">18.7%</td></tr>
+      <tr><td>채무조정 안내</td><td class="n">17.3%</td></tr>
+      <tr><td>고객 미수령금 신청</td><td class="n">17.1%</td></tr>
+      <tr><td>예금보험금 안내</td><td class="n">14.4%</td></tr>
+      <tr><td>은닉재산 신고</td><td class="n">13.8%</td></tr>
+    </table>
+    <div class="hint">되묻기 발동률 <b>2.0%</b> (착오송금만 적용 중). 예금보험금까지 확장하면 4.2%.</div>
+  </div>
+
+  <div class="card">
+    <h2>최신성 가드</h2>
+    <div class="row"><div class="lab"><b>활성 가드</b><small>만료 임박 1건</small></div><div class="ctl"><span class="val">4건</span></div></div>
+    <div class="row"><div class="lab"><b>가드 발동률</b><small>가드가 적용된 답변 비율</small></div><div class="ctl"><span class="val">31.8%</span></div></div>
+    <div class="bar"><i style="width:31.8%"></i></div>
+    <div class="row"><div class="lab"><b>가드 적용 답변 👎</b><small>일반 답변 2.1% 대비</small></div><div class="ctl"><span class="val" style="color:var(--ok)">1.4%</span></div></div>
+    <div class="hint">가드로 인한 토큰 증가: 질의당 약 <b>+120토큰</b> (발동 시에만). LLM 콜 수는 늘지 않습니다.</div>
+  </div>
+
+  <div class="card">
+    <h2>데이터 신선도</h2>
+    <div class="row"><div class="lab"><b>마지막 크롤링</b></div><div class="ctl"><span class="badge ok">2026-04-16</span></div></div>
+    <div class="row"><div class="lab"><b>부보금융회사 명단</b><small>분기 갱신 필요</small></div><div class="ctl"><span class="badge warn">2026 2분기</span></div></div>
+    <div class="row"><div class="lab"><b>공시이율 기준</b><small>은행 2.27% / 증권 0.67% / 보험 2.50%</small></div><div class="ctl"><span class="badge">2026-07</span></div></div>
+    <div class="row"><div class="lab"><b>코퍼스 버전</b><small>조각 800자 · 겹침 100자 · 표 유지</small></div><div class="ctl"><span class="badge ok">181청크 / 38문서</span></div></div>
+    <div class="row"><div class="lab"><b>검색 설정 정합성</b><small>코퍼스와 한 세트</small></div><div class="ctl"><span class="badge ok">일치</span></div></div>
+  </div>
+
+  <div class="card">
+    <h2>운영 상태</h2>
+    <div class="row"><div class="lab"><b>검색 인덱스</b></div><div class="ctl"><span class="dot ok"></span>정상</div></div>
+    <div class="row"><div class="lab"><b>업무 분류 모델</b><small>실패 시 키워드 방식으로 자동 전환</small></div><div class="ctl"><span class="dot ok"></span>정상</div></div>
+    <div class="row"><div class="lab"><b>LLM API</b><small>성공률 99.4% · 평균 2.9초</small></div><div class="ctl"><span class="dot ok"></span>정상</div></div>
+    <div class="row"><div class="lab"><b>콜 예산 소진</b><small>37 / 70</small></div><div class="ctl"><span class="val">53%</span></div></div>
+    <div class="bar"><i style="width:53%"></i></div>
+  </div>
+</div>
+</div>
+
+<script>
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.pane').forEach(x=>x.classList.remove('on'));
+  t.classList.add('on');
+  document.getElementById(t.dataset.p).classList.add('on');
+});
+document.querySelectorAll('.sw').forEach(s=>s.onclick=()=>s.classList.toggle('on'));
+document.querySelectorAll('.preset').forEach(p=>p.onclick=()=>{
+  p.parentElement.querySelectorAll('.preset').forEach(x=>x.classList.remove('on'));
+  p.classList.add('on');
+});
+document.querySelectorAll('.seg').forEach(g=>g.querySelectorAll('span').forEach(s=>s.onclick=()=>{
+  g.querySelectorAll('span').forEach(x=>x.classList.remove('on'));
+  s.classList.add('on');
+}));
+
+/* ── ⑦ 문서 처리 — 실측 A/B 데이터 ─────────────────────────────
+   출처: crawler/data/eval_overlap_report.md · eval_tablefix_report.md
+   실제로 돌려본 조합만 수치를 갖는다. 나머지는 "미측정"으로 정직하게 표시한다. */
+const BASE = {size:800, ov:100, min:60, tbl:true, gap:12};
+const MEASURED = [
+  // key: size|ov|tbl   (min·gap 은 측정 축이 아니었다)
+  {k:"800|100|1", chunks:181, all:0.8977, single:0.9081, and:0.8182, src:"현재 적용 중 (eval_tablefix on gap≤12)"},
+  {k:"800|100|0", chunks:215, all:0.8209, single:0.8946, and:0.3091, src:"eval_tablefix off (구 설정)"},
+  {k:"800|200|0", chunks:218, all:0.8163, single:0.8892, and:0.3091, src:"eval_overlap OVERLAP=200"},
+  {k:"800|300|0", chunks:222, all:0.8116, single:0.8811, and:0.3273, src:"eval_overlap OVERLAP=300"},
+];
+const find = (o)=>MEASURED.find(m=>m.k===`${o.size}|${o.ov}|${o.tbl?1:0}`);
+const cur = ()=>({size:+pSize.value, ov:+pOv.value, min:+pMin.value,
+                  tbl:pTbl.classList.contains("on"), gap:+pGap.value});
+const same = (a,b)=>a.size===b.size&&a.ov===b.ov&&a.min===b.min&&a.tbl===b.tbl&&a.gap===b.gap;
+const f4 = v=>v.toFixed(4);
+const dlt = (a,b)=>{const d=b-a; const c=d>0?"var(--ok)":d<0?"var(--bad)":"var(--tx3)";
+  return `<span style="color:${c}">${d>0?"+":""}${d===0?"—":d.toFixed(4)}</span>`;};
+
+function render(){
+  const c = cur();
+  vSize.textContent=c.size; vOv.textContent=c.ov; vMin.textContent=c.min; vGap.textContent=c.gap;
+  crawlHint.innerHTML = pCrawl.classList.contains("on")
+    ? '현재: <b style="color:var(--warn)">홈페이지에서 원문 재수집</b> — KDIC 사이트에 접속합니다 (약 8~12분).'
+    : '현재: <b>저장된 원문 재사용</b> — 홈페이지 접속 없이 다시 자르기만 합니다 (약 2분).';
+
+  const base = MEASURED[0], hit = find(c), changed = !same(c, BASE);
+  evTag.textContent = changed ? (hit ? "측정된 조합" : "미측정 조합") : "현재 설정";
+  evTag.className = "badge " + (changed ? (hit ? "ok" : "warn") : "");
+
+  if(!changed){
+    [["c",base.chunks,base.chunks],["a",base.all,base.all],["s",base.single,base.single],["d",base.and,base.and]]
+      .forEach(([id,a,b],i)=>{ document.getElementById(id+"0").textContent = i?f4(a):a;
+        document.getElementById(id+"1").textContent = i?f4(b):b;
+        document.getElementById(id+"2").innerHTML = "—"; });
+    evNote.style.display="none";
+    evSrc.textContent = "현재 적용 중인 설정입니다. 값을 바꾸면 비교가 표시됩니다.";
+    btnApply.disabled = true; btnEval.disabled = true; btnEval.classList.add("ghost");
+    return;
+  }
+  btnEval.disabled = false; btnEval.classList.remove("ghost");
+
+  if(hit){
+    document.getElementById("c0").textContent=base.chunks; document.getElementById("c1").textContent=hit.chunks;
+    document.getElementById("c2").innerHTML = (hit.chunks-base.chunks>0?"+":"")+(hit.chunks-base.chunks||"—");
+    [["a","all"],["s","single"],["d","and"]].forEach(([id,f])=>{
+      document.getElementById(id+"0").textContent=f4(base[f]);
+      document.getElementById(id+"1").textContent=f4(hit[f]);
+      document.getElementById(id+"2").innerHTML=dlt(base[f],hit[f]);
+    });
+    const worse = hit.all < base.all;
+    evNote.style.display="block";
+    evNote.className = "note" + (worse?" bad":"");
+    evNote.innerHTML = worse
+      ? `이 조합은 <b>현재보다 나쁩니다.</b> 전체 정확도 ${f4(base.all)} → ${f4(hit.all)}`
+        + (hit.and < base.and ? `, 복합 조건 질문은 ${f4(base.and)} → <b>${f4(hit.and)}</b>로 크게 떨어집니다.` : ".")
+      : `이 조합은 현재보다 나은 결과를 보였습니다.`;
+    evSrc.innerHTML = `근거: <code>${hit.src}</code> — 실제 평가셋으로 측정된 값입니다.`;
+  } else {
+    ["c","a","s","d"].forEach(id=>{
+      document.getElementById(id+"1").textContent="?";
+      document.getElementById(id+"2").innerHTML='<span style="color:var(--warn)">미측정</span>';
+    });
+    evNote.style.display="block"; evNote.className="note";
+    evNote.innerHTML = "이 조합은 <b>아직 평가한 적이 없습니다.</b> 아래 [A/B 평가 실행]을 눌러 실제 수치를 확인한 뒤 적용하세요.";
+    evSrc.textContent = "평가는 검색만 다시 돌리므로 LLM 비용이 들지 않습니다.";
+  }
+  btnApply.disabled = true;   // 평가 전에는 항상 잠금
+}
+
+/* ── 재빌드 진행 시뮬레이션 ───────────────────────────── */
+const STEPS_RECHUNK = ["문서 다시 자르기","임베딩 재계산","검색 인덱스 빌드","평가셋 검증"];
+const STEPS_CRAWL   = ["홈페이지 수집","문서 파싱","문서 다시 자르기","임베딩 재계산","검색 인덱스 빌드","평가셋 검증"];
+let running = false;
+
+function runJob(title, steps, done){
+  if(running) return; running = true;
+  jobBanner.style.display="block"; jobTitle.textContent=title;
+  jobSteps.innerHTML = steps.map(x=>`<span>${x}</span>`).join("");
+  let i=0;
+  const tick=()=>{
+    const els=[...jobSteps.children];
+    els.forEach((e,n)=>e.className = n<i?"done":n===i?"now":"");
+    const pct=Math.round(i/steps.length*100);
+    jobBar.style.width=pct+"%"; jobPct.textContent=pct+"%";
+    if(i<steps.length){ i++; setTimeout(tick, 900); }
+    else{ jobBar.style.width="100%"; jobPct.textContent="100%";
+          jobTitle.innerHTML="완료됨"; jobBanner.querySelector(".spin").style.display="none";
+          running=false; done&&done();
+          setTimeout(()=>{ jobBanner.style.display="none";
+            jobBanner.querySelector(".spin").style.display=""; }, 3500); }
+  };
+  tick();
+}
+
+btnEval.onclick = ()=>{
+  runJob("A/B 평가 실행 중 — 서비스 영향 없음", ["문서 다시 자르기(임시)","임베딩 재계산","평가셋 430문항 검색","결과 집계"], ()=>{
+    btnApply.disabled=false;
+    evNote.style.display="block"; evNote.className="note";
+    evNote.innerHTML="평가가 끝났습니다. 결과를 확인한 뒤 <b>[적용 &amp; 재빌드]</b>를 누르면 실제 서비스에 반영됩니다.";
+  });
+};
+
+btnApply.onclick = ()=>{
+  const crawl = pCrawl.classList.contains("on");
+  const msg = crawl
+    ? "KDIC 홈페이지에서 원문을 다시 수집한 뒤 전체를 재구성합니다.\n\n예상 8~12분. 진행 중에도 챗봇은 기존 설정으로 정상 동작합니다.\n\n계속할까요?"
+    : "저장된 원문으로 문서를 다시 자르고 전체를 재계산합니다.\n\n예상 2분. 진행 중에도 챗봇은 기존 설정으로 정상 동작합니다.\n\n계속할까요?";
+  if(!confirm(msg)) return;
+  runJob(crawl?"원문 재수집 + 재빌드 진행 중":"재빌드 진행 중", crawl?STEPS_CRAWL:STEPS_RECHUNK, ()=>{
+    alert("재빌드가 완료됐습니다.\n\n다음 작업이 남아 있습니다:\n· 검색 프리셋 재튜닝 (개발자)\n· 되묻기 조합 테이블 근거 재매핑 (개발자)\n· 최신성 가드 재검토 (관리자)");
+  });
+};
+
+["pSize","pOv","pMin","pGap"].forEach(id=>document.getElementById(id).oninput=render);
+pTbl.addEventListener("click", ()=>setTimeout(render,0));
+pCrawl.addEventListener("click", ()=>setTimeout(render,0));
+render();
+
+/* ══ 사이드 고정 패널 — 전 탭 공통 변경 추적 ══════════════════
+   정확도: 실측 A/B 표에서만 (미측정 조합은 "?" 로 남긴다 — 지어내지 않는다)
+   콜 수·응답시간: 경로 실측치(reject 1.32s / rag 4.96s, 1콜 / 2콜)로 계산
+   비용: 콜 수 × 단가 추정                                        */
+
+const LABEL = {
+  preset:["검색 방식",1], k:["참고문서 수",1], maxTok:["답변 길이 상한",1],
+  temp:["답변 일관성",1], strict:["링크 검사",1],
+  earlyBlock:["소관 밖 즉시 안내",2], linkRoute:["타기관 연락처 안내",2], askMode:["되묻기 문구",2],
+  qscope:["되묻기 적용 업무",3], askTurns:["되묻기 최대 횟수",3], carry:["앞 대화 조건 기억",3],
+  ttl:["조건 기억 유효 턴",3], cscope:["업무 전환 시",3], queue:["대기 용건 최대",3], expired:["만료 항목",3],
+  guardOn:["최신성 가드 사용",4],
+  size:["조각 크기 상한",7], ov:["겹치는 분량",7], min:["최소 조각 길이",7],
+  tbl:["표 통째로 유지",7], gap:["표 사이 흡수 한도",7], crawl:["원문 재수집",7],
+};
+const REBUILD = new Set(["size","ov","min","tbl","gap","crawl"]);
+
+/* 실측 정확도 (hit@5, TEST 430) */
+const ACC_PRESET = {accuracy:0.9054, balanced:0.8946, diverse:0.8892};
+const ACC_K      = {3:0.8108, 5:0.9081};                 // eval_tablefix K3/K5 (181청크)
+const ACC_CHUNK  = {"800|100|1":0.9081,"800|100|0":0.8946,"800|200|0":0.8892,"800|300|0":0.8811};
+
+const BASE_CFG = {preset:"accuracy", k:3, maxTok:512, temp:2, strict:"엄격",
+  earlyBlock:true, linkRoute:true, askMode:"템플릿",
+  qscope:"착오송금만", askTurns:2, carry:true, ttl:3, cscope:"기억 지움", queue:3, expired:"회색",
+  guardOn:true, size:800, ov:100, min:100*0+60, tbl:true, gap:12, crawl:false};
+const BASE_ACC = 0.9081, BASE_CALL = 1.72, BASE_LAT = 4.0, BASE_COST = 9.7;
+
+function readState(){
+  const st = {...BASE_CFG};
+  document.querySelectorAll('input[data-k]').forEach(el=>st[el.dataset.k] = +el.value);
+  document.querySelectorAll('.sw[data-k]').forEach(el=>st[el.dataset.k] = el.classList.contains("on"));
+  document.querySelectorAll('select[data-k]').forEach(el=>st[el.dataset.k] = el.value || el.options[el.selectedIndex].text);
+  document.querySelectorAll('.seg[data-k]').forEach(el=>{
+    const on = el.querySelector("span.on"); if(on) st[el.dataset.k] = on.dataset.v || on.textContent;});
+  const pon = document.querySelector('#p1 .preset.on'); if(pon) st.preset = pon.dataset.v;
+  return st;
+}
+const fmt = (k,v)=> typeof v==="boolean" ? (v?"켬":"끔")
+  : k==="temp" ? (v/10).toFixed(1)
+  : (k==="size"||k==="ov"||k==="min") ? v+"자"
+  : k==="preset" ? ({accuracy:"정확도 우선",balanced:"균형",diverse:"다양성 우선"})[v] : v;
+
+function estimate(st, diffKeys){
+  /* 정확도 */
+  let acc=null, accTag="측정";
+  const chunkChanged = ["size","ov","tbl"].some(k=>diffKeys.includes(k));
+  const kChanged = diffKeys.includes("k"), presetChanged = diffKeys.includes("preset");
+  const axes = [chunkChanged, kChanged, presetChanged].filter(Boolean).length;
+  if(axes===0) acc = BASE_ACC;
+  else if(axes>1){ acc=null; accTag="복합"; }
+  else if(chunkChanged) acc = ACC_CHUNK[`${st.size}|${st.ov}|${st.tbl?1:0}`] ?? null;
+  else if(kChanged)     acc = ACC_K[st.k] ?? null;
+  else                  acc = ACC_PRESET[st.preset] ?? null;
+  if(acc===null && accTag==="측정") accTag="미측정";
+
+  /* 경로 혼합 → 콜 수 · 응답시간 (실측 두 점) */
+  const T_FAST=1.32, T_RAG=4.96;
+  const fast = st.earlyBlock ? 0.28 : 0.0;          // 조기차단 경로 비중(대시보드 실측)
+  let call = fast*1 + (1-fast)*2;
+  const fireRate = st.qscope==="착오송금만" ? 0.020 : 0.042;
+  if(st.askMode==="LLM") call += fireRate * st.askTurns;
+  let lat = fast*T_FAST + (1-fast)*T_RAG;
+  const cost = BASE_COST * (call/BASE_CALL) * (st.maxTok/512*0.45 + 0.55);
+  return {acc, accTag, call, lat, cost};
+}
+
+function paint(){
+  const st = readState();
+  const diff = Object.keys(LABEL).filter(k=>String(st[k])!==String(BASE_CFG[k]));
+  const rb = diff.filter(k=>REBUILD.has(k));
+
+  chgBadge.textContent = diff.length ? `${diff.length}건 변경 · 미적용` : "변경 없음";
+  chgBadge.className = "badge " + (diff.length ? (rb.length?"warn":"ok") : "");
+  chgSub.textContent = diff.length ? "저장하기 전 예상 결과입니다." : "설정을 바꾸면 여기에 예상 결과가 표시됩니다.";
+  chgList.innerHTML = diff.length ? diff.map(k=>{
+    const [lab,tab]=LABEL[k];
+    return `<div><b>${lab}</b> <span style="color:var(--tx3)">(${tab}번 탭)</span><br>
+      ${fmt(k,BASE_CFG[k])} <span class="arw">→</span> <b>${fmt(k,st[k])}</b>
+      ${REBUILD.has(k)?'<span class="rb">재빌드 필요</span>':''}</div>`;}).join("") : "";
+
+  const e = estimate(st, diff);
+  const set=(id,v)=>document.getElementById(id).textContent=v;
+  set("mAcc0", BASE_ACC.toFixed(4));
+  set("mAcc1", e.acc===null ? "?" : e.acc.toFixed(4));
+  mAccT.textContent = e.accTag;
+  mAccT.className = "tag " + (e.accTag==="측정"?"ok":e.accTag==="복합"?"warn":"bad");
+  set("mCall0", BASE_CALL.toFixed(2)); set("mCall1", e.call.toFixed(2));
+  set("mLat0", BASE_LAT.toFixed(1)+"초"); set("mLat1", e.lat.toFixed(1)+"초");
+  set("mCost0", "₩"+BASE_COST.toFixed(1)); set("mCost1", "₩"+e.cost.toFixed(1));
+
+  let note="", cls="note";
+  if(rb.length){ cls="note bad";
+    note = `<b>재빌드가 필요한 변경 ${rb.length}건</b>이 있습니다. 저장 시 문서를 다시 자르고 전체를 재계산하며,
+            검색 방식 프리셋과 되묻기 조합 테이블 근거가 함께 무효화됩니다. → <b>⑦ 문서 처리</b> 탭에서 A/B 평가 후 적용하세요.`;}
+  else if(e.accTag==="복합"){ cls="note";
+    note = "정확도에 영향을 주는 항목을 <b>두 가지 이상</b> 동시에 바꿨습니다. 조합 효과는 곱해지지 않으므로 예측할 수 없습니다 — A/B 평가가 필요합니다.";}
+  else if(e.accTag==="미측정"){ cls="note";
+    note = "이 값은 <b>평가한 적이 없습니다.</b> 숫자를 추정하지 않고 비워 둡니다. A/B 평가 후 확인하세요.";}
+  else if(e.acc!==null && e.acc < BASE_ACC - 0.0001){ cls="note bad";
+    note = `정확도가 <b>${BASE_ACC.toFixed(4)} → ${e.acc.toFixed(4)}</b>로 떨어집니다.`;}
+  chgNote.style.display = note?"block":"none"; chgNote.className=cls; chgNote.innerHTML=note;
+
+  btnReset.disabled = btnSave.disabled = !diff.length;
+  btnSave.textContent = rb.length ? "저장 (재빌드 필요)" : "저장";
+}
+
+btnReset.onclick = ()=>{ location.reload(); };
+btnSave.onclick = ()=>{
+  const st=readState(); const rb=Object.keys(LABEL).filter(k=>REBUILD.has(k)&&String(st[k])!==String(BASE_CFG[k]));
+  if(rb.length){ alert("재빌드가 필요한 변경이 포함돼 있습니다.\n\n⑦ 문서 처리 탭에서 A/B 평가를 실행한 뒤 [적용 & 재빌드]를 눌러 주세요."); return; }
+  alert("설정이 저장됐습니다. 다음 질의부터 반영됩니다.");
+};
+
+document.addEventListener("input", paint);
+document.addEventListener("click", ()=>setTimeout(paint,0));
+document.addEventListener("change", paint);
+paint();
+</script>
+</body>
+</html>

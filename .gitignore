@@ -37,6 +37,12 @@ build/
 *.safetensors
 *.h5
 *.onnx
+# 라우터 체크포인트(2.4GB, pytorch_model.bin) — faq_bf_map.py --router 입력. 산출물 bf_map.jsonl만 커밋.
+router_moai_embedding_model/
+# 리랭커 실험 입력 패키지 — rerank_colab/prepare_inputs.py 재생성 산출물
+rerank_colab/rerank_inputs.zip
+# 그리드서치 전량 결과(29만 행) — tune_params_v2.py로 50초에 재생성. 요약만 커밋.
+crawler/data/tune_v2_*.json
 wandb/
 mlruns/
 runs/
@@ -84,3 +90,10 @@ corpus/
 # local files
 .claude/
 backup/
+
+# ===== 관리자 콘솔 런타임 상태 =====
+# 설정 오버라이드·첨부 오버레이·잡 기록·업로드·백업은 기기별 상태다. 코드만 커밋한다.
+admin/data/*
+!admin/data/.gitkeep
+# 마운트 환경에서 git이 남긴 잠금 파일 치우는 자리(삭제 권한이 없어 옮겨만 둔다)
+_to_delete/
