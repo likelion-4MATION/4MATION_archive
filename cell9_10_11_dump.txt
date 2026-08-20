@@ -1,9 +1,0 @@
---- cell 9 repr tail ---
-'영해야 한다.\nmodel.config.pad_token_id = tokenizer.pad_token_id\n\n# safetensors 저장 시 "non contiguous tensor" 오류 방지 — 미리 방어적으로 정리\nfor _p in model.parameters():\n    _p.data = _p.data.contiguous()\n\nprint("모델 로딩 성공 — 이 지점을 통과했다는 것 자체가 1차 리스크(로딩 실패) 해소를 의미한다.")'
-
---- cell 10 repr tail ---
-'del=model,\n    args=training_args,\n    train_dataset=train_ds,\n    eval_dataset=val_ds,\n    compute_metrics=compute_metrics,\n    callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],\n)\n\ntrain_result = trainer.train()\nprint(trainer.evaluate())'
-
---- cell 11 repr tail ---
-'_gap_recovered(local_correct, gpt4_correct, msp[np.array(idxs)])\n        if apgr is None:\n            print("[효율] APGR skip — gpt4_correct(문항별 GPT-4 정답여부) 라벨이 없음.")\n        else:\n            print(f"[효율] APGR={apgr:.3f}")\n\n\nevaluate_router(test_rows)'
-

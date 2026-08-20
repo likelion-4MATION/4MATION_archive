@@ -102,12 +102,20 @@ BF_QUERY_KEYWORDS = {
 }
 QBF_MIN_SCORE = 3
 QBF_MARGIN = 2
+# 키워드 분류기가 기권했을 때 1차 검색 결과로 업무를 역추론한다(의사 적합성 피드백).
+# 실측: 기권 128/448건(28.6%) 중 대부분이 '모호'가 아니라 '사전에 걸리는 말이 아예 없음'이라
+# 키워드로는 손쓸 수 없다. 반면 dense 검색기는 질의를 의미적으로 이해하고 있으므로
+# 1차 상위 결과의 business_function을 순위 가중 투표해 우세 업무를 얻는다.
+# 정답 라벨을 쓰지 않으므로 실배포 경로에서 그대로 동작하고, 1차 랭킹을 재사용해 비용이 없다.
+# A/B(eval_prf_bf.py): TEST hit@5 .855->.859 · VAL .839->.842 (두 셋 모두 개선). None이면 비활성.
+QBF_PRF_TOPN = 5        # 투표에 쓸 1차 상위 개수
+QBF_PRF_MIN_SHARE = 0.40  # 1위 업무 득표 비중이 이 값 이상일 때만 채택
 BF_DOC_CAP = 5     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
 BF_MODE = "soft"
 # bge-m3 재튜닝(2026-07-22): 강한 dense에 맞춰 부스트↓·dense가중↑ (eval_rrf_tune A/B, A안).
-BF_BOOST = 0.005          # 소프트부스트 강도(과보정 방지: 0.02→0.005)
+BF_BOOST = 0.04         # 소프트부스트 강도(과보정 방지: 0.02→0.005)
 RRF_ALPHA = 0.6        # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
 RRF_K = 5                 # RRF 상수(낮을수록 상위 랭크 신뢰↑). bge-m3 스윕 최적값(60→5).
 FACET_BOOST = 0.05       # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산. eval_facet A/B 채택.
@@ -339,6 +347,29 @@ class Searcher:
                 seen[d] = seen.get(d, 0) + 1
         return out
 
+    def _infer_bf_from_pool(self, pool: list[tuple[int, float]]) -> str | None:
+        """1차 검색 상위 결과의 business_function을 순위 가중 투표해 업무를 역추론한다.
+
+        키워드 분류기가 기권했을 때만 쓴다. 정답 라벨을 참조하지 않으므로 실배포
+        경로에서 그대로 동작한다. 우세 업무의 득표 비중이 QBF_PRF_MIN_SHARE 미만이면
+        판단을 보류하고 None을 돌려준다(기존 기권과 동일 동작).
+        """
+        if not QBF_PRF_TOPN or not pool:
+            return None
+        votes: dict[str, float] = {}
+        total = 0.0
+        for rank, (idx, _) in enumerate(pool[:QBF_PRF_TOPN], 1):
+            bf = self.chunks[idx].get("business_function")
+            if not bf:
+                continue
+            w = 1.0 / rank          # 상위일수록 큰 표
+            votes[bf] = votes.get(bf, 0.0) + w
+            total += w
+        if not votes or total <= 0:
+            return None
+        best, best_v = max(votes.items(), key=lambda x: x[1])
+        return best if (best_v / total) >= QBF_PRF_MIN_SHARE else None
+
     def search(self, query: str, k: int = 5, mode: str = "hybrid") -> list[dict]:
         if mode == "dense":
             hits = self.dense(query, k)
@@ -348,6 +379,10 @@ class Searcher:
             # 질의 업무 분류 → 업무 신호 반영(soft 부스트 / hard 제외) + doc-count cap.
             # 깊은 풀을 받아 문서당 BF_DOC_CAP개로 제한 후 top-k → 몬스터 문서 독점 차단.
             bf = classify_query_bf(query)
+            if bf is None and QBF_PRF_TOPN:
+                # 키워드가 기권 → 부스트 없이 1차 랭킹을 뽑아 업무를 역추론한 뒤 다시 융합.
+                base = self.hybrid_soft(query, len(self.chunks), bf=None, boost=0.0)
+                bf = self._infer_bf_from_pool(base)
             if BF_MODE == "soft":
                 pool = self.hybrid_soft(query, len(self.chunks), bf=bf, boost=BF_BOOST)
             else:

@@ -29,8 +29,9 @@ OUT_PATH = "data/chunks.jsonl"
 DOC_ATT_PATH = "data/doc_attachments.json"   # [doc-agg] 문서 단위 첨부 집합
 
 CHUNK_SIZE = 800
-OVERLAP = 200
+OVERLAP = 100   # 03 문서 노션 권고 준수(docstring과 실제 값이 어긋나 있던 드리프트 수정)
 MIN_CHUNK = 60   # 표 사이 낀 짧은 헤딩/라인 파편 병합 임계
+TABLE_GAP_MAX = 12   # 표 안 파이프 없는 구간(<br> 다항목 등) 흡수 유예. 0=엄격, None=무제한.
 
 SCHEMA_FIELDS = ["chunk_id", "parent_doc_id", "business_function", "sub_category",
                  "page_type", "coverage", "variant", "source_url",
@@ -128,16 +129,30 @@ def split_faq(text: str) -> list[str]:
 
 
 def _blocks(text: str) -> list[tuple[str, str]]:
-    """표(연속 |라인)는 ('table', ...) 원자 블록, 그 외는 ('text', 라인)."""
+    """표(파이프 줄, 사이 TABLE_GAP_MAX줄까지 파이프 없는 줄 흡수)는 ('table', ...) 원자 블록,
+    그 외는 ('text', 라인).
+
+    표 셀의 <br> 다항목이 파이프 없는 일반 줄로 직렬화되면서 '연속 파이프 줄=표'만 보는
+    휴리스틱이 표 중간에서 끊기던 문제 대응 — 파이프 줄 뒤 TABLE_GAP_MAX줄 이내에 파이프
+    줄이 다시 나오면 그 사이 비파이프 줄도 표에 흡수한다. 유예를 넘기면(=진짜 표→산문→표
+    경계) 그 지점에서 표를 끊는다.
+    """
     lines = [l for l in text.split("\n") if l.strip()]
     out, i = [], 0
     while i < len(lines):
         if "|" in lines[i]:
-            j = i
-            while j < len(lines) and "|" in lines[j]:
-                j += 1
-            out.append(("table", "\n".join(lines[i:j])))
-            i = j
+            last_pipe = i
+            j = i + 1
+            while j < len(lines):
+                if "|" in lines[j]:
+                    last_pipe = j
+                    j += 1
+                elif TABLE_GAP_MAX is None or (j - last_pipe) <= TABLE_GAP_MAX:
+                    j += 1
+                else:
+                    break
+            out.append(("table", "\n".join(lines[i:last_pipe + 1])))
+            i = last_pipe + 1
         else:
             out.append(("text", lines[i]))
             i += 1
