@@ -1,6 +1,6 @@
 """RAG 검색 공용 모듈 — 임베딩 · dense(FAISS) · BM25(kiwi) · 하이브리드(RRF).
 
-- 임베딩: sentence-transformers `jhgan/ko-sroberta-multitask` (로컬 한국어 SBERT, 768d).
+- 임베딩: sentence-transformers `dragonkue/BGE-m3-ko` (bge-m3 한국어 파인튜닝, 1024d).
 - dense: FAISS IndexFlatIP + 정규화 임베딩(= 코사인).
 - sparse: rank_bm25 BM25Okapi, kiwipiepy 형태소 토큰.
 - 융합: RRF(k=60). 리랭킹·파라미터 튜닝은 D1 범위 밖(D2 판단).
@@ -19,7 +19,7 @@ import numpy as np
 
 MODEL_NAME = "dragonkue/BGE-m3-ko"
 INDEX_DIR = "data/index"
-EMB_DIM = 1024   # bge-m3-ko 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
+EMB_DIM = 1024   # bge-m3 임베딩 차원(모델 교체 시 갱신). build 시 실제 임베딩 차원으로 자동 보정됨.
 
 _model = None
 _kiwi = None
@@ -78,28 +78,27 @@ def chunk_embed_text(chunk: dict) -> str:
 BF_QUERY_KEYWORDS = {
     "예금자보호제도": [("보호돼", 3), ("보호되", 3), ("보호받", 3), ("보호 되", 3),
                   ("보호대상", 3), ("보호한도", 3), ("예금자보호", 3), ("예금 보호", 3),
-                  ("얼마까지", 1), ("한도", 1), ("1억", 1), ("5천", 1), ("새마을금고", 3),
-                  ("신협", 3), ("우체국", 2), ("외화", 1), ("펀드", 2),
-                  ("예금보험 가입", 2), ("세전", 1)],
-    "예금보험금 안내": [("예금보험금", 1), ("가지급금", 3), ("개산지급금", 1), ("보험금", 1),
-                  ("보험사고", 2), ("망하면", 1), ("문 닫으면", 1), ("대신 주는", 1),
-                  ("대신 준다", 1)],
+                  ("얼마까지", 2), ("한도", 2), ("1억", 2), ("5천", 2), ("새마을금고", 3),
+                  ("신협", 3), ("우체국", 2), ("외화", 2), ("펀드", 2),
+                  ("예금보험 가입", 2), ("세전", 2), ("저축은행", 1)],
+    "예금보험금 안내": [("예금보험금", 3), ("가지급금", 3), ("개산지급금", 3), ("보험금", 2),
+                  ("보험사고", 2), ("망하면", 2), ("문 닫으면", 2), ("대신 주는", 2),
+                  ("대신 준다", 2), ("지급", 1), ("창구", 1)],
     "고객 미수령금 신청": [("미수령", 3), ("못 찾", 3), ("못 받은 돈", 3), ("안 찾아간", 3),
-                   ("찾아가지", 3), ("돌아가신", 1), ("상속인", 2), ("상속", 1), ("통합신청", 2)],
+                   ("찾아가지", 3), ("돌아가신", 2), ("상속인", 2), ("상속", 1), ("통합신청", 2)],
     "착오송금 반환 신청": [("착오송금", 3), ("잘못 보낸", 3), ("잘못 송금", 3), ("잘못 이체", 3),
-                   ("계좌 잘못", 3), ("돈 잘못", 3), ("딴 사람", 1),
+                   ("이체 실수", 3), ("계좌 잘못", 3), ("돈 잘못", 3), ("딴 사람", 2),
                    ("반환", 2), ("수취인", 2), ("이체수수료", 2), ("이의제기", 2)],
-    "채무조정 안내": [("채무조정", 3), ("개인회생", 3), ("신용회복", 2),
-                 ("빚", 2), ("채무", 3), ("감면", 1), ("빚 조정", 3), ("빚 감면", 3),
-                 ("연체", 1)],
+    "채무조정 안내": [("채무조정", 3), ("개인회생", 3), ("면책", 3), ("신용회복", 3),
+                 ("빚", 3), ("채무", 3), ("감면", 3), ("빚 조정", 3), ("빚 감면", 3),
+                 ("파산", 2), ("연체", 2)],
     "은닉재산 신고": [("은닉재산", 3), ("숨긴 재산", 3), ("숨겨둔", 3), ("숨긴 돈", 3),
-                 ("제보", 3), ("포상금", 2), ("부실관련자", 3),
-                 ("은닉", 2)],
+                 ("제보", 3), ("포상금", 3), ("부실관련자", 3), ("신고센터", 2),
+                 ("은닉", 2), ("신고", 1)],
 }
-QBF_MIN_SCORE = 3
-QBF_MARGIN = 2
+QBF_MIN_SCORE = 3          # 키워드 분류 최소 점수
+QBF_MARGIN = 2             # 키워드 분류 1위–2위 마진
 BF_DOC_CAP = 4     # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단)
-# cap=4/sib_boost=0.05/sib_topn=3 조합 채택(2026-08-19 grid, hit@5=0.808 — 사용자 지정 복원값).
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
 BF_MODE = "soft"
@@ -108,16 +107,11 @@ BF_BOOST = 0.04          # 소프트부스트 강도. 0.01→0.04(2026-08-18, ca
 RRF_ALPHA = 0.6           # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
 RRF_K = 5                 # RRF 상수(낮을수록 상위 랭크 신뢰↑). bge-m3 스윕 최적값(60→5).
 FACET_BOOST = 0.1        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산. eval_facet A/B 채택.
-# sibling-boost(2026-08-18): 표 병합 재청킹(chunk.py) 이후 채택. RRF top-N에 든 문서의
-# 다른 청크(형제)를 그 문서 최고점수 비례로 끌어올린다 — and-relation 정답의 80%가
-# "같은 문서 내 서로 다른 청크 2개"라 top-5 슬롯 안에 형제 청크가 같이 들어오게 돕는다.
-# 과분할 상태(재청킹 전)에서는 효과가 없었음(형제가 너무 많고 파편화돼 신호가 흐려짐) —
-# 청크가 굵어진 뒤에야 유효해진 휴리스틱이라 재청킹과 묶어서 도입.
-SIBLING_BOOST = 0.05
-SIBLING_TOPN = 3
-# cap=4/boost=0.05/topn=3 (2026-08-19, 사용자 지정): v9_dupfix2 grid에서 hit@5=0.808.
-# 같은 grid의 boost=0.10/topn=5(cap=5)가 hit@5=0.830으로 더 높게 나온 기록도 있음 —
-# 재현/비교 필요 시 이 값으로 바꿔 다시 돌려볼 것.
+# 2026-08-20 anc 병합 검토: RRF_ALPHA/RRF_K/BF_BOOST/FACET_BOOST/BF_DOC_CAP를 anc값
+# (0.65/4/0.06/0.05/5)으로 바꿔 격리 테스트했으나 gt_natural450_v9_dupfix2(448문항,
+# hybrid_bf) 기준 이 kokopas 값 대비 이득 없음(Hit@5 동일 0.812) — 유지.
+# sibling-boost(SIBLING_BOOST=0.05/SIBLING_TOPN=3)도 같은 라운드에 격리 테스트,
+# Hit@5 0.812→0.801로 악화(표가 자기완결적이 된 181청크 코퍼스에서는 역효과) — 제외 확정.
 # 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
 # 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
 BF_SHARED_DOCS = {
@@ -169,9 +163,6 @@ def query_facets(query: str) -> set:
     for kws, tok in DIR_RULES:
         if any(k.replace(" ", "") in qn for k in kws):
             facets.add(tok); break
-    # 착오송금 kmrsItrdAplyMthd 같은 "신청방법" 허브 문서는 방문/구비서류 내용을
-    # 자체 포함하는데도 세부 facet(방문접수/구비서류) 매칭 문서에 밀려 손해를 봄
-    # (eval_anchor_v3 v9_dupfix2 A/B: 전 지표 개선, 착오송금 Hit@3 0.500→0.512).
     if facets & {"방문접수", "구비서류"}:
         facets.add("신청방법")
     return facets
@@ -277,7 +268,10 @@ class Searcher:
         return [(int(i), float(scores[i])) for i in order]
 
     def hybrid(self, query: str, k: int = 10, pool: int = 20,
-               rrf_k: int = RRF_K, bf: str | None = None) -> list[tuple[int, float]]:
+               rrf_k: int | None = None, bf: str | None = None) -> list[tuple[int, float]]:
+        # rrf_k 기본값을 시그니처에 박지 않는다 — 기본인자는 정의 시점에 고정되므로
+        # 런타임에 rag.RRF_K를 바꿔도 반영되지 않아 A/B가 조용히 틀린다(실제로 겪음).
+        rrf_k = RRF_K if rrf_k is None else rrf_k
         # bf 지정 시(하드 필터): 후보를 해당 업무 청크로 제한. 필터링으로 후보가
         # 줄므로 pool을 전체로 넓혀 in-bf 청크를 빠짐없이 확보.
         dpool = pool if bf is None else len(self.chunks)
@@ -298,14 +292,19 @@ class Searcher:
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return [(idx, score) for idx, score in ranked]
 
-    def hybrid_soft(self, query: str, k: int = 10, rrf_k: int = RRF_K,
+    def hybrid_soft(self, query: str, k: int = 10, rrf_k: int | None = None,
                     bf: str | None = None, boost: float = 0.0,
-                    alpha: float = RRF_ALPHA) -> list[tuple[int, float]]:
+                    alpha: float | None = None) -> list[tuple[int, float]]:
         """소프트부스트 융합 — 전체 풀 RRF 후 같은 업무 청크에 +boost(제외 없음).
 
         하드필터(hybrid(bf=...))와 달리 타 업무 청크를 남겨두므로, 질의 분류가
         틀려도 정답이 후보에 살아있다(graceful degradation). boost=0이면 순수 하이브리드.
+
+        rrf_k·alpha 기본값은 시그니처가 아니라 호출 시점에 모듈 상수에서 읽는다 —
+        기본인자로 박으면 정의 시점에 고정돼 런타임 A/B가 조용히 틀린다.
         """
+        rrf_k = RRF_K if rrf_k is None else rrf_k
+        alpha = RRF_ALPHA if alpha is None else alpha
         N = len(self.chunks)
         d = self.dense(query, N)
         s = self.sparse(query, N)
@@ -325,16 +324,6 @@ class Searcher:
                         hit = sum(1 for t in facets if t in c.get("sub_category", ""))
                         if hit:
                             rrf[idx] += FACET_BOOST * hit
-        if SIBLING_BOOST > 0:
-            pre_ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)
-            doc_best: dict[str, float] = {}
-            for idx, sc in pre_ranked[:SIBLING_TOPN]:
-                dcid = self.chunks[idx]["parent_doc_id"]
-                doc_best[dcid] = max(doc_best.get(dcid, 0.0), sc)
-            for idx in rrf:
-                dcid = self.chunks[idx]["parent_doc_id"]
-                if dcid in doc_best:
-                    rrf[idx] += SIBLING_BOOST * doc_best[dcid]
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return ranked
 

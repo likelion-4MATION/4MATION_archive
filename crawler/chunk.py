@@ -29,7 +29,7 @@ OUT_PATH = "data/chunks.jsonl"
 DOC_ATT_PATH = "data/doc_attachments.json"   # [doc-agg] 문서 단위 첨부 집합
 
 CHUNK_SIZE = 800
-OVERLAP = 200
+OVERLAP = 100
 MIN_CHUNK = 60   # 표 사이 낀 짧은 헤딩/라인 파편 병합 임계
 
 SCHEMA_FIELDS = ["chunk_id", "parent_doc_id", "business_function", "sub_category",
@@ -127,17 +127,44 @@ def split_faq(text: str) -> list[str]:
     return [c.strip() for c in chunks if c.strip()]
 
 
+# 표 셀 안 <br> 다항목은 파이프 없는 줄로 직렬화된다. 그 줄에서 표 블록이 끊기면
+# 표 하나가 조각나고(보호대상 표 → 9블록, 착오송금 구비서류 → 18블록), 조각마다
+# 어느 행인지 알 수 없게 된다. 그래서 **파이프 줄 사이에 낀 비-파이프 줄은 셀
+# 연속으로 보고 흡수**한다. 코퍼스 실측: 그런 구간 37개 중 최장이 11줄이며 전부
+# 실제 셀 내용이었다(산문 오흡수 0건).
+# TABLE_GAP_MAX는 신규 문서에서 "표 → 산문 → 표"가 나타날 때의 안전장치다. 현재
+# 코퍼스 최대 구간이 11줄이라 12는 기존 표를 전부 통과시키면서 이상 케이스만 막는다.
+#   0    흡수 안 함 = 옛 동작(연속 파이프 줄만 표). A/B 대조군.
+#   N    N줄 이하 구간만 흡수.
+#   None 무제한 흡수(상한 없음).
+TABLE_GAP_MAX: int | None = 12
+
+
 def _blocks(text: str) -> list[tuple[str, str]]:
-    """표(연속 |라인)는 ('table', ...) 원자 블록, 그 외는 ('text', 라인)."""
+    """표는 ('table', ...) 원자 블록, 그 외는 ('text', 라인).
+
+    표 블록 = 첫 파이프 줄부터 마지막 파이프 줄까지. 사이의 비-파이프 줄은
+    TABLE_GAP_MAX 이하 길이일 때만 흡수한다(셀 내부 다항목).
+    """
     lines = [l for l in text.split("\n") if l.strip()]
     out, i = [], 0
     while i < len(lines):
         if "|" in lines[i]:
-            j = i
-            while j < len(lines) and "|" in lines[j]:
-                j += 1
-            out.append(("table", "\n".join(lines[i:j])))
-            i = j
+            j, last = i, i
+            while j < len(lines):
+                if "|" in lines[j]:
+                    last = j
+                    j += 1
+                    continue
+                k = j
+                while k < len(lines) and "|" not in lines[k]:
+                    k += 1
+                # 다음 파이프 줄이 없거나 간격이 상한을 넘으면 표는 last에서 끝난다.
+                if k >= len(lines) or (TABLE_GAP_MAX is not None and k - j > TABLE_GAP_MAX):
+                    break
+                j = k
+            out.append(("table", "\n".join(lines[i:last + 1])))
+            i = last + 1
         else:
             out.append(("text", lines[i]))
             i += 1
@@ -145,24 +172,17 @@ def _blocks(text: str) -> list[tuple[str, str]]:
 
 
 def split_generic(text: str) -> list[str]:
-    """표 블록도 텍스트처럼 CHUNK_SIZE까지 인접 블록과 합친다.
-
-    '표는 중간분할 금지'는 지키되(하드분할 루프는 text 블록에만 적용), 작은 표 조각들이
-    (아코디언 섹션마다 미니 표 하나씩 있는 페이지처럼) 무조건 단독 청크로 끊기지 않도록
-    먼저 cur에 합칠 수 있는지 시도한다. 합쳐서 CHUNK_SIZE를 넘으면 표는 그대로(더 쪼개지
-    않고) 단독 청크로 플러시, 텍스트는 기존처럼 오버랩+하드분할한다.
-    """
     chunks, cur = [], ""
     for kind, blk in _blocks(text):
-        cand = (cur + "\n" + blk).strip() if cur else blk
-        if len(cand) <= CHUNK_SIZE:
-            cur = cand
-            continue
         if kind == "table":
             if cur.strip():
                 chunks.append(cur.strip())
-            chunks.append(blk)          # 표 단독 청크 (중간분할 금지, 크기 초과 허용)
+            chunks.append(blk)          # 표 단독 청크 (중간분할 금지)
             cur = ""
+            continue
+        cand = (cur + "\n" + blk).strip() if cur else blk
+        if len(cand) <= CHUNK_SIZE:
+            cur = cand
         else:
             if cur.strip():
                 chunks.append(cur.strip())
