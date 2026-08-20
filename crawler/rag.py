@@ -52,6 +52,23 @@ def tokenize(text: str) -> list[str]:
     return out or [text.lower()]
 
 
+# 구어 ↔ 코퍼스 법정용어 사전 — BM25 질의측에만 적용(인덱스 무수정).
+# 실패 실물에서만 뽑았고 질의 ID가 아니라 토큰에 걸리므로 질의별 하드코딩이 아니다.
+# 예: "아이 이름으로 남은 돈"의 gold는 "예금자가 미성년자인 경우"라 BM25 원점수가 0이었다.
+QUERY_SYNONYMS = {
+    "아이": ["미성년자"], "애": ["미성년자"], "자녀": ["미성년자"], "어린": ["미성년자"],
+    "넘어가": ["계약이전"], "넘기": ["계약이전"], "인수": ["계약이전"],
+    "돌아가시": ["상속인", "사망"], "유족": ["상속인"],
+    "빚": ["채무"], "깎": ["감면"],
+    "망하": ["파산", "보험사고"], "문닫": ["파산", "보험사고"],
+}
+
+
+def expand_query_tokens(toks: list[str]) -> list[str]:
+    """원 토큰은 남기고 동의어만 덧붙인다(치환이 아니라 확장 — 원 표현 매칭을 잃지 않는다)."""
+    return toks + [s for t in toks for s in QUERY_SYNONYMS.get(t, ())]
+
+
 def embed_texts(texts: list[str]) -> np.ndarray:
     m = get_model()
     e = m.encode(texts, normalize_embeddings=True, show_progress_bar=False)
@@ -99,14 +116,14 @@ BF_QUERY_KEYWORDS = {
 QBF_MIN_SCORE = 3          # 키워드 분류 최소 점수
 QBF_MARGIN = 2             # 키워드 분류 1위–2위 마진
 # hybrid_bf: parent_doc_id당 top-k 청크 수 제한(문서 다양성↑, 몬스터 문서 독점 차단).
-# 99 = 사실상 해제. 최종 top-30 안에 같은 문서 청크가 100개 들어올 수 없으므로 절대 물리지 않는다.
-# 근거(2026-08-20 앵커평가 448문항): cap=4와 cap해제의 top-1/top-3 결과가 450/450 질의에서
-# 완전 동일 — Hit@1 0.475 / Hit@3 0.804 / Hit@5 0.888로 소수점 셋째자리까지 같다. top-5도
-# 443/450 동일(7건만 물림). 즉 서빙 K(=3)에서 이 파라미터는 아무 일도 하지 않는다.
-# 도입 근거였던 "몬스터 문서의 top-3 독점"(hit@3 0.793→0.857)은 215청크 + parent_doc_id
-# 매칭 시절 측정이고, 표 병합으로 181청크가 되면서 소멸했다 — 정당화 측정이 만료된 파라미터.
-# 비용: Hit@10 0.964→0.958, Hit@30 0.991→0.989. top-10 이상을 컨텍스트로 넣는다면 4로 되돌릴 것.
-BF_DOC_CAP = 99
+# 근거(2026-08-20 soft Hit@5 실패분석 448문항): 실패 36건 중 31건이 "top-30엔 있으나 top-5 밖",
+# 그 상당수가 top-5를 한 문서(FAQ 38청크 등)의 청크로 도배당한 사례였다.
+# cap=3 A/B: soft Hit@5 .9196→.9263 (개선 3 · 악화 0, p=0.25 ns) · nDCG@5 .7048→.7225 ·
+# soft Hit@1 .6049 불변. 홀짝 분할 양쪽 개선(.9286→.9330 / .9107→.9196).
+# 비용: soft Hit@30 .9955→.9888 — top-30이 최소 10개 문서에서 나와야 하므로 한 문서의
+# 4번째 이후 청크가 정답인 3문항을 잃는다. 서빙 K(3~5)에서는 이득이 손실보다 크다.
+# cap 초과분을 버리지 않고 뒤로 미루는 변형(capq)도 시험했으나 38문서×3=114>30이라 결과 동일 — 단순한 쪽 유지.
+BF_DOC_CAP = 3
 # 업무 신호 반영 방식: "soft"(같은 업무 청크에 RRF +BF_BOOST, 제외 없음) | "hard"(타 업무 제외).
 # soft 채택(2026-07-22): 오분류 시 정답을 배제하지 않아 실트래픽에 안전 + 리랭킹 토대. 하드는 A/B 재현용 보존.
 BF_MODE = "soft"
@@ -114,6 +131,14 @@ BF_MODE = "soft"
 BF_BOOST = 0.04          # 소프트부스트 강도. 0.01→0.04(2026-08-18, cap=5와 짝으로 그리드 최선값).
 RRF_ALPHA = 0.6           # 가중 RRF의 dense 비중(0.5 동일가중~1.0 dense-only). sparse=1-RRF_ALPHA
 RRF_K = 5                 # RRF 상수(낮을수록 상위 랭크 신뢰↑). bge-m3 스윕 최적값(60→5).
+# ── 2026-08-20 앵커평가 448문항 실패분석 기반 추가 랭킹항 ────────────────────
+# 분석 결과: top-30 recall 0.989인데 Hit@1은 0.475 — 병목은 후보 확보가 아니라 1~3위 변별.
+# Hit@1 실패 235건 중 147건(62.6%)이 정답 rank 2~3, 32.6%가 1위와의 score gap<0.02.
+# 원인은 RRF가 dense의 연속 유사도 마진을 이산 순위로 뭉개는 것(dense 1위 28건이 융합 후 1위 상실).
+DENSE_W = 0.5    # RRF 위에 dense 코사인 원점수를 연속항으로 가산 — 이산 순위가 뭉갠 마진 복원.
+TITLE_W = 0.04   # 질의 토큰 ∩ (page_title+page_type) 토큰 비율 가산 — 동일업무 형제문서 변별(실패의 60%).
+# A/B(448문항): baseline .475/.804/.888/MRR .649 → .516/.806/.893/MRR .673 (개선 24 · 악화 6).
+# 홀짝 분할 교차확인 양쪽 개선(.451→.513 / .500→.518). 질의별 하드코딩 없음, 인덱스 재빌드 불요.
 FACET_BOOST = 0.1        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산. eval_facet A/B 채택.
 # 2026-08-20 anc 병합 검토: RRF_ALPHA/RRF_K/BF_BOOST/FACET_BOOST/BF_DOC_CAP를 anc값
 # (0.65/4/0.06/0.05/5)으로 바꿔 격리 테스트했으나 gt_natural450_v9_dupfix2(448문항,
@@ -262,6 +287,15 @@ class Searcher:
         self.index = faiss.read_index(str(self.dir / "faiss.index"))
         with open(self.dir / "bm25.pkl", "rb") as f:
             self.bm25 = pickle.load(f)["bm25"]
+        self._title_toks: list[set] | None = None   # TITLE_W용 지연 캐시
+
+    def _titles(self) -> list[set]:
+        """청크별 (page_title + page_type) 토큰 집합. 코퍼스 고정이므로 1회만 계산."""
+        if self._title_toks is None:
+            self._title_toks = [
+                set(tokenize(f"{c.get('page_title') or ''} {c.get('page_type') or ''}"))
+                for c in self.chunks]
+        return self._title_toks
 
     def dense(self, query: str, k: int = 10) -> list[tuple[int, float]]:
         q = embed_texts([query])
@@ -271,7 +305,7 @@ class Searcher:
     def sparse(self, query: str, k: int = 10) -> list[tuple[int, float]]:
         if self.bm25 is None:
             return []
-        scores = self.bm25.get_scores(tokenize(query))
+        scores = self.bm25.get_scores(expand_query_tokens(tokenize(query)))
         order = np.argsort(scores)[::-1][:k]
         return [(int(i), float(scores[i])) for i in order]
 
@@ -321,17 +355,31 @@ class Searcher:
             rrf[idx] = rrf.get(idx, 0.0) + alpha / (rrf_k + rank + 1)
         for rank, (idx, _) in enumerate(s):
             rrf[idx] = rrf.get(idx, 0.0) + (1.0 - alpha) / (rrf_k + rank + 1)
+        dsc = dict(d)
         if bf is not None and boost > 0:
             allow = BF_SHARED_DOCS.get(bf, set())
             facets = query_facets(query) if FACET_BOOST > 0 else set()
+            # 업무부스트는 상수가 아니라 dense 유사도에 비례한다. 상수 가산은 같은 업무 청크
+            # 전체를 똑같이 올려 형제문서 혼동(실패의 60%)에서 정확히 상쇄돼 순위를 못 바꾼다.
+            dmax = max(dsc.values(), default=0.0) or 1e-9
             for idx in rrf:
                 c = self.chunks[idx]
                 if c.get("business_function") == bf or c["parent_doc_id"] in allow:
-                    rrf[idx] += boost
+                    rrf[idx] += boost * dsc.get(idx, 0.0) / dmax
                     if facets:
                         hit = sum(1 for t in facets if t in c.get("sub_category", ""))
                         if hit:
                             rrf[idx] += FACET_BOOST * hit
+        # RRF가 뭉갠 연속 신호 복원: dense 코사인 원점수 + 질의·제목 토큰 겹침 비율.
+        # bf 분류 성공 여부와 무관하게 적용(분류 미달 128문항에도 동일하게 효과).
+        if DENSE_W or TITLE_W:
+            qt = set(tokenize(query)) if TITLE_W else set()
+            titles = self._titles() if qt else None
+            for idx in rrf:
+                if DENSE_W:
+                    rrf[idx] += DENSE_W * dsc.get(idx, 0.0)
+                if qt:
+                    rrf[idx] += TITLE_W * len(qt & titles[idx]) / len(qt)
         ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
         return ranked
 

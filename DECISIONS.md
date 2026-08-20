@@ -96,3 +96,162 @@
   거절 문구("확인되지 않는", "안내된 내용이 아니" 등) 감지 시 `check_citations`의
   "출처 번호 미표기" 오탐 방지. 정상 답변의 출처 누락은 계속 플래그됨(검증 완료).
 
+## 2026-08-20 — P0-1: feature/kokopas 부분 stash 복원 확인 (유실 아님)
+
+`stash@{0}` (`WIP on feature/kokopas: b1ea86d`)이 그대로 남아 있음을 확인. **유실 아님** —
+60d3f86 커밋 시 chunk.py 변경분만 빠뜨렸을 뿐, stash 자체는 온전.
+
+- **stash@{0} 내용**: chunk.py(19줄) + rag.py(71줄) + 기타 데이터 파일. 두 파일 다 들어있음.
+- **chunk.py**: `OVERLAP` 100→200, `split_generic()`에서 표 블록도 먼저 인접 텍스트와
+  병합 시도(CHUNK_SIZE 이내면 합침) 후 초과 시에만 단독 청크로 플러시 — "표 병합 청킹".
+  현재 워킹트리 `chunk.py`는 stash 베이스(`eb32e6b`)와 diff 없음 = **아직 미적용 상태**.
+  워킹트리에 uncommitted 변경 없음 (`git status --short` 결과 없음) → stash pop 시 충돌 없이 깨끗하게 적용 가능할 것으로 보임(미검증, 실제 pop 전 재확인 필요).
+- **rag.py 비교**: stash 버전과 60d3f86 커밋 버전이 **다른 값**을 채택하고 있음.
+  - stash: `BF_DOC_CAP=5`, `SIBLING_BOOST=0.10`, `SIBLING_TOPN=5` — 커밋 메시지 근거상
+    v9_dupfix2 grid에서 hit@5=.830 (해당 grid 내 최선).
+  - 60d3f86(현재 HEAD): `BF_DOC_CAP=4`, `SIBLING_BOOST=0.05`, `SIBLING_TOPN=3` — 커밋 코멘트가
+    스스로 "사용자 지정 복원값"이라 칭하며 hit@5=.808. 같은 코멘트 안에 "0.10/5 조합이 .830으로
+    더 높게 나온 기록 있음 — 재현/비교 필요 시 이 값으로 바꿔 다시 돌려볼 것"이라고 자인.
+  - 즉 **현재 HEAD가 stash보다 낮은 성능 값을 채택한 상태로 배포됨**. grid 최선값(stash)이
+    사람 지정값(커밋)으로 대체된 이유는 커밋 메시지에 없음 — 왜 낮은 값을 의도적으로
+    골랐는지 불명. P0-2 (A)/(B) 결정 시 "sibling-boost 파라미터를 stash 값(0.10/5/cap5)으로
+    되돌릴지, 커밋된 값(0.05/3/cap4)을 유지할지"도 함께 결정해야 함 — 이건 원래 P0-2가
+    묻던 A/B 축과는 별개의 세 번째 축이므로 사람 확인 필요.
+- **chunk_embed_text (anchor 임베딩) 부분**: stash와 HEAD 사이 diff 없음 — 이미 d547597에서
+  별도로 반영된 것으로 확인, P0-1 범위 밖.
+- **다음 단계**: P0-2 진행 가능(스태시 유실 없음 확정). 단, (A)/(B) 결정과 별개로
+  sibling-boost 파라미터값 자체(stash 0.10/5 vs 커밋 0.05/3)를 어느 쪽으로 할지
+  사람 승인 필요 — 자동으로 stash 값으로 덮어쓰지 않음.
+
+## 2026-08-20 — P0-2 적용 · P0-3: GT 181청크 재매핑
+
+- **P0-2 적용 완료**: (B) anc 방식 채택(사람 승인). `chunk.py`·`rag.py` anc 버전으로 교체,
+  `rag.py`의 `chunk_embed_text()`만 kokopas 값(anchor 임베딩)으로 되돌림. `faq_bf_map.py`
+  anc에서 추가(import 의존성). anc에 `SIBLING_BOOST` 로직 자체가 없어 P0-1이 남긴
+  "sibling-boost 파라미터 stash값 복원 여부" 질문은 **자동 해소**(그 로직이 사라졌으므로
+  선택지 자체가 없음). 인덱스 181청크로 재빌드 완료.
+- **P0-3 GT 재매핑 — `promote_gt_anchors.py` 새로 안 짬, 기존 `build_gt_dupfix.py` 재사용**:
+  `gt_natural450_v9_dupfix2.jsonl`이 옛 215청크 `chunk_id` 기준이라 새 181청크 corpus 채점 시
+  신뢰 불가(Hit@5=.741, anc 자체 .831대와 괴리)였던 문제. `build_gt_dupfix.py`(anchor_span
+  verbatim 매칭, old id 존재 여부 무관하게 동작)를 새 corpus로 재실행 → 89/450건 gt_chunk_ids
+  갱신, 완전 깨진 6건(zero-valid-gold) 전부 복구. 재평가 결과 **Hit@5 .741 → .812**로 신뢰
+  가능 범위 확보. 상세 수치·재현 절차·잔여 미결(v2 dupfix는 old-id 임베딩 조회라 그대로 못
+  씀)은 `crawler/data/session_handoff_0820_gt_remap.md` 참고.
+
+## 2026-08-20 — P0-4: anc 차이점 개별 격리 검증 · 최종 baseline 확정 (Hit@5 .812 → .821)
+
+P0-2에서 anc를 통째로 채택했으나, anc가 kokopas 대비 실제로 바꾼 항목(TABLE_GAP,
+FAQ BF map, MOAI router, retrieval 파라미터, 그 외 질의측 로직)을 **하나씩 격리해**
+같은 GT(`gt_natural450_v9_dupfix2.jsonl`, 448문항, hybrid_bf)로 재검증했다. 한 번에
+여러 변경을 섞지 않고, baseline(P0-3, Hit@5=.812) 대비 개별 효과만 측정.
+
+**rag.py — 개별 결과**(baseline Hit@1/3/5/10 = .469/.717/.812/.884):
+| 변경 | Hit@1 | Hit@3 | Hit@5 | Hit@10 | 판정 |
+|---|---:|---:|---:|---:|---|
+| 질의 키워드 가중치 anc→kokopas 복원 | .464 | .717 | .812 | .886 | 기각(잡음 수준, Hit@1 소폭 악화) |
+| 패싯 규칙 복원("방문접수/구비서류"→"신청방법", anc가 제거했던 것) | .469 | .719 | .812 | .891 | **채택**(전 지표 비하락) |
+| sibling-boost 복원(SIBLING_BOOST=0.05/TOPN=3, kokopas 옛값) | .469 | .714 | **.801** | .882 | 기각(Hit@5 -0.011 악화 — 표가 자기완결적인 181청크 코퍼스에서 역효과, DECISIONS 이전 우려대로) |
+| RRF_ALPHA/RRF_K/BF_BOOST/FACET_BOOST/BF_DOC_CAP → kokopas 값(0.6/5/0.04/0.1/4) | .471 | .730 | .812 | .886 | **채택**(전 지표 비하락, Hit@3 +0.013) |
+| FAQ BF map(fbm 조인) · MOAI router 배선 | — | — | — | — | **제거**(로컬에 bf_map.jsonl·라우터 체크포인트 없어 두 경로 다 상시 폴백 = 코드상 no-op 증명. 죽은 코드만 삭제, 동작 변화 없음) |
+
+위 채택분(패싯 규칙 + kokopas 파라미터 + FAQ맵/router 제거)을 합쳐 재검증:
+**Hit@1/3/5/10 = .473/.732/.821/.893 — 전 지표 개선.**
+
+**chunk.py — TABLE_GAP_MAX 대조군 실험은 중도 폐기**: TABLE_GAP_MAX=0(옛 동작)으로
+재청킹해 표 병합/OVERLAP 축과 분리 검증하려 했으나, 청크 수가 181→215로 회귀해
+(재청킹 10분+GT 재매핑 필요) 방향 전환 — 이미 anc의 TABLE_GAP_MAX=12는 코퍼스
+실측 근거(코드 주석에 명시: 흡수 구간 37개 중 최장 11줄, 전부 실제 셀 내용, 산문
+오흡수 0건)로 정당화돼 있어 **추가 격리 스윕 없이 그대로 확정**(탑다운 — 이미
+근거가 있는 결정은 재실험하지 않는다). OVERLAP=100·split_generic(표는 항상 단독
+플러시, 병합 없음)도 anc 그대로 유지. chunk.py는 kokopas 대비 anc와 100% 동일.
+
+**최종 baseline**: Hit@5 = **0.821**(n=448, `gt_natural450_v9_dupfix2.jsonl`,
+hybrid_bf, 181청크). chunk.py=anc 그대로, rag.py=anc 골격 + kokopas 파라미터/패싯
+규칙 + chunk_embed_text(anchor 임베딩, kokopas) + FAQ맵/router 코드 제거.
+`crawler/faq_bf_map.py`는 삭제하지 않고 보존(router 체크포인트 확보 시 재검토 대상,
+현재는 rag.py에서 미참조).
+
+---
+
+## 2026-08-20 — 앵커 448 리포트 사후 감사 (feature/kokopas)
+
+리포트(`docs/eval_anchor_규남.md` A~C)의 결론을 실측으로 재검증. 상세는 같은 문서 **D절**.
+
+- **평가 지표 수정**: GT의 `gt_chunk_ids`(문항당 평균 1.97개 relevant)를 무시하고 앵커 청크
+  1개만 정답으로 세고 있었다. 실패 217건 중 40건(18.4%)은 top-1이 GT가 relevant로 라벨한 청크.
+  등급 relevance 도입 시 **soft Hit@1 0.605 · soft Hit@5 0.920 · nDCG@5 0.705** — 목표 미달 결론이 뒤집힌다.
+  `eval_anchor_gold.py`에 nDCG·soft-hit·Wilson CI·McNemar(`--compare`) 추가.
+- **유의성 기준 확립**: n=448에서 Hit@1의 95% CI는 **±4.6pp**. 이전 스윕의 +0.2~+1.1pp Reject는
+  판정 불가한 차이였다(결론은 동일, 근거만 교정). 채택안은 McNemar 24/6, **p=0.0014로 유의**.
+- **미실험 레버 실측**: RRF→질의별 정규화 융합(α 0.5~0.9 전 구간 악화), 제목 겹침 IDF 가중(악화),
+  재청킹 acc/sect 188청크(ns) → 기각. 신규 하네스 `eval_fusion_sweep.py`(파리티 448/448 검증) 추가.
+- **rag.py 반영(2차)**: 업무부스트 상수→dense 비례 곱셈 + BM25 질의측 동의어 확장 13항
+  (`QUERY_SYNONYMS`/`expand_query_tokens`) + `BF_DOC_CAP` 99→3. 각각은 유의성 미달이지만
+  **셋 다 악화 0건**이라 채택 — "+0.6pp 개선"을 주장하지는 않는다.
+  **최종: Hit@1 0.522 · Hit@3 0.808 · Hit@5 0.895 · MRR@10 0.678 · soft@1 0.612 · nDCG@5 0.724**
+  (vs baseline McNemar 27/6, p=0.0003). 대가는 Hit@30 0.996→0.980(cap=3) — 리랭커를 top-30 위에
+  얹으면 cap을 리랭킹 이후로 옮길 것. 상세는 `docs/eval_anchor_규남.md` E절.
+- **`DENSE_W` 민감도 곡선**: 0.4~0.75가 고원(Hit@1 0.513~0.518), 채택값 0.5는 그 한가운데 — 과적합 아님.
+- **`BF_DOC_CAP` 재해석**: Hit 기준으로는 no-op이 맞지만 nDCG@5는 cap=3에서 유의하게 개선
+  (0.705→0.722, 부트스트랩 95% CI [+0.011,+0.024]). 단 후보 풀에 걸면 Hit@30 0.996→0.980.
+  서빙 K=3에서는 무의미하므로 현행 유지, **컨텍스트에 top-5 이상을 넣으면 cap=3으로 전환** 권고.
+- **남은 공백 2가지**: (1) 엔드투엔드(LLM 답변) 평가 부재 — Hit@1 우선이라는 목표 설정 자체가
+  미검증. (2) `span_verbatim_ok`가 448건 전량 True라 평가셋 편향 미검증, 실로그 검증셋 필요.
+
+---
+
+## 2026-08-20 — soft Hit@5 최적화: `BF_DOC_CAP` 99 → 3 (feature/kokopas)
+
+목표를 Hit@1에서 **soft Hit@5**로 옮기고, 실패 36건을 전수 분류한 뒤 그 유형만 공략했다.
+재임베딩·재청킹·리랭킹 없이 캐시(`data/qscore_cache.npz`) 위 융합/랭킹 항만 탐색.
+
+- **실패 유형(baseline 36건)**: `top-30엔 있으나 top-5 밖` 31건 · `dense/BM25 모두 놓침` 5건.
+  전자의 상당수가 **한 문서(FAQ 38청크 등)가 top-5를 도배**한 사례 — 문서 중복이 실제 Hit@5 실패 원인.
+- **채택: `BF_DOC_CAP=3`**. soft Hit@5 **.9196→.9263**(개선 3 · 악화 0, McNemar p=0.25 ns) ·
+  nDCG@5 .7048→.7225 · soft Hit@1 .6049 불변 · strict Hit@5 .893→.897.
+  홀짝 분할 양쪽 개선(.9286→.9330 / .9107→.9196)이라 과적합으로 보지 않는다.
+  비용: soft Hit@30 .9955→.9888(top-30이 최소 10개 문서에서 나와야 해 한 문서 4번째+ 청크가
+  정답인 3문항 손실). 서빙 K=3~5에서 이득이 크다.
+  → 직전 항목의 "cap은 Hit 기준 no-op" 판정은 **strict Hit 기준**이었고, soft 기준에서는 성립하지 않는다.
+- **전 파라미터 재스윕 결과 현행값이 이미 최적**: RRF_K(1~60), RRF_ALPHA(0.4~0.8), DENSE_W(0.3~0.7),
+  TITLE_W(0~0.12), BF_BOOST(0~0.12), FACET_BOOST(0~0.3) 모두 현행값이 고원 정점이거나 동률.
+  FACET_BOOST=0.2가 soft Hit@5 .9263로 동률이나 soft Hit@1을 .605→.596으로 깎아 기각.
+- **cap 조합 튜닝 기각**: cap=3 + (alpha .55 | title_w .08)이 .9286로 1문항 더 얹지만 짝수반에서만
+  나오고 soft Hit@1을 깎는다 — 과적합으로 판단.
+- **cap 변형 `capq`(초과분 절단 대신 후순위로 밀어내기) 기각**: 38문서×3=114>30이라 밀린 청크가
+  top-30에 못 돌아와 cap과 결과 완전 동일. 단순한 쪽 유지.
+- **종료**: 잔여 실패 33건은 dense·BM25가 나란히 6~20위인 문항으로, 융합식 조정으로 얻을 신호가 없다.
+  추가 개선은 금지된 레버(재임베딩/리랭킹/재청킹)를 요구한다 → 현 구조에서의 탐색 종료.
+- 신규 하네스: `crawler/diag_hit5.py`(실패 전수 분류), `crawler/eval_hit5.py`(soft Hit@5 그리드),
+  `crawler/eval_hit5_final.py`(홀짝 교차확인), `crawler/eval_hit5_capq.py`(cap 변형 A/B).
+  최종 검색 결과 `crawler/data/retrieved_top30_cap3_real.jsonl` — 시뮬레이터와 top-30 448/448 일치.
+
+---
+
+## 2026-08-20 — 최종 확정: 동의어 확장 + 업무부스트 곱셈화 + `cap=3` (feature/kokopas)
+
+같은 날 두 세션이 `crawler/rag.py`를 **병행 수정**했다(서로 모르는 채로). 양쪽 변경이 모두
+현재 코드에 들어가 있고, 실측으로 정합성을 확인한 뒤 **현재 코드를 최종본으로 확정**했다.
+
+| 라운드 | 채택 | 기준 |
+|---|---|---|
+| 3 (E절) | `BF_DOC_CAP` 99→3 | soft Hit@5 최우선, 손실 0 |
+| 4 (F절) | 동의어 13항(BM25 질의측) + 업무부스트 곱셈화 + `cap=3` | 악화 0건이면 유의성 미달이어도 채택 |
+
+- **두 라운드가 독립적으로 `cap=3`에 도달** — 상호 검증으로 본다.
+- **최종 지표(448문항)**: strict Hit@1 **0.522** / Hit@3 0.808 / Hit@5 0.895 / Hit@30 0.980 ·
+  MRR@10 0.678 · soft Hit@1 **0.612** / Hit@5 **0.924** · nDCG@5 **0.724**.
+  vs 라운드1 baseline McNemar 개선 27 · 악화 6 · **p=0.0003 유의**.
+  `eval_fusion_sweep.py` 파리티 top-30 **448/448** 재확인.
+- **목표 지표는 soft Hit@5로 확정**(LLM에 top-5를 넣으므로 Hit@5가 답변 가능 여부를 가른다).
+  cap 단독안(라운드3)이 soft Hit@5 .926으로 현재 코드 .924보다 1문항 앞서지만 **448문항에서
+  순증 1문항은 유의성이 없어** 동의어·곱셈부스트를 되돌리지 않는다. 문서에만 기록한다.
+  → "cap 단독이 Hit@5에서 낫다"고 주장하지 않는다. 두 값은 이 평가셋에서 구분 불가하다.
+- **D-3의 기각을 F-1이 뒤집은 건에 대한 정리**: 동의어·곱셈부스트는 D-3에서 "유의하지 않음"으로
+  기각됐다가 F-1에서 "악화 0건의 비대칭성"을 근거로 채택됐다. **F-1의 해석을 채택**한다 —
+  손실 없는 방향의 변경을 유의성 미달만으로 되돌릴 이유는 없다. 단 개선폭을 주장하지도 않는다.
+- **baseline 파일 보존**: 병행 세션의 재실행이 `data/retrieved_top30_kunam.jsonl`(라운드1 baseline)을
+  덮어썼다. git 인덱스에서 복구해 `data/retrieved_top30_base_cap99.jsonl`로 분리 보존했다.
+  이후 A/B의 `--compare` 기준은 이 파일이다.
+- **문서 통합**: 라운드1~4 전 기록을 `docs/eval_anchor_규남.md` 한 파일로 통합(0절 요약 · A~G절 ·
+  뒤집힌 결론 목록). 이 문서가 단일 handoff 산출물이다.
