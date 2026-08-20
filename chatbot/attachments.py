@@ -22,6 +22,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CRAWLER_DIR = ROOT / "crawler"
 DOC_ATTACH_PATH = CRAWLER_DIR / "data" / "doc_attachments.json"
 
+# 큐폼 후단 필터(B안)용: 첨부 조합 좌표 원천(유상 태깅) + 스코프
+TAGGING_PATH = CRAWLER_DIR / "yesom_분기분석" / "attachment_tagging_template.csv"
+QFORM_SCOPE_BF = "착오송금 반환 신청"   # 하위호환 별칭 (ver1~3 단일 스코프)
+
+# ver4 M2 — 업무별 조합 테이블. **파일 분리 + combo_id prefix 로 네임스페이스를 가른다.**
+# 착오송금 CSV 는 동결이라 한 파일에 합치지 않는다(§9-7).
+QFORM_TABLES = {
+    "착오송금 반환 신청": CRAWLER_DIR / "data" / "qform_combos_msdr.csv",
+    "예금보험금 안내": CRAWLER_DIR / "data" / "qform_combos_dpin.csv",
+}
+
 # 다운로드 시 브라우저에 넘길 MIME (미지정·기타는 octet-stream = 강제 다운로드).
 MIME = {
     "pdf": "application/pdf",
@@ -54,6 +65,110 @@ def _key(a: dict):
     return a.get("enc_real") or a.get("anchor_text") or a.get("name")
 
 
+# ── 큐폼 후단 필터(B안, §3-1) ──────────────────────────────────────────────
+# collect() 결과를 조합 조인으로 좁힌다. 슬롯이 비거나 sub_task=None이면 무손실
+# 통과(graceful degradation) — 기존 동작으로 자연 복귀. 검색·생성엔 관여 안 함
+# (계약 4필드 불변, hit@k 불변). 첨부 목록만 정밀화한다.
+_tag_cache = None
+_combo_cache: dict | None = None
+
+
+def _load_combo_tables() -> dict:
+    """bf -> 조합행 리스트. 파일이 없으면 그 업무만 조용히 빠진다(앱은 안 깨진다)."""
+    global _combo_cache
+    if _combo_cache is None:
+        import csv
+        tables = {}
+        for bf, path in QFORM_TABLES.items():
+            try:
+                with path.open(encoding="utf-8-sig") as fh:
+                    tables[bf] = list(csv.DictReader(fh))
+            except (FileNotFoundError, OSError):
+                continue
+        _combo_cache = tables
+    return _combo_cache
+
+
+def _load_tagging() -> dict:
+    """(doc_id, canonical_filename) -> 태깅행. 조인키 = orig_filename 확장자 제거 == canonical_filename."""
+    global _tag_cache
+    if _tag_cache is None:
+        import csv
+        idx = {}
+        try:
+            with TAGGING_PATH.open(encoding="utf-8-sig") as fh:  # BOM 방지
+                for r in csv.DictReader(fh):
+                    idx[(r["source_doc_id"], r["canonical_filename"])] = r
+        except (FileNotFoundError, OSError, KeyError):
+            idx = {}
+        _tag_cache = idx
+    return _tag_cache
+
+
+def _joins_combo(combo: dict, coords: dict) -> bool:
+    """조합행 <-> 첨부 좌표 조인 (T1 AC4와 동일 술어). 공란/'공통'=와일드카드, 다중값 overlap."""
+    from qform_state import _toks
+    if combo["business_function"].strip() != coords["business_function"].strip():
+        return False
+    cp, ap = combo["party"].strip(), coords["party"].strip()
+    if cp and ap and cp != ap:
+        return False
+    if combo["sub_task"].strip() != coords["sub_task"].strip():
+        return False
+    qc, qa = _toks(combo["qualification"]), _toks(coords["qualification"])
+    if qc and qa and not (qc & qa):
+        return False
+    sc, sa = _toks(combo["subject"]), _toks(coords["subject"])
+    if sc and sa and "공통" not in sc and "공통" not in sa and not (sc & sa):
+        return False
+    mc, ma = _toks(combo["method"]), _toks(coords["method"])
+    if mc and ma and not (mc & ma):
+        return False
+    return True
+
+
+def _qform_narrow(out: list, qform: dict) -> list:
+    """collect() 결과를 큐폼 슬롯으로 후단 필터. 스코프 밖/미태깅 첨부는 보존.
+
+    **한 업무의 조합 테이블은 그 업무의 첨부만 좁힌다.** 그리고 사용자의 `sub_task` 가
+    그 테이블에 실재하는 값일 때만 발동한다 — 예: `sub_task='반환신청'` 이면 DPIN 테이블은
+    아예 관여하지 않고 예금보험금 첨부는 **ver3 와 동일하게 보존**된다. 이 조건이 없으면
+    "생존 조합 0개 → 전부 제외"가 되어 타업무 첨부가 조용히 사라진다(오추출 > 미추출, 규칙6).
+    """
+    if not qform or not qform.get("sub_task"):
+        return out                       # sub_task 없으면 좁히지 않음(D2, graceful)
+    try:
+        from qform_state import survivors, _toks
+    except Exception:
+        return out                       # 상태 모듈 부재 시 무손실 통과
+
+    want = _toks(qform.get("sub_task"))
+    surv_by_bf = {}
+    for bf, rows in _load_combo_tables().items():
+        have = set()
+        for r in rows:
+            have |= _toks(r["sub_task"])
+        if want & have:                  # 이 테이블이 다루는 용건일 때만 발동
+            surv_by_bf[bf] = survivors(qform, rows)
+
+    if not surv_by_bf:
+        return out                       # 어느 테이블도 모르는 sub_task → 무손실 통과
+
+    idx = _load_tagging()
+    kept = []
+    for att in out:
+        fname = att.get("orig_filename")
+        stem = pathlib.Path(fname).stem if fname else None
+        coords = idx.get((att.get("doc_id"), stem))
+        bf = coords["business_function"].strip() if coords else None
+        if coords is None or bf not in surv_by_bf:
+            kept.append(att)             # 미태깅·스코프 밖 → 보존
+        elif any(_joins_combo(c, coords) for c in surv_by_bf[bf]):
+            kept.append(att)             # 생존 조합에 조인 → 유지
+        # else: 좌표는 있으나 어느 생존 조합과도 안 맞음 → 제외
+    return kept
+
+
 def _abs(local_path):
     """crawler/ 기준 상대 local_path -> 절대경로(실존 시). 없으면 None(원문 링크 폴백용)."""
     if not local_path:
@@ -83,12 +198,15 @@ def _fmt(a: dict, doc_id: str, doc_title: str, page_url: str) -> dict:
     }
 
 
-def collect(hits, doc_attachments=None) -> list:
+def collect(hits, doc_attachments=None, qform=None) -> list:
     """검색 hits -> 반환할 첨부 목록. 근거 문서 등장 순서 보존.
 
     문서별 규칙: 그 문서 소속 검색 청크 중 하나라도 첨부 태깅이 있으면 -> 태깅된
     파일만(정밀). 태깅이 전무하거나 매칭 실패면 -> 문서 전체 첨부(폴백).
     파일은 (doc_id, orig_filename)로 dedup(재다운로드 _1 중복 방지).
+
+    qform(큐폼 슬롯 dict)이 주어지면 결과를 조합 조인으로 **후단 필터**한다(B안, §3-1).
+    기본값 None이면 기존 동작과 완전 동일 — 슬롯이 비면 자연 복귀(graceful degradation).
     """
     da = doc_attachments if doc_attachments is not None else _load()
 
@@ -129,4 +247,6 @@ def collect(hits, doc_attachments=None) -> list:
                 continue
             seen.add(dk)
             out.append(_fmt(a, pid, title_by[pid], url_by[pid]))
+    if qform:                            # B안 후단 필터 (없으면 기존 동작 그대로)
+        out = _qform_narrow(out, qform)
     return out

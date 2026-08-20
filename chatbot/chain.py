@@ -186,8 +186,11 @@ def _reject_result(label: str, reason: str, cls_meta: dict, k: int) -> dict:
     }
 
 
-def answer(query: str, k: int = 3) -> dict:
-    """계약 4필드 + 부가(checks/_meta). 분류 선행 — 소관밖은 검색·생성 없이 즉시 거절."""
+def answer(query: str, k: int = 3, qform: dict | None = None) -> dict:
+    """계약 4필드 + 부가(checks/_meta). 분류 선행 — 소관밖은 검색·생성 없이 즉시 거절.
+
+    qform(큐폼 슬롯 dict, 선택): 주어지면 첨부를 조합 조인으로 후단 필터(B안, §3-1).
+    파라미터만 추가 — 반환 4필드·검색·생성은 불변(D3, §1-5). None이면 기존 동작 그대로."""
     label, reason, cls_meta = classify(query)
     route = _route(label)
     if route == "reject":
@@ -208,7 +211,8 @@ def answer(query: str, k: int = 3) -> dict:
     checks = (answer_checks.run_all(text, hits, allow_context_urls=False)  # 확정(사람 결정): sources 밖 URL은 본문 유래여도 플래그
               if text is not None else {"ok": False, "flags": ["생성 실패 — 검증 생략"], "results": {}})
     # 근거 문서 첨부 조회 — 청크 태깅 우선, 없으면 문서 단위 폴백. 검색 hits만 사용(추가 콜 0).
-    attach = attachments.collect(hits)
+    # qform 주어지면 조합 조인 후단 필터(B안). None이면 기존 동작 그대로.
+    attach = attachments.collect(hits, qform=qform)
     return {
         "text": text,
         "sources": sources,
@@ -216,7 +220,8 @@ def answer(query: str, k: int = 3) -> dict:
         "route": route,
         "checks": checks,           # 부가 필드(계약 외 추가 — 축소 아님)
         "attachments": attach,      # 부가 필드 — 근거 문서 첨부(다운로드용). 없으면 []
-        "_meta": {"model": MODEL_NAME, "cls_label": label, "cls_reason": reason, **cls_meta, **meta, "k": k},
+        "_meta": {"model": MODEL_NAME, "cls_label": label, "cls_reason": reason, **cls_meta,
+                  **meta, "k": k, "qform": qform},  # qform 부가 기록(§1-5: _meta 허용)
     }
 
 

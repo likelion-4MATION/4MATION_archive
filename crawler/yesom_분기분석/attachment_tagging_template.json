@@ -293,7 +293,7 @@
   "sub_task": "이체수수료환급",
   "qualification": "",
   "subject": "공통",
-  "method": "온라인;방문",
+  "method": "온라인;방문;이메일;팩스",
   "doc_kind": "양식",
   "form_type": "환급신청서",
   "node_tag": "#착오송금수취인이체수수료환급",
@@ -305,7 +305,7 @@
   "confidence(제안)": "high",
   "verified(사람입력)": "",
   "corrected_tags(사람입력)": "",
-  "notes": ""
+  "notes": "이체수수료 환급 접수처 팩스 02-758-0270 / 이메일 kmrs@kdic.or.kr (T1-b 보정)"
  },
  {
   "attachment_id": "ATT-15",

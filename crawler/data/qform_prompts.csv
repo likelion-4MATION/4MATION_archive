@@ -1,0 +1,29 @@
+slot,sub_task,prompt_template,value,phrase,evidence_chunk,evidence_spans,evidence_span_hits
+qualification,반환신청,{sub_task}은 누가 하시나요?,본인,본인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#01,,
+qualification,반환신청,{sub_task}은 누가 하시나요?,대리인,대리인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#00,,
+qualification,대리인변경,{sub_task}은 누가 신청하시나요?,본인,본인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#01,,
+qualification,대리인변경,{sub_task}은 누가 신청하시나요?,대리인,대리인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#00,,
+qualification,*,누가 신청하시나요?,본인,본인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#01,,
+qualification,*,누가 신청하시나요?,대리인,대리인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#00,,
+subject,반환신청,누구를 대리해서 신청하시나요?,법인,법인을 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#05,,
+subject,반환신청,누구를 대리해서 신청하시나요?,비법인단체,비법인단체를 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#05,,
+subject,반환신청,누구를 대리해서 신청하시나요?,미성년자,미성년자를 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#06,,
+subject,반환신청,누구를 대리해서 신청하시나요?,군복무자,군복무자를 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#08,,
+subject,반환신청,누구를 대리해서 신청하시나요?,국외거주 또는 유학생,국외거주 또는 유학생을 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#09,,
+subject,반환신청,누구를 대리해서 신청하시나요?,대리인,대리인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#00,,
+subject,반환신청,누구를 대리해서 신청하시나요?,본인,본인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#01,,
+subject,*,어떤 경우이신가요?,법인,법인을 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#05,,
+subject,*,어떤 경우이신가요?,비법인단체,비법인단체를 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#05,,
+subject,*,어떤 경우이신가요?,미성년자,미성년자를 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#06,,
+subject,*,어떤 경우이신가요?,군복무자,군복무자를 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#08,,
+subject,*,어떤 경우이신가요?,국외거주 또는 유학생,국외거주 또는 유학생을 대리하는 경우,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#09,,
+subject,*,어떤 경우이신가요?,대리인,대리인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#00,,
+subject,*,어떤 경우이신가요?,본인,본인,kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#01,,
+qualification,보험금신청,누가 신청하시나요?,본인,예금자 본인이 찾을 경우,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn::예금자 본인이 찾을 경우,1
+qualification,보험금신청,누가 신청하시나요?,대리인,대리인이 찾을 경우,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn::대리인이 찾을 경우,1
+subject,보험금신청,어떤 경우이신가요?,본인,예금자 본인이 찾을 경우,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn::예금자 본인이 찾을 경우,1
+subject,보험금신청,어떤 경우이신가요?,대리인,대리인이 찾을 경우,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn::대리인이 찾을 경우,1
+subject,보험금신청,어떤 경우이신가요?,군복무자,예금자 본인이 군복무 중일 경우,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn::예금자 본인이 군복무 중일 경우,1
+subject,보험금신청,어떤 경우이신가요?,미성년자,예금자가 미성년자인 경우,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn::예금자가 미성년자인 경우,2
+subject,보험금신청,어떤 경우이신가요?,사망 예금자,예금자가 사망한 경우,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#01,kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn::예금자가 사망한 경우,2
+subject,보험금신청,어떤 경우이신가요?,국외거주 또는 유학생,"예금자가 국외거주 외국인, 유학생, 상사주재원인 경우",kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#02,"kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn::예금자가 국외거주 외국인, 유학생, 상사주재원인 경우",1
