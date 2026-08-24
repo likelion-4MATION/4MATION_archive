@@ -278,7 +278,7 @@ kdic.or.kr 에 접속한다. 참고로 `--rebuild` 가 인덱스를 `rmtree` 하
 > 이 수정 이전에 기록된 `measured` 값은 **저장된 검색 설정이 아니라 rag.py 기본값 기준**이다.
 > 기준선을 다시 맞추려면 [③ 재검증]을 한 번 돌리면 된다.
 
-지표는 콘솔 출력을 정규식으로 긁지 않고 `eval_anchor_v3.evaluate_retrieval()` 을 직접 호출해
+지표는 콘솔 출력을 정규식으로 긁지 않고 `eval.evaluate_retrieval()`(구 `eval_anchor_v3` — 2026-08-24 통합) 을 직접 호출해
 dict 로 받는다. 재빌드가 성공하면 그 값이 `settings.record_measured()` 로 저장되고,
 그때부터 대시보드의 "현재 정확도"가 **추정표가 아니라 실측치**가 된다.
 
@@ -403,7 +403,7 @@ crawler/data/files/manifest.json             (doc_id, enc_real, enc_temp) → st
 - **대시보드의 비용·질의 수는 예시값이 아니라 계산·추정값**이다. 실서비스 로그 저장소가 붙으면
   `metrics.py` 의 `business_mix()`(현재 평가셋 기준)와 비용 항목을 로그 기반으로 교체해야 한다.
 - **`apply_runtime()` 은 같은 프로세스에만 즉시 반영**된다. 위 연동 ①번 참조.
-- 러너는 `pipeline.main()` 과 `eval_anchor_v3.evaluate_retrieval()` 의 시그니처에 의존한다.
+- 러너는 `pipeline.main()` 과 `eval.evaluate_retrieval()`(구 `eval_anchor_v3` — 2026-08-24 통합) 의 시그니처에 의존한다.
   그쪽이 바뀌면 러너도 같이 고쳐야 한다(조용히 실패하지 않고 예외로 멈춘다).
 - 업로드 파일은 `data/uploads/` 에 그대로 쌓인다. 백업·용량 관리는 운영 몫이다.
 - `data/backup/` 은 최근 5개만 유지된다. 코퍼스가 크면 디스크를 확인할 것.
