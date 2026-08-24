@@ -17,8 +17,8 @@ config 간 비교가 정확해지고(같은 base) 임베딩 재계산도 없앤�
 
 사용:
   python predict_query_bf.py            # 선행: 라우터 질의 예측 캐시 생성
-  python eval_router_facet.py
-  python eval_router_facet.py --gt data/gt_schema_v6.jsonl --depth 50
+  python exp_router_facet.py
+  python exp_router_facet.py --gt data/gt_schema_v6.jsonl --depth 50
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import pathlib
 import numpy as np
 
 import rag
-import eval_anchor_v3 as ev3
+import eval as ev3
 from faq_bf_map import normalize_q, qhash
 
 DEFAULT_GT = "data/gt_schema_v6.jsonl"

@@ -161,7 +161,7 @@ def run_pipeline(recrawl: bool) -> None:
 
 def run_eval(index_dir: str, gt_name: str = "gt_testset_retrieval_450.jsonl") -> dict:
     """평가 함수를 직접 호출해 지표 dict 를 받는다 — 콘솔 문자열을 정규식으로 긁지 않는다."""
-    import eval_anchor_v3 as ev
+    import eval as ev
     import rag
     gt_path = CRAWLER / gt_name
     if not gt_path.exists():

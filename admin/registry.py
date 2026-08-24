@@ -152,7 +152,7 @@ GOLDEN = {
     "value": 0.9081,
     "metric": "anchor hit@5",
     "chunks": 181,
-    "src": "eval_tablefix (181청크 · 표 유지 on) · 검색 5축은 tune_params_v2 8,064조합 그리드",
+    "src": "exp_tablefix (181청크 · 표 유지 on) · 검색 5축은 tune_params_v2 8,064조합 그리드",
     "caveat": "이 0.9081은 **앵커 hit@5**이고 **181청크** 코퍼스 기준입니다. 지금 대시보드의 "
               "청크 hit@5와 직접 비교되지 않습니다. 되돌린 뒤 [한 번에 실행]으로 같은 잣대의 "
               "수치를 다시 재세요.",

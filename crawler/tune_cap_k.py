@@ -31,7 +31,7 @@ import statistics
 import numpy as np
 
 import rag
-import eval_anchor_v3 as ev3
+import eval as ev3
 from tune_params import _topk_lists
 
 CAPS = (0, 3, 5, 8, 10, 15)        # 0 = 무제한
@@ -82,7 +82,7 @@ def build(name: str):
              + (1 - rag.RRF_ALPHA) / (rag.RRF_K + rank_s + 1)
              + rag.BF_BOOST * bf + rag.FACET_BOOST * fc)
 
-    # 문항별 판정 조건 — eval_anchor_v3의 앵커 하이브리드 규약
+    # 문항별 판정 조건 — eval.py chunk 판정의 앵커 하이브리드 규약
     need = []
     for it in gt:
         gold = ev3._get_gt_chunk_ids(it)
@@ -122,7 +122,7 @@ def main() -> int:
 
     L = ["# BF_DOC_CAP × 반환 K 스윕 (relation 분리 + 컨텍스트 비용)\n",
          f"- 융합: alpha={rag.RRF_ALPHA} · rrf_k={rag.RRF_K} · bf={rag.BF_BOOST} · facet={rag.FACET_BOOST}",
-         f"- 판정: 앵커 하이브리드(eval_anchor_v3 규약) · `and`=ALL, 그 외=ANY",
+         f"- 판정: 앵커 하이브리드(eval.py chunk 판정 규약) · `and`=ALL, 그 외=ANY",
          f"- 토큰 환산 {CHARS_PER_TOKEN}자/토큰 · HCX-003 최대입력 {HCX003_MAX_INPUT:,}토큰",
          f"- 컨텍스트 = SYS({SYS_LEN}자) + [출처N] 제목/본문 + 질의 (chain.py:197 형식)",
          "- **현행 배포는 cap=5**이며 `chain.py`가 `search(k=k)`로 K를 받는다\n"]

@@ -1,7 +1,7 @@
 """앵커 라벨 점검 + 미앵커 gold 청크의 후보 앵커 추출.
 
 배경: `and` 문항은 gold가 2~4개인데 앵커는 1개뿐인 경우가 대부분이라, 나머지 gold는
-`chunk_id` 폴백으로 판정된다(eval_anchor_v3의 하이브리드). 그 폴백분이 얼마나 되고
+`chunk_id` 폴백으로 판정된다(eval.py chunk 판정의 하이브리드). 그 폴백분이 얼마나 되고
 어느 청크에 몰려 있는지, 그리고 결정론적으로 후보 앵커를 뽑을 수 있는지 본다.
 
 **앵커를 생성하지 않는다.** 후보는 청크 원문에서 '고른' 줄이며, 그 줄이 이 질문의
@@ -23,7 +23,7 @@ import collections
 import json
 import pathlib
 
-import eval_anchor_v3 as ev3
+import eval as ev3
 
 MIN_LINE = 12          # 후보 줄 최소 길이(정규화 전 원문 기준)
 MAX_CANDIDATES = 3     # 청크당 제시할 후보 수

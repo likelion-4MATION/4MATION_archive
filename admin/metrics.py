@@ -18,16 +18,16 @@ CRAWLER = REPO / "crawler"
 # ── 실측 정확도 (지표: 앵커 hit@5) ─────────────────────────────────────
 # 출처: crawler/data/tune_v2_summary.md · eval_overlap_report.md · eval_tablefix_report.md
 ACC_PRESET = {"accuracy": 0.9054, "balanced": 0.8946, "diverse": 0.8892}
-ACC_K = {3: 0.8108, 5: 0.9081}                     # eval_tablefix K3/K5 (181청크)
+ACC_K = {3: 0.8108, 5: 0.9081}                     # exp_tablefix K3/K5 (181청크)
 ACC_CHUNK = {                                       # "size|overlap|table_keep"
     "800|100|1": {"chunks": 181, "all": 0.8977, "single": 0.9081, "and": 0.8182,
-                  "src": "eval_tablefix on gap≤12 (현행)"},
+                  "src": "exp_tablefix on gap≤12 (현행)"},
     "800|100|0": {"chunks": 215, "all": 0.8209, "single": 0.8946, "and": 0.3091,
-                  "src": "eval_tablefix off (구 설정)"},
+                  "src": "exp_tablefix off (구 설정)"},
     "800|200|0": {"chunks": 218, "all": 0.8163, "single": 0.8892, "and": 0.3091,
-                  "src": "eval_overlap OVERLAP=200"},
+                  "src": "exp_overlap OVERLAP=200"},
     "800|300|0": {"chunks": 222, "all": 0.8116, "single": 0.8811, "and": 0.3273,
-                  "src": "eval_overlap OVERLAP=300"},
+                  "src": "exp_overlap OVERLAP=300"},
 }
 BASELINE = {"acc": 0.9081, "calls": 1.72, "latency": 4.0, "cost": 9.7}
 
@@ -86,7 +86,7 @@ def accuracy_for(cfg: dict, changed: list[str], measured: dict | None = None) ->
             return got
         v = ACC_K.get(int(cfg["k"]))
         return ({"value": v, "grade": "measured", "metric": f"hit@{int(cfg['k'])}",
-                 "src": f"eval_tablefix K{int(cfg['k'])} (181청크)"}
+                 "src": f"exp_tablefix K{int(cfg['k'])} (181청크)"}
                 if v is not None else
                 {"value": None, "grade": "unmeasured", "metric": None,
                  "src": f"k={int(cfg['k'])}는 실측이 없습니다 (러너는 hit@1·3·5·10만 냅니다)"})

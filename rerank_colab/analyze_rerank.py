@@ -6,7 +6,7 @@
 핵심 질문: 430(TEST)에서 hit@5가 제자리인 것이 '리랭커가 무능해서'인가,
 아니면 'single은 오르고 and는 떨어져 집계가 상쇄돼서'인가.
 
-판정은 eval_anchor_v3 규약을 그대로 쓴다(같은 모듈을 import).
+판정은 eval.py chunk 판정 규약을 그대로 쓴다(같은 모듈을 import).
 
 사용:
   cd crawler && python ../rerank_colab/analyze_rerank.py
@@ -25,7 +25,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "crawler"))
 
-import eval_anchor_v3 as ev3        # noqa: E402
+import eval as ev3        # noqa: E402
 
 KS = (1, 3, 5, 10, 30, 50)
 

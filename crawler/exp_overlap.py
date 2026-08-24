@@ -23,8 +23,8 @@
 청크에 온전히** 남는지. 잘리면 GT가 실제로 손상된 것이므로 그 자체가 비용이다.
 
 사용:
-  cd crawler && python eval_overlap.py
-  cd crawler && python eval_overlap.py --overlaps 100 200 300 400
+  cd crawler && python exp_overlap.py
+  cd crawler && python exp_overlap.py --overlaps 100 200 300 400
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ import tempfile
 import numpy as np
 
 import rag
-import eval_anchor_v3 as ev3
+import eval as ev3
 from tune_params import _topk_lists
 
 GT_PATH = "../final_testset/gt_natural430.jsonl"

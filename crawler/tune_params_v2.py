@@ -20,7 +20,7 @@
 from __future__ import annotations
 import argparse, collections, itertools, json, pathlib, statistics, time
 import numpy as np
-import rag, eval_anchor_v3 as ev3
+import rag, eval as ev3
 from tune_params import _topk_lists
 
 GRID = {"alpha": (0.35, 0.50, 0.65, 0.75, 0.85, 0.95, 1.0),
@@ -43,7 +43,7 @@ SETS = ("430", "355")
 def load_corpus(gap, path):
     if path:
         return ev3._load_jsonl(pathlib.Path(path))
-    from eval_tablefix import variant
+    from exp_tablefix import variant
     return variant(gap)
 
 
@@ -90,7 +90,7 @@ def build(chunks, name):
     # 판정 조건 — 앵커는 텍스트 매칭이라 재청킹 무관. 미앵커 gold는 원본 프로브 재투영
     base = {c["chunk_id"]: c for c in ev3._load_jsonl(pathlib.Path("data/chunks.jsonl"))}
     bnorm = {k: ev3._norm_text(v["text"]) for k, v in base.items()}
-    from eval_overlap import unique_probe
+    from exp_overlap import unique_probe
     need = []
     for it in items:
         gold = ev3._get_gt_chunk_ids(it); anc = ev3._get_gt_anchors(it)
