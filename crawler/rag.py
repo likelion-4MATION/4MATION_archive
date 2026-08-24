@@ -162,6 +162,31 @@ RRF_K = 4                 # RRF 상수(낮을수록 상위 랭크 신뢰↑)
 # 주의: 0.15는 이 448문항에서 스윕해 고른 값이므로 그만큼 낙관적 — 별도 split 확정 필요.
 # [08-18] 표 원자성 수정으로 청크가 자기완결적이 되며 0.15 → 0.05로 재하향(위 블록 참조).
 FACET_BOOST = 0.05        # 서브인텐트 패싯 부스트(업무 내부 형제문서 구분). sub_category 매칭 청크에 가산.
+# ── RRF가 뭉갠 연속 신호 복원 (feature/kokopas 이식, 2026-08-20 448문항 실패분석) ──────
+# 병목은 후보 확보가 아니라 1~3위 변별이었다: top-30 recall .989인데 Hit@1은 .475.
+# Hit@1 실패 235건 중 147건(62.6%)이 정답 rank 2~3, 32.6%가 1위와 score gap<0.02.
+# 원인은 RRF가 dense의 연속 유사도 마진을 이산 순위로 뭉개는 것(dense 1위 28건이 융합 후 1위 상실).
+# 공용셋 재검증(경은 gt_natural430_curated · and=ALL · 동일 검색캐시):
+#   Hit@1 .453 → .498 (개선 23 · 악화 4 · McNemar p=0.0003)
+#   단 Hit@3 +0.9pp · Hit@5 +0.5pp는 유의성 없음 — **Hit@1 전용 레버**로 취급할 것.
+DENSE_W = 0.5    # RRF 위에 dense 코사인 원점수를 연속항으로 가산 — 이산 순위가 뭉갠 마진 복원.
+TITLE_W = 0.04   # 질의 토큰 ∩ (page_title+page_type) 토큰 비율 가산 — 동일업무 형제문서 변별.
+# 업무부스트를 상수로 더할지, dense 유사도에 비례시킬지.
+#   "const"  기존 anc 동작. rrf[i] += boost
+#   "dense"  kokopas 동작. rrf[i] += boost * dense[i]/dense_max
+# 상수 가산은 같은 업무 청크 전체를 똑같이 올려 형제문서 혼동 구간에서 정확히 상쇄돼 순위를
+# 못 바꾼다. 비례 가산은 그 구간을 가른다.
+# ⚠ **BF_BOOST의 스케일이 달라진다.** "dense"에서 실효 부스트는 boost 이하이고 평균은 훨씬
+# 낮다. 위 BF_BOOST=0.06은 "const" 전제로 스윕한 값이므로 **재스윕 전까지 두 모드의 수치를
+# 같은 표에 올리지 말 것.** 재스윕 시 이 상수로 A/B 한다.
+BF_BOOST_SCALING = "dense"
+# ── PRF 역추론 (emb-ko 이식) — 3단 폴백의 3단 ─────────────────────────────────
+# 라우터 미보유 환경(클론 직후·CI)에서는 키워드 분류가 28.6%(128/448) 기권하고 그 구간은
+# 부스트를 아예 못 받는다. 1차 랭킹 상위의 업무를 순위가중 투표해 그 구멍을 메운다.
+# 경은 실측: 기권 구간 hit@5 .843 → .860 · 전체 TEST .855 → .859.
+# 라우터가 로드되면 기권이 0%라 이 경로는 사실상 발동하지 않는다(비용 0).
+QBF_PRF_TOPN = 5          # 투표에 쓸 1차 상위 개수. 0이면 PRF 비활성
+QBF_PRF_MIN_SHARE = 0.40  # 1위 업무 득표 비중이 이 값 이상일 때만 채택(미만이면 기존대로 기권)
 # 업무 공용 문서: 하드필터 시 해당 업무 외에도 허용할 문서(태그는 1개지만 실제로 여러 업무에서 필요).
 # 예: 예금보험금 구비서류(DpsmIbamtAplyPossDcmnt)는 미수령금 신청 구비서류로도 동일하게 쓰임.
 BF_SHARED_DOCS = {
@@ -343,6 +368,15 @@ class Searcher:
             print(f"[bf_map] 경고: 미매핑 FAQ 청크 {len(self.bf_unmapped)}건 — 질문이 바뀌었거나 "
                   f"bf_map이 청킹보다 오래됨. faq_bf_map.py를 재실행하세요. "
                   f"예: {self.bf_unmapped[:3]}")
+        self._title_toks: list[set] | None = None   # TITLE_W용 지연 캐시
+
+    def _titles(self) -> list[set]:
+        """청크별 (page_title + page_type) 토큰 집합. 코퍼스 고정이므로 1회만 계산."""
+        if self._title_toks is None:
+            self._title_toks = [
+                set(tokenize(f"{c.get('page_title') or ''} {c.get('page_type') or ''}"))
+                for c in self.chunks]
+        return self._title_toks
 
     def _resolve_bf(self, c: dict) -> str | None:
         """청크의 유효 BF. FAQ/게시판 청크는 bf_map(라우터 산출), 그 외는 문서 상속 태그.
@@ -413,6 +447,21 @@ class Searcher:
         rrf_k·alpha 기본값은 시그니처가 아니라 호출 시점에 모듈 상수에서 읽는다 —
         기본인자로 박으면 정의 시점에 고정돼 런타임 A/B가 조용히 틀린다.
         """
+        rrf, dsc = self._fuse(query, rrf_k, alpha)
+        self._apply_bf_boost(rrf, dsc, query, bf, boost)
+        return sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
+
+    def _fuse(self, query: str, rrf_k: int | None = None,
+              alpha: float | None = None) -> tuple[dict[int, float], dict[int, float]]:
+        """업무부스트 **이전**까지의 융합 — 가중 RRF + 연속항(dense 원점수 · 제목 겹침).
+
+        (rrf, dsc)를 돌려준다. dsc는 idx→dense 코사인 원점수로, 비례 부스트가 다시 쓴다.
+
+        부스트를 분리한 이유: PRF 역추론이 "부스트 없는 1차 랭킹"을 필요로 하는데,
+        예전 구현은 그걸 위해 hybrid_soft를 통째로 재호출해 dense(N)+sparse(N)를 **2회**
+        돌렸다(주석은 "1차 랭킹 재사용이라 비용 없음"이라 적혀 있었지만 실제로는 아니었다).
+        부스트가 융합 이후 가산이므로 여기서 끊으면 수치는 완전히 같고 비용만 절반이 된다.
+        """
         rrf_k = RRF_K if rrf_k is None else rrf_k
         alpha = RRF_ALPHA if alpha is None else alpha
         N = len(self.chunks)
@@ -423,19 +472,63 @@ class Searcher:
             rrf[idx] = rrf.get(idx, 0.0) + alpha / (rrf_k + rank + 1)
         for rank, (idx, _) in enumerate(s):
             rrf[idx] = rrf.get(idx, 0.0) + (1.0 - alpha) / (rrf_k + rank + 1)
-        if bf is not None and boost > 0:
-            allow = BF_SHARED_DOCS.get(bf, set())
-            facets = query_facets(query) if FACET_BOOST > 0 else set()
+        dsc = dict(d)
+        # 연속항은 bf 분류 성공 여부와 무관하게 적용한다 — 기권 구간에도 같은 효과.
+        if DENSE_W or TITLE_W:
+            qt = set(tokenize(query)) if TITLE_W else set()
+            titles = self._titles() if qt else None
             for idx in rrf:
-                c = self.chunks[idx]
-                if self._bf[idx] == bf or c["parent_doc_id"] in allow:
-                    rrf[idx] += boost
-                    if facets:
-                        hit = sum(1 for t in facets if t in c.get("sub_category", ""))
-                        if hit:
-                            rrf[idx] += FACET_BOOST * hit
-        ranked = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:k]
-        return ranked
+                if DENSE_W:
+                    rrf[idx] += DENSE_W * dsc.get(idx, 0.0)
+                if qt:
+                    rrf[idx] += TITLE_W * len(qt & titles[idx]) / len(qt)
+        return rrf, dsc
+
+    def _apply_bf_boost(self, rrf: dict[int, float], dsc: dict[int, float],
+                        query: str, bf: str | None, boost: float) -> None:
+        """같은 업무 청크에 부스트를 가산한다(제자리 수정). bf가 None이거나 boost=0이면 무동작."""
+        if bf is None or boost <= 0:
+            return
+        allow = BF_SHARED_DOCS.get(bf, set())
+        facets = query_facets(query) if FACET_BOOST > 0 else set()
+        dmax = max(dsc.values(), default=0.0) or 1e-9
+        for idx in rrf:
+            c = self.chunks[idx]
+            # FAQ 청크는 bf_map 조인값(_resolve_bf), 그 외는 문서 상속 태그.
+            if self._bf[idx] == bf or c["parent_doc_id"] in allow:
+                rrf[idx] += (boost * dsc.get(idx, 0.0) / dmax
+                             if BF_BOOST_SCALING == "dense" else boost)
+                if facets:
+                    hit = sum(1 for t in facets if t in c.get("sub_category", ""))
+                    if hit:
+                        rrf[idx] += FACET_BOOST * hit
+
+    def _infer_bf_from_pool(self, pool: list[tuple[int, float]]) -> str | None:
+        """1차 검색 상위 결과의 업무를 순위 가중 투표해 역추론한다(PRF).
+
+        키워드 분류기가 기권했을 때만 쓴다. 정답 라벨을 참조하지 않으므로 실배포
+        경로에서 그대로 동작한다. 우세 업무의 득표 비중이 QBF_PRF_MIN_SHARE 미만이면
+        판단을 보류하고 None을 돌려준다(기존 기권과 동일 동작).
+
+        emb-ko 원본과 한 곳이 다르다 — 투표 대상이 `business_function` 원본 태그가 아니라
+        `self._bf`(bf_map 조인값)다. 문서측 BF가 질의측과 같은 기준으로 정렬돼야
+        FAQ 청크의 표가 옛 부모 태그로 새지 않는다.
+        """
+        if not QBF_PRF_TOPN or not pool:
+            return None
+        votes: dict[str, float] = {}
+        total = 0.0
+        for rank, (idx, _) in enumerate(pool[:QBF_PRF_TOPN], 1):
+            bf = self._bf[idx]
+            if not bf:
+                continue
+            w = 1.0 / rank          # 상위일수록 큰 표
+            votes[bf] = votes.get(bf, 0.0) + w
+            total += w
+        if not votes or total <= 0:
+            return None
+        best, best_v = max(votes.items(), key=lambda x: x[1])
+        return best if (best_v / total) >= QBF_PRF_MIN_SHARE else None
 
     def _cap_by_doc(self, hits: list[tuple[int, float]], cap: int) -> list[tuple[int, float]]:
         """parent_doc_id당 cap개까지만 순서 유지하며 남김(문서 단위 다양성 확보)."""
@@ -458,10 +551,25 @@ class Searcher:
         elif mode == "hybrid_bf":
             # 질의 업무 분류 → 업무 신호 반영(soft 부스트 / hard 제외) + doc-count cap.
             # 깊은 풀을 받아 문서당 BF_DOC_CAP개로 제한 후 top-k → 몬스터 문서 독점 차단.
+            #
+            # BF 소스 3단 폴백:
+            #   1) 라우터 6분류        classify_query_bf() 내부. 체크포인트 있으면 기권 0%
+            #   2) 키워드 분류        라우터 미보유 시 폴백. 기권 28.6%
+            #   3) PRF 역추론         1·2가 모두 기권했을 때. 아래 블록
+            # 라우터가 로드되면 3단은 사실상 안 탄다(비용 0). 미보유 환경에서만 살아난다.
             bf = classify_query_bf(query)
             if BF_MODE == "soft":
-                pool = self.hybrid_soft(query, len(self.chunks), bf=bf, boost=BF_BOOST)
+                # 융합을 1회만 돌리고, PRF는 그 결과(부스트 전 랭킹)를 재사용한다.
+                rrf, dsc = self._fuse(query)
+                if bf is None and QBF_PRF_TOPN:
+                    base = sorted(rrf.items(), key=lambda x: x[1], reverse=True)[:QBF_PRF_TOPN]
+                    bf = self._infer_bf_from_pool(base)
+                self._apply_bf_boost(rrf, dsc, query, bf, BF_BOOST)
+                pool = sorted(rrf.items(), key=lambda x: x[1], reverse=True)
             else:
+                if bf is None and QBF_PRF_TOPN:
+                    base = self.hybrid_soft(query, QBF_PRF_TOPN, bf=None, boost=0.0)
+                    bf = self._infer_bf_from_pool(base)
                 pool = self.hybrid(query, max(k * 5, 50), bf=bf)
             hits = self._cap_by_doc(pool, BF_DOC_CAP)[:k]
         else:
