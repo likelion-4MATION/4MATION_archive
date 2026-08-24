@@ -18,6 +18,7 @@ import faiss
 import numpy as np
 
 import faq_bf_map as fbm
+import router_source
 
 MODEL_NAME = "dragonkue/BGE-m3-ko"
 INDEX_DIR = "data/index"
@@ -115,9 +116,12 @@ BF_QUERY_KEYWORDS = {
 }
 QBF_MIN_SCORE = 3          # 키워드 분류(폴백) 최소 점수
 QBF_MARGIN = 2             # 키워드 분류(폴백) 1위–2위 마진
-# 라우터 6분류 체크포인트. .gitignore 대상(2.4GB)이라 레포에 없을 수 있으며,
-# 없으면 classify_query_bf가 키워드 분류로 폴백한다(클론 직후에도 동작).
-ROUTER_PATH = str(pathlib.Path(__file__).resolve().parent.parent / "router_moai_embedding_model")
+# 라우터 6분류 체크포인트. 가중치 pytorch_model.bin(2.38GB)은 .gitignore 대상이라
+# 레포에 없다. router_source.resolve()가 로컬 디렉토리 → HF 프라이빗 repo 순으로
+# 위치를 정하고(from_pretrained가 둘 다 받는다), 셋 다 없으면 None을 돌려준다.
+# None이면 get_router()가 키워드 분류로 폴백한다(클론 직후에도 검색은 동작).
+# 설정·트러블슈팅: docs/router_checkpoint.md
+ROUTER_PATH = router_source.resolve()
 # MSP 임계. 주의: 이 체크포인트는 held-out 450셋에서 MSP 최솟값 0.9991·중앙값 1.0000으로
 # 체계적 과신 상태라 사실상 한 건도 걸러내지 못한다(θ 0.00~0.99 결과 동일). 소관밖(OOS)
 # 판정 장치로 신뢰하지 말 것 — 작업계획서 B안의 MSP 임계 설계는 캘리브레이션 후 재검토 대상.
