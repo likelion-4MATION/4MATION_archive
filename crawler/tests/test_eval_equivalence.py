@@ -221,12 +221,37 @@ def run() -> list[str]:
     absent = [n for n in need if not hasattr(new, n)]
     check("하위호환 심볼 전수", [f"누락: {absent}"] if absent else [])
 
-    # 7. admin/runner.run_eval() 이 읽는 키
-    r = new.evaluate_retrieval(gt, ret, new._load_jsonl(CHUNKS), score="both")
+    # 7. admin/runner.run_eval() 이 읽는 키 — 콘솔과 같은 인자로 부른다
+    #    (score="anchor" · id_fallback=False = 앵커텍스트 전용 판정)
+    r = new.evaluate_retrieval(gt, ret, new._load_jsonl(CHUNKS),
+                               score="anchor", id_fallback=False)
     m, an = r["chunk_level"], r.get("anchor_level") or {}
-    need_keys = ("n_evaluated", "hit@1", "hit@3", "hit@5", "hit@10", "mrr", "macro_recall@50")
-    miss_keys = [k for k in need_keys if k not in m] + ([] if "hit@5" in an else ["anchor.hit@5"])
+    need_an = ("n_scored", "n_missing_span", "hit@1", "hit@3", "hit@5", "hit@10", "mrr")
+    need_ch = ("hit@5", "n_evaluated", "macro_recall@50")   # 감사용 참고값
+    miss_keys = ([f"anchor.{k}" for k in need_an if k not in an]
+                 + [f"chunk.{k}" for k in need_ch if k not in m])
     check("admin/runner.run_eval() 이 읽는 키", [f"누락: {miss_keys}"] if miss_keys else [])
+
+    # 8. 앵커텍스트 전용 판정 — chunk_id 가 판정에 섞이지 않는지
+    fb_on = new.evaluate_retrieval(gt, ret, chunks, score="anchor", id_fallback=True)
+    a_off, a_on = r["anchor_level"], fb_on["anchor_level"]
+    bad = []
+    if a_off["n_id_fallback"] != 0:
+        bad.append(f"id 폴백이 남아 있다: n_id_fallback={a_off['n_id_fallback']}")
+    if a_off["n_full_anchor"] != a_off["n_scored"]:
+        bad.append(f"순수앵커 {a_off['n_full_anchor']} != 채점 {a_off['n_scored']}")
+    # 폴백을 끄면 앵커 없는 문항이 채점 대상에서 빠진다 — 분모가 줄고 결측이 늘어난다
+    if a_off["n_scored"] > a_on["n_scored"]:
+        bad.append(f"채점 문항이 늘었다: {a_on['n_scored']} -> {a_off['n_scored']}")
+    if a_off["n_scored"] + a_off["n_missing_span"] != a_on["n_scored"] + a_on["n_missing_span"]:
+        bad.append("채점+결측 총합이 두 모드에서 다르다 — 문항이 사라졌다")
+    if r.get("id_fallback") is not False:
+        bad.append("result['id_fallback'] 표기 누락 — 기록이 판정 방식을 밝히지 못한다")
+    if "id_fallback" in fb_on:
+        bad.append("레거시 경로에 id_fallback 키가 새로 생겼다 — 구 평가기와 dict 가 달라진다")
+    check("앵커텍스트 전용 판정 (chunk_id 미사용)", bad)
+    print(f"    · 채점 {a_off['n_scored']}문항 / 앵커 미보유 {a_off['n_missing_span']}문항 "
+          f"(폴백 켤 때 채점 {a_on['n_scored']} · id 섞임 {a_on['n_id_fallback']})")
 
     return fails
 

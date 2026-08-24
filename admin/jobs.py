@@ -11,7 +11,7 @@
   chain    eval → (판정 게이트) → rebuild → verify 를 한 잡으로 연달아 실행.
 
 체인의 판정 게이트
-    1단계 샌드박스 평가의 hit@5 가 마지막 실측 기준선보다 낮으면 잡을 `awaiting` 으로
+    1단계 샌드박스 평가의 앵커 hit@5 가 마지막 실측 기준선보다 낮으면 잡을 `awaiting` 으로
     세워 두고 `resume()` 신호를 기다린다. 브라우저를 닫았다 다시 열어도 대기 상태가
     유지된다(상태가 파일에 있으므로). 30분 안에 응답이 없으면 자동 중단한다.
 
@@ -295,7 +295,7 @@ def _gate_check(job: dict, metrics: dict) -> dict | None:
                 "base": base, "got": None}
     if got < base - 1e-9:
         return {"reason": "worse",
-                "text": f"검증 결과가 현재보다 나쁩니다 — hit@5 {base:.4f} → {got:.4f}.",
+                "text": f"검증 결과가 현재보다 나쁩니다 — 앵커 hit@5 {base:.4f} → {got:.4f}.",
                 "base": base, "got": got}
     return None
 

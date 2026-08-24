@@ -39,7 +39,9 @@ const fmt = (key, v) => {
   return String(v);
 };
 const val = k => (k in DRAFT ? DRAFT[k] : SAVED[k]);
-/* 지표 계열 — "anchor hit@5"(옛 A/B 표)와 "hit@5"(재빌드 실측)는 서로 뺄 수 없다 */
+/* 지표 계열 — 앵커 계열(anchor…)과 청크 계열(hit@…)은 서로 뺄 수 없다.
+   재빌드 실측도 이제 앵커 판정이라 두 계열이 같아졌지만, 옛 기록에는 청크 계열이
+   남아 있으므로 판별은 그대로 둔다(metric 문자열이 스스로 계열을 밝힌다). */
 const fam = m => !m ? null : (String(m).startsWith("anchor") ? "anchor" : "chunk");
 const changedKeys = () => Object.keys(DRAFT).filter(k => String(DRAFT[k]) !== String(SAVED[k]));
 
@@ -113,7 +115,7 @@ async function paint() {
   const baseAcc = base.acc === null || base.acc === undefined ? "?" : base.acc.toFixed(4);
   // 지표 이름을 고정하지 않는다 — k 를 바꾸면 hit@3 ↔ hit@5 로 잣대 자체가 달라진다
   const accLab = "정확도 " + (base.acc_metric && acc.metric && base.acc_metric !== acc.metric
-    ? `${base.acc_metric} → ${acc.metric}` : (acc.metric || base.acc_metric || "hit@5"));
+    ? `${base.acc_metric} → ${acc.metric}` : (acc.metric || base.acc_metric || "anchor hit@5"));
   $("#projTbl").innerHTML = `
     <tr><th>지표</th><th class="n">현재</th><th class="n">변경 후</th><th></th></tr>
     ${line(accLab, baseAcc, acc.value === null ? "?" : acc.value.toFixed(4), acc.grade)}
@@ -191,7 +193,7 @@ function paintTab7(acc, measured) {
      ${row("앵커 정확도(전체)", num(cur.all), g("all"))}
      ${row("단일 조건 질문", num(cur.single), g("single"))}
      ${row("복합 조건 질문", num(cur.and), g("and"))}
-     ${cur.chunk_hit5 != null ? `<tr><td>청크 hit@5</td>
+     ${cur.chunk_hit5 != null ? `<tr><td>청크 hit@5 <span class="hint">(참고 · 판정 미사용)</span></td>
         <td class="n">${Number(cur.chunk_hit5).toFixed(4)}</td>
         <td class="n">—</td><td class="n">—</td></tr>` : ""}`;
 
@@ -240,7 +242,7 @@ const hit5 = m => (m && m["hit@5"] != null) ? Number(m["hit@5"]).toFixed(4) : "�
 function stageBlock(s) {
   const done = s.steps.filter(x => x.status === "done").length;
   const pct = Math.round(done / (s.steps.length || 1) * 100);
-  const right = s.metrics && s.metrics["hit@5"] != null ? "hit@5 " + hit5(s.metrics)
+  const right = s.metrics && s.metrics["hit@5"] != null ? "앵커 hit@5 " + hit5(s.metrics)
     : s.status === "running" ? pct + "%" : s.status === "skipped" ? "건너뜀" : "";
   return `<div class="stage ${s.status}">
     <div class="stagehead">
@@ -250,8 +252,8 @@ function stageBlock(s) {
       <div class="steps">${s.steps.map(x =>
         `<span class="${x.status}">${esc(x.name)}</span>`).join("")}</div>` : ""}
     ${s.status === "done" && s.metrics && !s.metrics.error
-      ? `<div style="font-size:11px;color:var(--tx3);margin-top:5px">hit@1 ${s.metrics["hit@1"]}
-         · hit@3 ${s.metrics["hit@3"]} · MRR ${s.metrics["mrr@10"]} · ${s.chunks ?? "—"}청크</div>` : ""}
+      ? `<div style="font-size:11px;color:var(--tx3);margin-top:5px">앵커 hit@1 ${s.metrics["hit@1"]}
+         · hit@3 ${s.metrics["hit@3"]} · MRR ${s.metrics["mrr@10"]} · ${s.chunks ?? "—"}청크${s.metrics["n_evaluated"] ? ` · 채점 ${s.metrics["n_evaluated"]}문항` : ""}</div>` : ""}
     ${s.error ? `<div class="note bad" style="margin-top:8px">${esc(s.error)}</div>` : ""}
   </div>`;
 }
@@ -279,7 +281,7 @@ function cmpBlock(j) {
     return `<span style="color:${c}">${v > 0 ? "+" : ""}${v.toFixed(4)}</span>`;
   };
   return `<table style="margin-top:10px">
-    <tr><th>단계</th><th class="n">hit@5</th><th class="n">청크</th><th class="n">실행 전 대비</th></tr>
+    <tr><th>단계</th><th class="n">앵커 hit@5</th><th class="n">청크</th><th class="n">실행 전 대비</th></tr>
     ${b ? `<tr><td style="color:var(--tx3)">실행 전</td>
         <td class="n">${Number(b["hit@5"]).toFixed(4)}</td>
         <td class="n">${b.chunks ?? "—"}</td><td class="n">—</td></tr>` : ""}

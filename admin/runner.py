@@ -160,7 +160,14 @@ def run_pipeline(recrawl: bool) -> None:
 
 
 def run_eval(index_dir: str, gt_name: str = "gt_testset_retrieval_450.jsonl") -> dict:
-    """평가 함수를 직접 호출해 지표 dict 를 받는다 — 콘솔 문자열을 정규식으로 긁지 않는다."""
+    """평가 함수를 직접 호출해 지표 dict 를 받는다 — 콘솔 문자열을 정규식으로 긁지 않는다.
+
+    **판정은 앵커텍스트 전용이다**(`score="anchor"` · `id_fallback=False`). `gt_chunk_ids`
+    는 특정 청킹에 대한 좌표라 재청킹하면 값이 변한다 — 그걸 지표로 쓰면 청크 파라미터를
+    바꿀 때마다 수치가 검색 성능이 아니라 판정 방식 때문에 움직이고, 콘솔 ⑦탭이 그
+    움직임을 '정확도 변화'로 표시한다. 그래서 `hit@k` · `mrr@10` 은 전부 앵커 판정값이다.
+    chunk_id 판정값은 `chunk_hit@*` 로 따로 실어 감사용으로만 남긴다.
+    """
     import eval as ev
     import rag
     gt_path = CRAWLER / gt_name
@@ -177,16 +184,30 @@ def run_eval(index_dir: str, gt_name: str = "gt_testset_retrieval_450.jsonl") ->
                                           searcher.search(r["question"], k=10, mode="hybrid_bf")]}
                  for r in gt]
     chunk_meta = ev._load_jsonl(pathlib.Path(index_dir) / "chunk_meta.jsonl")
-    res = ev.evaluate_retrieval(gt, retrieved, chunk_meta, score="both")
+    res = ev.evaluate_retrieval(gt, retrieved, chunk_meta,
+                                score="anchor", id_fallback=False)
     m, a = res["chunk_level"], res.get("anchor_level") or {}
+    if not a:
+        # 앵커 판정을 못 했다면(청크 메타 없음 등) 숫자를 만들지 않는다 — chunk_id 수치를
+        # 앵커 자리에 몰래 넣으면 콘솔이 잣대가 다른 값을 '정확도'로 표시한다.
+        return {"error": "앵커 판정을 하지 못했습니다 (청크 본문 없음). "
+                         "chunk_meta.jsonl 에 text 필드가 있는지 확인하세요.",
+                "chunks": len(chunk_meta)}
+    scored, missing = a.get("n_scored", 0), a.get("n_missing_span", 0)
     return {
-        "n_evaluated": m.get("n_evaluated"),
+        "score_mode": "anchor",                 # 이 기록이 앵커 계열임을 스스로 밝힌다
+        "n_evaluated": scored,                  # 앵커 채점 문항 = 지표의 실제 분모
+        "n_missing_span": missing,              # 앵커 미보유 → 분모 제외분
+        "anchor_coverage": round(scored / ((scored + missing) or 1), 4),
         "chunks": len(chunk_meta),
-        "hit@1": round(m.get("hit@1", 0), 4), "hit@3": round(m.get("hit@3", 0), 4),
-        "hit@5": round(m.get("hit@5", 0), 4), "hit@10": round(m.get("hit@10", 0), 4),
-        "mrr@10": round(m.get("mrr", 0), 4),
+        "hit@1": round(a.get("hit@1", 0), 4), "hit@3": round(a.get("hit@3", 0), 4),
+        "hit@5": round(a.get("hit@5", 0), 4), "hit@10": round(a.get("hit@10", 0), 4),
+        "mrr@10": round(a.get("mrr", 0), 4),
+        "anchor_hit@5": round(a.get("hit@5", 0), 4),
+        # ── 아래는 감사용 참고값. 판정에 쓰이지 않는다 ──
+        "chunk_hit@5": round(m.get("hit@5", 0), 4),
+        "chunk_n_evaluated": m.get("n_evaluated"),
         "recall@50": round(m.get("macro_recall@50", 0), 4),
-        "anchor_hit@5": round(a.get("hit@5", 0), 4) if a else None,
     }
 
 

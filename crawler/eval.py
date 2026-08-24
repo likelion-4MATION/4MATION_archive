@@ -18,16 +18,20 @@ eval_doc_legacy.py 를 가리킨다. 판정 기준은 `docs/handoff/eval_유상.
 세 판정의 의미가 서로 달라 "중복 제거"로 하나만 남기지 않았다. 실제로 중복이던
 것(로더·정규화·표 헬퍼·GT 파서·검색 실행)만 §2 로 합쳐 단일 지점을 만들었다.
 
-  - `chunk` : gold `chunk_id` 완전일치 + 앵커텍스트 포함(앵커 미커버 gold 는 id 폴백).
-              KS=1~50, relation ANY/ALL. **admin 콘솔이 쓰는 경로.**
+  - `chunk` : **앵커텍스트 판정(정본).** KS=1~50, relation ANY/ALL. **admin 콘솔이 쓰는 경로.**
+              `gt_chunk_ids` 는 판정에 쓰지 않는다 — 특정 청킹에 대한 좌표라 재청킹하면
+              값이 변하고, 그러면 수치가 검색 성능이 아니라 판정 방식 때문에 움직인다.
+              앵커가 없는 문항은 분모에서 뺀다(미적중이 아니라 판정 불가).
+              구 하이브리드 동작(앵커 미커버 gold 를 id 로 요구)은 `--id-fallback` 으로만.
   - `span`  : `gt_anchor_spans`(청크별 정렬 리스트) 전부 발견해야 AND hit. KS=1~10.
   - `gold`  : 앵커를 포함한 **모든** 청크를 host 로 계산(gold id 무관). 등급 nDCG·
               Wilson CI·McNemar 유의성 검정 제공.
 
 사용:
     cd crawler
-    python eval.py chunk --gt ../final_testset/gt_natural430_anchored.jsonl
+    python eval.py chunk --gt ../final_testset/gt_natural430_anchored.jsonl   # 앵커 판정(기본)
     python eval.py chunk --gt ... --score chunk_id|anchor|both --mode hybrid_bf
+    python eval.py chunk --gt ... --id-fallback     # 구 하이브리드 판정(라벨 잔량 감사용)
     python eval.py span  --gt ... --mode hybrid_bf [--id-fallback] [--limit N]
     python eval.py gold  --gt ... --retrieved data/retrieved_top30.jsonl [--compare other.jsonl]
     python eval.py              # 인자 없으면 chunk (구 eval_anchor_v3.py 기본 동작)
@@ -500,6 +504,7 @@ def evaluate_retrieval(
     retrieved_data: Iterable[dict],
     chunk_metadata: Iterable[dict] | None = None,
     score: str = "both",
+    id_fallback: bool = True,
 ) -> dict:
     """GT와 검색 결과를 결정론적으로 평가한다.
 
@@ -512,6 +517,17 @@ def evaluate_retrieval(
       - ``anchor``  : top-k 청크 텍스트가 ``gt_anchor_span``을 포함하는지(골드텍스트).
       - ``both``    : 둘 다 산출(기본). 전환 효과를 나란히 보기 위한 모드.
     앵커 판정은 청크 본문이 필요하므로 ``chunk_metadata`` 없이는 건너뛴다.
+
+    ``id_fallback``: 앵커가 덮지 못한 gold 를 ``chunk_id`` 로 요구할지.
+      - ``True``  (함수 기본값) 기존 동작. 구 ``eval_anchor_v3.py`` 와 바이트 동등하다 —
+        `tests/test_eval_equivalence.py` 가 이 경로를 기준값으로 삼으므로 바꾸지 않는다.
+      - ``False`` **앵커텍스트만으로 판정한다.** `gt_chunk_ids` 는 특정 청킹에 대한
+        좌표라 재청킹하면 값이 변한다 — 평가 기준으로 쓰면 코퍼스를 바꿀 때마다
+        수치가 판정 방식 때문에 움직인다. 앵커가 하나도 없는 문항은 판정 근거가
+        없으므로 ``n_missing_span`` 으로 세고 분모에서 뺀다.
+    **평가셋 정책은 `id_fallback=False`(앵커텍스트 전용)다.** CLI(`--score` 기본
+    ``anchor``)와 `admin/runner.run_eval()` 이 그 경로로 부른다. 함수 기본값이 아직
+    ``True`` 인 것은 등가성 회귀 테스트의 기준값을 보존하기 위한 것뿐이다.
     """
     if score not in SCORE_MODES:
         raise ValueError(f"score must be one of {SCORE_MODES}, got {score!r}")
@@ -599,6 +615,11 @@ def evaluate_retrieval(
         if anchor_on:
             anchors = _get_gt_anchors(gt_item)
             unanchored, stale = _split_gold_by_anchor(gold_ids, anchors, chunk_text)
+            if not id_fallback:
+                # 앵커텍스트 전용 판정 — chunk_id 는 조건에서 완전히 뺀다.
+                # 앵커가 없는 문항은 아래 `not anchors and not unanchored` 에 걸려
+                # n_missing_span 으로 빠진다(미적중이 아니라 판정 불가).
+                unanchored = []
             anchor_metrics["n_stale_gold"] += len(stale)
             if stale and not anchors:
                 anchor_metrics["n_stale_only"] += 1
@@ -669,6 +690,9 @@ def evaluate_retrieval(
         "gold_coverage": gold_coverage,
         "audit_rows": audit_rows,
         "score_mode": score,
+        # 레거시 경로(id_fallback=True)에는 이 키를 넣지 않는다 — 등가성 회귀 테스트가
+        # 구 평가기의 반환 dict 와 키 집합까지 대조하기 때문이다(tests/ §1).
+        **({} if id_fallback else {"id_fallback": False}),
     }
 
 def _error_analysis(rows: list[dict], chunk_to_bf: dict[str, str] | None) -> dict:
@@ -886,17 +910,32 @@ def _anchor_report_lines(result: dict) -> list[str]:
              "정답 내용이 여러 청크에 정당히 존재해도 적중으로 잡히며, 재청킹으로 `chunk_id`가",
              "밀려도 판정이 유지된다. 출처: `docs/앵커텍스트_정답라벨링_파이프라인.md` ⑤.", "",
              "- `single`/`or`: 앵커 하나라도 발견되면 적중",
-             "- `and`: 앵커 **전부** 발견 + 앵커 없는 gold 청크 **전부** top-k에 존재",
-             "- 앵커가 덮지 않는 gold 청크는 `chunk_id`로 판정한다(하이브리드). 앵커를 지어내지",
-             "  않으면서 relation 의미를 지키는 방식이며, 라벨이 채워질수록 id 의존분이 줄어든다.", "",
-             f"- 채점 {anchor['n_scored']}문항 "
-             f"(앵커만으로 판정 {anchor['n_full_anchor']} · chunk_id 폴백 섞임 {anchor['n_id_fallback']}) "
-             f"· 근거 없음 {anchor['n_missing_span']}문항(분모 제외)",
-             f"- **id 의존도: {anchor['n_id_fallback'] / n_scored:.1%}** — 이 비율이 0에 가까울수록 "
-             f"수치가 순수 앵커 판정이다. 잔여 라벨 작업량의 지표이기도 하다.",
-             f"- 아래 표의 두 열과 Δ는 모두 **앵커 채점 대상 {anchor['n_scored']}문항** 기준이다"
-             f" (참고: 전체 {chunk['n_evaluated']}문항 기준 chunk_id hit@5 = {chunk['hit@5']:.3f}).", "",
-             "| 지표 | chunk_id 기준 | 앵커텍스트 기준 | Δ |", "|---|---:|---:|---:|"]
+             "- `and`: 앵커 **전부** 발견 + 앵커 없는 gold 청크 **전부** top-k에 존재"]
+    if result.get("id_fallback") is False:
+        lines += [
+            "- **판정은 앵커텍스트만 본다 (`--id-fallback` 꺼짐).** `gt_chunk_ids` 는 특정 청킹에",
+            "  대한 좌표라 재청킹하면 값이 변한다 — 평가 기준으로 쓰면 수치가 검색 성능이 아니라",
+            "  판정 방식 때문에 움직인다. 그래서 `and` 조건에서도 앵커 없는 gold 는 요구하지 않는다.",
+            "- 앵커가 하나도 없는 문항은 판정 근거가 없어 **분모에서 뺀다**(미적중이 아니다).", "",
+            f"- 채점 {anchor['n_scored']}문항 (전부 순수 앵커 판정) "
+            f"· 앵커 미보유 {anchor['n_missing_span']}문항(분모 제외)",
+            f"- **앵커 커버율: {anchor['n_scored'] / (anchor['n_scored'] + anchor['n_missing_span'] or 1):.1%}** "
+            f"— 이 비율이 낮으면 수치의 모집단이 작다는 뜻이다. 잔여 라벨 작업량의 지표.",
+            f"- 아래 표의 두 열과 Δ는 모두 **앵커 채점 대상 {anchor['n_scored']}문항** 기준이다."
+            f" chunk_id 열은 **참고용**이며 판정에 쓰이지 않는다"
+            f" (전체 {chunk['n_evaluated']}문항 기준 chunk_id hit@5 = {chunk['hit@5']:.3f}).", ""]
+    else:
+        lines += [
+            "- 앵커가 덮지 않는 gold 청크는 `chunk_id`로 판정한다(하이브리드). 앵커를 지어내지",
+            "  않으면서 relation 의미를 지키는 방식이며, 라벨이 채워질수록 id 의존분이 줄어든다.", "",
+            f"- 채점 {anchor['n_scored']}문항 "
+            f"(앵커만으로 판정 {anchor['n_full_anchor']} · chunk_id 폴백 섞임 {anchor['n_id_fallback']}) "
+            f"· 근거 없음 {anchor['n_missing_span']}문항(분모 제외)",
+            f"- **id 의존도: {anchor['n_id_fallback'] / n_scored:.1%}** — 이 비율이 0에 가까울수록 "
+            f"수치가 순수 앵커 판정이다. 잔여 라벨 작업량의 지표이기도 하다.",
+            f"- 아래 표의 두 열과 Δ는 모두 **앵커 채점 대상 {anchor['n_scored']}문항** 기준이다"
+            f" (참고: 전체 {chunk['n_evaluated']}문항 기준 chunk_id hit@5 = {chunk['hit@5']:.3f}).", ""]
+    lines += ["| 지표 | chunk_id 기준 | 앵커텍스트 기준 | Δ |", "|---|---:|---:|---:|"]
     for key in ("hit@1", "hit@3", "hit@5", "hit@10", "mrr"):
         lines.append(f"| {key} | {base_all[key]:.3f} | {anchor[key]:.3f} | "
                      f"{anchor[key] - base_all[key]:+.3f} |")
@@ -928,6 +967,8 @@ def _print_summary(result: dict, report_path: Path) -> None:
         ("n_excluded", str(m["n_excluded_unanswerable"])),
         ("n_inconsistent", str(m["n_inconsistent"])),
         ("score_mode", result.get("score_mode", "chunk_id")),
+        ("판정", "앵커텍스트 전용 (chunk_id 미사용)" if result.get("id_fallback") is False
+                else "앵커 + chunk_id 폴백 (하이브리드)"),
     ])
     if anchor:
         base = result["chunk_on_anchor_subset"]   # 동일 모집단(앵커 채점 대상) baseline
@@ -937,9 +978,13 @@ def _print_summary(result: dict, report_path: Path) -> None:
             for k in (1, 3, 5, 10)
         ] + [("MRR@10", f"{base['mrr']:.3f}  ->  {anchor['mrr']:.3f}"
                         f"  ({anchor['mrr'] - base['mrr']:+.3f})"),
-             ("앵커 채점/결측", f"{anchor['n_scored']} / {anchor['n_missing_span']}"),
-             ("순수앵커/id폴백", f"{anchor['n_full_anchor']} / {anchor['n_id_fallback']}"
-                            f"  (id 의존도 {anchor['n_id_fallback'] / (anchor['n_scored'] or 1):.1%})")])
+             ("앵커 채점/결측", f"{anchor['n_scored']} / {anchor['n_missing_span']}")]
+            + ([("앵커 커버율",
+                 f"{anchor['n_scored'] / ((anchor['n_scored'] + anchor['n_missing_span']) or 1):.1%}"
+                 f"  (앵커 미보유 {anchor['n_missing_span']}문항은 분모 제외)")]
+               if result.get("id_fallback") is False else
+               [("순수앵커/id폴백", f"{anchor['n_full_anchor']} / {anchor['n_id_fallback']}"
+                 f"  (id 의존도 {anchor['n_id_fallback'] / (anchor['n_scored'] or 1):.1%})")]))
     if result.get("score_mode") != "anchor":
         # anchor 모드에서는 위 비교 그룹이 이미 chunk_id 열을 담고 있어 중복이다.
         _print_group("Hit@K (chunk_id 기준)", [
@@ -1522,7 +1567,7 @@ SUBCOMMANDS = ("chunk", "span", "gold")
 
 
 def _cmd_chunk(args: argparse.Namespace) -> None:
-    """구 eval_anchor_v3.main() — 동작 무변경."""
+    """구 eval_anchor_v3.main() — 판정 로직 무변경. 기본 판정 기준만 앵커텍스트 전용이다."""
     data_dir = _default_data_dir()
     gt_data = _load_jsonl(args.gt)
     if args.retrieved:
@@ -1533,7 +1578,8 @@ def _cmd_chunk(args: argparse.Namespace) -> None:
                                         depth=DEPTH_CHUNK, gold_bf=True)
         retrieval_source = f"`rag.Searcher.search(question, k=10, mode={args.mode!r})`"
     chunk_metadata = _load_jsonl(args.chunks)
-    result = evaluate_retrieval(gt_data, retrieved_data, chunk_metadata, score=args.score)
+    result = evaluate_retrieval(gt_data, retrieved_data, chunk_metadata,
+                                score=args.score, id_fallback=args.id_fallback)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     write_report(result, args.report, args.gt, retrieval_source, chunk_metadata)
     _print_summary(result, args.report)
@@ -1588,11 +1634,15 @@ def _build_parser() -> argparse.ArgumentParser:
                    help="id, retrieved_chunk_ids JSONL. 생략하면 현재 rag.Searcher로 검색한다.")
     p.add_argument("--mode", default="hybrid_bf", help="--retrieved 생략 시 rag 검색 mode")
     p.add_argument("--report", default=data_dir / "eval_chunk_report.md", type=Path)
-    p.add_argument("--score", default="both", choices=SCORE_MODES,
-                   help="적중 판정 기준. chunk_id=gold ID 완전일치만 산출 · "
-                        "anchor=앵커텍스트를 주 기준으로 보고 · both=둘 다 병기(기본). "
+    p.add_argument("--score", default="anchor", choices=SCORE_MODES,
+                   help="적중 판정 기준. anchor=앵커텍스트 판정(기본, 평가셋 정책) · "
+                        "chunk_id=gold ID 완전일치만 산출 · both=둘 다 병기. "
                         "anchor/both는 산출 지표가 같고 콘솔 표시만 다르다 — "
                         "chunk_id 지표는 오류 분석·감사표에 필요해 항상 계산된다.")
+    p.add_argument("--id-fallback", action="store_true", dest="id_fallback",
+                   help="앵커가 덮지 못한 gold 를 chunk_id 로 요구한다(구 동작). "
+                        "기본 꺼짐 — gt_chunk_ids 는 특정 청킹에 대한 좌표라 재청킹하면 "
+                        "값이 변하므로 평가 기준으로 쓰지 않는다. 라벨 잔량 감사용으로만 켠다.")
     p.set_defaults(func=_cmd_chunk)
 
     p = sub.add_parser("span", help="다중 span 판정(구 eval_anchor_span_multi.py)")
