@@ -1,6 +1,6 @@
 # 오류 분석 리포트 — hybrid_bf 기준
 
-- 대상: 전체 450건 중 **미적중 28건** · 미적중률 6.2%
+- 대상: 전체 450건 중 **미적중 25건** · 미적중률 5.6%
 - 미적중 = gt_docs 문서가 hybrid_bf top-3 밖. `rank=0` 은 top-10 내에도 정답 문서 없음.
 - 태그: **✅정답** / **⚠️타업무혼입** / **❌동일업무오답**.
 - 원인(질의 분류): **불명**(필터 미적용) / **오분류**(엉뚱한 업무로 필터) / **정분류**(업무 내부 랭킹·청킹 문제).
@@ -9,7 +9,7 @@
 
 | 원인 | 건수 |
 |---|---|
-| 정분류 | 19 |
+| 정분류 | 16 |
 | 불명 | 8 |
 | 오분류 | 1 |
 
@@ -18,9 +18,9 @@
 | 업무 | 문항 | 미적중 | 미적중률 |
 |---|---|---|---|
 | 착오송금 반환 신청 | 84 | 11 | 13.1% |
-| 채무조정 안내 | 78 | 6 | 7.7% |
 | 고객 미수령금 신청 | 77 | 5 | 6.5% |
 | 예금보험금 안내 | 65 | 3 | 4.6% |
+| 채무조정 안내 | 78 | 3 | 3.8% |
 | 예금자보호제도 | 84 | 2 | 2.4% |
 | 은닉재산 신고 | 62 | 1 | 1.6% |
 
@@ -31,18 +31,18 @@
 | `kdic-fins-ir-aplygudn-MtrsGvbkSprtProc-selectScrn` | 8 | 착오송금 반환 신청 |
 | `kdic-fins-cm-bbs-selectFaqNramtAply` | 8 | 예금보험금 안내 |
 | `kdic-www-sp-kmrs-kmrsItrdAplyTrgt-selectScrn` | 7 | 착오송금 반환 신청 |
-| `kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn` | 6 | 채무조정 안내 |
-| `kdic-fins-lb-lbltinfo-LbltInfoInqItrdMthdGudn-selectScrn` | 6 | 채무조정 안내 |
 | `kdic-fins-cm-bbs-selectFaqTop10` | 6 | 착오송금 반환 신청 |
 | `kdic-fins-ua-aplygudn-NramtItgrAplyItrdMthdGudn-selectScrn` | 5 | 고객 미수령금 신청 |
+| `kdic-fins-lb-lbltinfo-LbltInfoInqItrdMthdGudn-selectScrn` | 4 | 채무조정 안내 |
 | `kdic-fins-cm-bbs-selectFaqMsdrGvbkAply` | 4 | 착오송금 반환 신청 |
-| `kdic-www-rb-lbltajmt-LbltAjmtSprtCredRcvrySprt-selectScrn` | 4 | 채무조정 안내 |
+| `kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn` | 3 | 채무조정 안내 |
 | `kdic-www-sp-dpstrprot-ProtSystHrpeHistInq-selectScrn` | 3 | 고객 미수령금 신청 |
 | `kdic-www-rb-lbltajmt-LbltAjmtSprtPsnBr-selectScrn` | 2 | 채무조정 안내 |
 | `kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn` | 2 | 착오송금 반환 신청 |
 | `kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn` | 2 | 착오송금 반환 신청 |
 | `kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn` | 2 | 예금자보호제도 |
 | `kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn` | 2 | 예금보험금 안내 |
+| `kdic-fins-cm-bbs-selectFaqLbltInfoInq` | 2 | 채무조정 안내 |
 
 ## 3. 업무 간 혼입 흐름 (top-1이 엉뚱한 업무)
 
@@ -251,33 +251,6 @@
   1. [❌동일업무오답] 착오송금 반환 신청 / 착오송금반환지원 신청대상  `kdic-www-sp-kmrs-kmrsItrdAplyTrgt-selectScrn`
   2. [❌동일업무오답] 착오송금 반환 신청 / 반환지원절차  `kdic-fins-ir-aplygudn-MtrsGvbkSprtProc-selectScrn`
   3. [❌동일업무오답] 착오송금 반환 신청 / 착오송금수취인  `kdic-fins-ir-aplygudn-MsdrAddrsePossDcmntGudn-selectScrn`
-
-### [채무조정 안내 · gap_aug_chunk] 예금보험공사 지원기금 채무조정은 어떻게 신청하나요?
-- 정답 gt_docs: ['kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn']
-- 질의분류: 채무조정 안내 · **원인: 정분류(업무내 랭킹/청킹)**
-- dense rank: 미적중 · hybrid_bf rank: 미적중(top10밖)
-- hybrid_bf top-3:
-  1. [❌동일업무오답] 채무조정 안내 / 소개와 방법 안내  `kdic-fins-lb-lbltinfo-LbltInfoInqItrdMthdGudn-selectScrn`
-  2. [❌동일업무오답] 채무조정 안내 / 채무조정제도  `kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn`
-  3. [❌동일업무오답] 채무조정 안내 / 신용회복 지원  `kdic-www-rb-lbltajmt-LbltAjmtSprtCredRcvrySprt-selectScrn`
-
-### [채무조정 안내 · gap_aug_chunk] 채무조정 지원제도에는 어떤 것들이 있나요?
-- 정답 gt_docs: ['kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn']
-- 질의분류: 채무조정 안내 · **원인: 정분류(업무내 랭킹/청킹)**
-- dense rank: 미적중 · hybrid_bf rank: 미적중(top10밖)
-- hybrid_bf top-3:
-  1. [❌동일업무오답] 채무조정 안내 / 소개와 방법 안내  `kdic-fins-lb-lbltinfo-LbltInfoInqItrdMthdGudn-selectScrn`
-  2. [❌동일업무오답] 채무조정 안내 / 채무조정제도  `kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn`
-  3. [❌동일업무오답] 채무조정 안내 / 신용회복 지원  `kdic-www-rb-lbltajmt-LbltAjmtSprtCredRcvrySprt-selectScrn`
-
-### [채무조정 안내 · gap_aug_chunk] 채무조정을 신청하면 빚 독촉이 멈추나요?
-- 정답 gt_docs: ['kdic-www-sp-sprtfund-SprtFndDebtDlngAplyGudn-selectScrn']
-- 질의분류: 채무조정 안내 · **원인: 정분류(업무내 랭킹/청킹)**
-- dense rank: 미적중 · hybrid_bf rank: 9
-- hybrid_bf top-3:
-  1. [❌동일업무오답] 채무조정 안내 / 신용회복 지원  `kdic-www-rb-lbltajmt-LbltAjmtSprtCredRcvrySprt-selectScrn`
-  2. [❌동일업무오답] 채무조정 안내 / 채무조정제도  `kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn`
-  3. [❌동일업무오답] 채무조정 안내 / 채무정보 조회 ＆ 상담신청  `kdic-www-rb-lbltajmt-LbltAjmtSprtLbltInfoInqDscsnAply-selectScrn`
 
 ### [채무조정 안내 · heading] 빚 일부만 몇 년 갚으면 나머지는 법원이 없애주는 제도 이름이 뭐죠?
 - 정답 gt_docs: ['kdic-www-rb-lbltajmt-LbltAjmtSprtPsnRg-selectScrn']

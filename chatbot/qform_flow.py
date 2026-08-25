@@ -43,7 +43,7 @@ for _p in (_BASE / "chatbot", _BASE / "crawler"):
 import qform_ask  # noqa: E402
 import qform_config  # noqa: E402
 import qform_state  # noqa: E402
-from qform_extract import IN_SCOPE_BF, extract, is_definitional  # noqa: E402
+from qform_extract import IN_SCOPE_BF, extract, in_scope, is_definitional  # noqa: E402
 
 # D2: 되묻기 상한. **값의 주인은 `qform_config` 로 옮겼고(ver3 T2) 이 이름은 별칭이다.**
 # `verify_docs.py` 가 `qform_flow.MAX_ASK_TURNS` 를 읽으므로 이름을 없애지 않는다.
@@ -70,7 +70,11 @@ def new_state() -> dict:
             "slot_turn": {},                           # {슬롯: 설정된 턴} — TTL 판정용
             "slot_origin": {},                         # {슬롯: 신규|이월|미채움} — 트레이스
             "carryover": None,                         # 이월 판정 사유 (트레이스)
-            "ask_bypass": None}                        # 되묻기 우회 사유 (ver3 T3)
+            "ask_bypass": None,                        # 되묻기 우회 사유 (ver3 T3)
+            "queue": [],                               # 기존 Qform 세부용건 큐 (ver4 K13)
+            "unit_queue": [],                          # 절별 BF/OOS 순차 큐
+            "routing_history": [],                     # 절별 6-BF/OOS 처리 기록
+            "passed": []}                              # pass 로 확정 포기한 슬롯 (ver4 K5)
 
 
 def _default_classify(query: str):
@@ -80,7 +84,7 @@ def _default_classify(query: str):
 
 def _default_answer(query: str, qform: dict):
     import chain                             # 지연 임포트 — 되묻기 턴에는 여기까지 오지 않는다
-    return chain.answer(query, qform=qform)
+    return chain.answer_in_scope(query, qform=qform)
 
 
 def _clean(slots: dict) -> dict:
@@ -110,7 +114,8 @@ def options(state: dict) -> list[str]:
     if not slot:
         return []
     slots = state.get("qform") or {}
-    vals = qform_ask.survivor_values(slot, qform_state.survivors(slots))
+    vals = qform_ask.survivor_values(
+        slot, qform_state.survivors(slots, qform_state.combos_for(state.get("bf"))))
     rows = qform_ask.rows_for(slot, slots.get("sub_task"))
     covered = {r["value"] for r in rows}
     return [r["value"] for r in rows if r["value"] in vals] + sorted(vals - covered)
@@ -139,7 +144,8 @@ def _carryover_gate(cfg: dict, cls_bf, prev_bf, prev: dict) -> tuple[bool, str]:
 
 
 def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = False,
-          classify_fn=None, answer_fn=None, llm_call=None, config=None) -> dict:
+          classify_fn=None, answer_fn=None, llm_call=None, config=None,
+          business_function: str | None = None, detect_multi: bool = True) -> dict:
     """새 질의 진입. 업무 판정을 **1회** 계산해 추출기에 주입한다(E3).
 
     ver3 T2 — **슬롯 이월.** 되묻기로 좁힌 슬롯이 다음 턴에 증발하지 않게 직전 턴
@@ -156,13 +162,17 @@ def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = 
     prev_turn = dict(state.get("slot_turn") or {})
     turn_no = int(state.get("turn_no") or 0) + 1
 
-    cls_bf = (classify_fn or _default_classify)(query)
+    # 상단 절별 라우터가 고른 BF가 있으면 그대로 쓴다. 기존 직접 호출은 None이라 현행
+    # classify_fn/_default_classify 경로를 유지한다.
+    cls_bf = business_function if business_function is not None \
+        else (classify_fn or _default_classify)(query)
     allow, reason = _carryover_gate(cfg, cls_bf, prev_bf, prev)
     # 업무 불명이면 직전 업무를 물려 추출기에 넣는다 — "그럼 법인은요?" 가 스코프
     # 게이트에 걸려 슬롯 0개로 죽는 것을 막는다. 이월이 막힌 턴에서는 상속하지 않는다.
     bf = cls_bf if cls_bf is not None else (prev_bf if allow else None)
 
-    slots = extract(query, business_function=bf)
+    # M8-b — 스코프를 **cfg 에서** 받는다. 기본값이 `msdr` 이라 주입이 없으면 현행과 동일하다.
+    slots = extract(query, business_function=bf, scope=cfg.get("QFORM_SCOPE"))
     origin = {f: (SRC_NEW if slots.get(f) else SRC_EMPTY) for f in SLOT_FIELDS}
     slot_turn = {f: turn_no for f in SLOT_FIELDS if slots.get(f)}
 
@@ -174,12 +184,17 @@ def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = 
     if allow and not evidence and cfg["CARRYOVER_SCOPE"] != "global":
         allow, reason = False, "신규 추출 0 — 업무 증거 없음"
 
+    expired: dict = {}                         # TTL 만료분 — 패널이 **회색으로 잔류**시킨다(K6)
     if allow:
         carried = 0
         for f in SLOT_FIELDS:
             if slots.get(f) is not None or prev.get(f) is None:
                 continue                       # ① 신규가 있으면 이월값이 못 덮는다
             stamp = prev_turn.get(f)
+            if stamp is not None and turn_no - stamp > cfg["CARRYOVER_TTL"]:
+                # 값은 이월하지 않지만 **화면에서 조용히 지우지는 않는다.**
+                # 아무것도 안 했는데 항목이 사라지면 사용자는 버그로 읽는다(K6 조건 ①).
+                expired[f] = prev[f]
             if stamp is None or turn_no - stamp > cfg["CARRYOVER_TTL"]:
                 continue                       # TTL 만료 · 설정 턴 불명 → 이월 안 함
             slots[f] = prev[f]
@@ -192,9 +207,25 @@ def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = 
     slots["_carryover"] = reason
     state.update({"bf": bf, "base_q": query, "qform": _clean(slots),
                   "slots_raw": slots, "ask_turn": 0, "pending_slot": None,
-                  "asked": [],                 # 새 질의 = 새 되묻기 이력
+                  "asked": [], "passed": [],   # 새 질의 = 새 되묻기 이력
                   "turn_no": turn_no, "slot_turn": slot_turn,
-                  "slot_origin": origin, "carryover": reason})
+                  "slot_origin": origin, "carryover": reason,
+                  "expired": expired})
+
+    # ver4 K13 — 다중 의도는 **병합하지 않고 큐에 쌓는다.** 지금 처리하는 의도는
+    # `extract()` 가 고른 것 그대로이며(=기존 경로 무변경), 나머지만 적재한다.
+    # `classify_fn` 을 넘기지 않는다 — 절마다 업무 판정을 돌리면 E3(업무 판정 1회)이
+    # 깨진다. 업무 교차 감지는 화면이 명시로 부른다(`detect_intents(q, classify_fn=…)`).
+    if detect_multi and cfg.get("MAX_QUEUE", 0):
+        import qform_memory_panel              # 지연 임포트 — 순환 참조 방지
+        intents = qform_memory_panel.detect_intents(
+            query, score_fn=qform_memory_panel.bf_scores, scope=cfg.get("QFORM_SCOPE"))
+        if intents["kind"] == "parallel":
+            rest = [st for st in intents["sub_tasks"] if st != state["qform"].get("sub_task")]
+            qform_memory_panel.enqueue(
+                state, [{"sub_task": st, "bf": bf, "text": query} for st in rest],
+                config=config)
+        state["intents"] = intents
     return _step(state, ask_mode=ask_mode, boost=boost, config=cfg,
                  answer_fn=answer_fn, llm_call=llm_call)
 
@@ -233,7 +264,14 @@ def reply(state: dict, text: str, *, value: str | None = None,
             origin[slot] = SRC_NEW
             slot_turn[slot] = turn_no
     else:
-        merged = extract(f"{state['base_q']} {text}", business_function=IN_SCOPE_BF)
+        # 스코프 안이면 **상태의 업무를 그대로** 쓴다(M5 확장 대비). 스코프 밖이면 기존처럼
+        # 착오송금으로 명시 — 후속 답변("대리인이요")만으로는 게이트에 걸리기 때문이다.
+        # 기본 스코프(msdr)에서는 되묻기 대화의 bf 가 착오송금이라 **동작이 완전히 같다**.
+        _bf = state.get("bf")
+        _scope = qform_config.resolve(config).get("QFORM_SCOPE")
+        merged = extract(f"{state['base_q']} {text}",
+                         business_function=_bf if (_bf and in_scope(_bf, _scope)) else IN_SCOPE_BF,
+                         scope=_scope)
         for f in SLOT_FIELDS:
             if not state["qform"].get(f) and merged.get(f):
                 state["qform"][f] = merged[f]
@@ -279,13 +317,15 @@ def _try_ask(state: dict, *, ask_mode: str, llm_call, cfg: dict) -> dict | None:
         state["pending_slot"] = None
         return None
 
-    nq = (qform_state.next_question(state["qform"], exclude=set(state.get("asked") or ()))
+    combos = qform_state.combos_for(state.get("bf"))   # M6-c — 업무의 표를 본다
+    nq = (qform_state.next_question(state["qform"], exclude=set(state.get("asked") or ()),
+                                    combos=combos)
           if state["ask_turn"] < cfg["MAX_ASK_TURNS"] else None)
     if nq is None:
         state["pending_slot"] = None
         return None
 
-    surv = qform_state.survivors(state["qform"])
+    surv = qform_state.survivors(state["qform"], combos)
     ask = qform_ask.build_question(nq["slot"], state["qform"], surv,
                                    mode=ask_mode, llm_call=llm_call)
     state["ask_turn"] += 1
@@ -321,12 +361,30 @@ def edit(state: dict, field: str, value: str | None = None, *,
     만지작거릴 때마다 예산이 새면 안 되므로, 재생성은 사용자가 명시로 요청할 때만
     한다(`answer_now`). ⓐ 모드에서 이 함수의 HCX 콜은 **0**이다.
 
-    해제 시:
-      - `asked` 에서 그 슬롯을 뺀다 — **다시 물을 수 있어야** 고치는 의미가 있다(AC6-2)
-      - `ask_turn` 을 `len(asked)` 로 되돌린다. 안 그러면 상한에 이미 닿은 대화에서
-        해제해도 되묻기가 영영 안 뜬다. 되묻기 하나를 무른 것이니 턴도 하나 무른다.
+    **해제(`value=None`)의 의미가 ver4 에서 바뀌었다 — K4.** X 는 "그만 물어봐"가 아니라
+    **메모리 오염 차단**이다: "이 값을 다음 용건으로 끌고 가지 마라". 그래서 지우자마자
+    다시 묻지 않는다. 재질문 차단은 X 가 아니라 `pass_slot()` 이 맡는다(K5).
 
-    반환: `{"kind": "ask", …}` 되물을 것이 생김 (콜 0 · ⓐ)
+    | | ver3 (개정 전) | **ver4 (개정 후)** |
+    |---|---|---|
+    | X 직후 | 해당 슬롯 되묻기 즉시 재발동 | **아무 것도 묻지 않음.** 값만 None |
+    | `asked` | 그 슬롯을 제거 | **건드리지 않음** |
+    | `ask_turn` | `len(asked)` 로 무름 | **무르지 않음** |
+    | `answer()` | 0회 | **0회 (F8 유지)** |
+
+    ⚠ **X 이후 재질문 여부는 슬롯이 어떻게 채워졌느냐에 따라 갈린다. 의도된 비대칭이며
+    버그가 아니다.**
+
+    | 슬롯이 채워진 경로 | `asked` | X 이후 |
+    |---|---|---|
+    | 되묻기로 채움 | 이미 기록됨 | **다시 안 물음** — 결과적으로 pass 와 동일 |
+    | 첫 발화에서 추출 | 기록 없음 | **다시 물을 수 있음** — 새 용건이 그 슬롯을 요구하면 |
+
+    두 번째 줄이 K4 의 의도에 정확히 맞는다. 오염만 끊고, 새 용건에 필요한 것은 새로 묻는다.
+    첫 줄은 "이미 한 번 물어본 것을 또 묻지 않는다"는 기존 원칙이 이기는 자리이며,
+    사용자가 다시 답하고 싶으면 ✏️ 수정으로 값을 직접 넣으면 된다.
+
+    반환: `{"kind": "ask", …}` 되물을 것이 생김 (**값 설정 경로에서만**. 콜 0 · ⓐ)
           `{"kind": "ready", …}` 되물을 것 없음 → 화면이 '다시 답변받기' 를 노출한다
     """
     if field not in SLOT_FIELDS:
@@ -345,8 +403,8 @@ def edit(state: dict, field: str, value: str | None = None, *,
         origin[field] = SRC_EMPTY
         slot_turn.pop(field, None)
         hits.pop(field, None)
-        state["asked"] = [s for s in (state.get("asked") or []) if s != field]
-        state["ask_turn"] = len(state["asked"])
+        # K4 — `asked` · `ask_turn` 을 건드리지 않는다. 되묻기를 재발동시키지 않기 위해서다.
+        # (ver3 는 여기서 asked 제거 + ask_turn 되감기를 했다 → 즉시 재질문)
     else:
         origin[field] = SRC_NEW
         slot_turn[field] = int(state.get("turn_no") or 0)
@@ -356,10 +414,50 @@ def edit(state: dict, field: str, value: str | None = None, *,
     raw["_origin"] = origin
     state.update({"slots_raw": raw, "slot_origin": origin, "slot_turn": slot_turn})
 
+    if value is None:
+        # K4 — 해제는 침묵한다. 되묻기 판정 자체를 돌리지 않는다.
+        state["pending_slot"] = None
+        return {"kind": "ready", "field": field, "value": None,
+                "slots": dict(state["qform"]),
+                "survivors": qform_state.survivors(state["qform"])}
+
     ev = _try_ask(state, ask_mode=ask_mode, llm_call=llm_call, cfg=cfg)
     if ev is not None:
         return ev
     return {"kind": "ready", "field": field, "value": value,
+            "slots": dict(state["qform"]),
+            "survivors": qform_state.survivors(state["qform"])}
+
+
+def pass_slot(state: dict, field: str) -> dict:
+    """⏭ pass — **이 슬롯은 답하지 않겠다.** 값을 `None` 으로 확정하고 `asked` 에 기록한다.
+
+    K5 로 X 와 역할이 갈렸다. X(`edit(f, None)`)는 오염 차단이라 `asked` 를 안 건드리고,
+    pass 는 **재질문 차단**이라 `asked` 에 남긴다. 이 경로는 ver3 에도 사실상 있었다 —
+    되묻기에 "잘 모르겠어요"로 답하면 `reply()` 가 `_mark_asked()` 를 불렀다.
+    이번 작업은 그것을 **버튼으로 명시 노출**하는 것이고, 여기서는 그 경로를 함수로 고정한다.
+
+    `answer()` 를 부르지 않는다(F8). 되묻기도 새로 띄우지 않는다 — 지금 묻던 슬롯을
+    포기한 것이므로 다음 판정은 사용자의 다음 입력에서 돈다.
+    """
+    if field not in SLOT_FIELDS:
+        raise ValueError(f"슬롯이 아니다: {field!r} (허용 {SLOT_FIELDS})")
+    state.setdefault("qform", {})[field] = None
+    raw = dict(state.get("slots_raw") or {})
+    raw[field] = None
+    origin = dict(state.get("slot_origin") or {})
+    origin[field] = SRC_EMPTY
+    raw["_origin"] = origin
+    slot_turn = dict(state.get("slot_turn") or {})
+    slot_turn.pop(field, None)
+    _mark_asked(state, field)                       # ← X 와 갈리는 유일한 지점
+    passed = state.setdefault("passed", [])
+    if field not in passed:
+        passed.append(field)
+    if state.get("pending_slot") == field:
+        state["pending_slot"] = None
+    state.update({"slots_raw": raw, "slot_origin": origin, "slot_turn": slot_turn})
+    return {"kind": "ready", "field": field, "value": None, "passed": list(passed),
             "slots": dict(state["qform"]),
             "survivors": qform_state.survivors(state["qform"])}
 

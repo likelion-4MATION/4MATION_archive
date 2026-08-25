@@ -27,23 +27,32 @@ ver3 T5 — 되묻기 선택지 버튼과 예시 질의 칩을 붙였다. 둘 �
 실행: streamlit run chatbot/app.py
 주의: chain.CALL_BUDGET(70콜, 재시도 포함)을 공유 — 소진 시 앱 재시작으로 리셋.
 """
+import json
 import pathlib
 import sys
+import uuid
+from datetime import datetime, timezone
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "chatbot"))
 sys.path.insert(0, str(ROOT / "crawler"))
+sys.path.insert(0, str(ROOT / "admin"))
 
 import chain
+import orchestrator
+import oos_store
 import qform_flow
 import qform_followup
+import qform_memory_panel as qmp
 import qform_panel
 import qform_state
 import qform_trace
 
-ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "reject": "소관 밖"}
+ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "reject": "소관 밖",
+               "oos": "안내 범위 밖 처리"}
 SLOT_LABEL = {"party": "역할", "sub_task": "세부주제", "qualification": "자격",
               "subject": "주체", "method": "접수수단"}
 ASK_MODES = {"ⓐ 템플릿 (콜 0)": "template", "ⓑ LLM 생성 (턴당 1콜)": "llm"}
@@ -98,15 +107,208 @@ EXAMPLE_CHIPS = [
     ("은닉재산 신고", "은닉재산 신고하면 포상금 얼마나 받나요?"),
 ]
 
+# 업무 도메인 아이콘 — EXAMPLE_CHIPS 라벨과 1:1. 장식용(이모지)일 뿐 판정에 안 쓴다.
+DOMAIN_ICONS = {
+    "착오송금 반환 신청": "💸",
+    "예금자보호제도": "🛡️",
+    "예금보험금 안내": "💰",
+    "고객 미수령금 신청": "🔍",
+    "채무조정 안내": "🤝",
+    "은닉재산 신고": "🕵️",
+}
+
+# 슬롯 추출 스코프 라벨 → `qform_config.SPEC["QFORM_SCOPE"]` 허용값. 첫 항목이 기본값이다.
+SCOPE_LABELS = {"착오송금 단일 (기본)": "msdr", "착오송금 + 예금보험금": "msdr+dpin"}
+_SCOPE_DEFAULT_LABEL = next(iter(SCOPE_LABELS))
+
 st.set_page_config(page_title="KDIC 안내 챗봇 PoC", page_icon="💬", layout="wide")
-st.title("💬 KDIC 안내 챗봇 — PoC")
-st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
+
+# ── 레이아웃 CSS (ver6) ──────────────────────────────────────────────────────
+# 좌·우 컬럼 안 맨 앞에 보이지 않는 마커(span)를 심어두고, `[data-testid="stColumn"]
+# :has(.col-anchor-*)` 로 "그 마커를 담고 있는 컬럼"을 직접 골라낸다 — 형제 선택자로
+# 옆 요소를 짚어가던 이전 방식보다 훨씬 안전하다(중첩 깊이가 바뀌어도 안 깨진다).
+# 안쪽에 또 st.columns()가 있어도(도메인 그리드 등) 그 내부 컬럼엔 마커가 없어서
+# 이 규칙이 걸리지 않는다.
+st.markdown("""
+<style>
+/* Streamlit은 기본적으로 앱 전체를 뷰포트 높이에 고정하고(overflow:hidden) 그 안
+   (stAppScrollToBottomContainer, chat_input이 있으면 생김)만 내부 스크롤시킨다 —
+   좌·우를 sticky로 고정하려면 페이지 자체가 평범하게 스크롤돼야 하므로 풀어준다.
+   중간 래퍼(stMainBlockContainer·stHorizontalBlock)에 overflow:hidden이 섞여 있으면
+   sticky가 조용히 무효화되므로 같이 열어준다. */
+[data-testid="stApp"][data-testid="stApp"],
+[data-testid="stAppViewContainer"][data-testid="stAppViewContainer"],
+[data-testid="stAppScrollToBottomContainer"][data-testid="stAppScrollToBottomContainer"],
+[data-testid="stMainBlockContainer"][data-testid="stMainBlockContainer"],
+[data-testid="stHorizontalBlock"][data-testid="stHorizontalBlock"] {
+    position: static !important; height: auto !important; min-height: 0 !important;
+    overflow: visible !important; overflow-y: visible !important;
+}
+body { min-height: 100vh; }
+
+/* 색 하나로 통일 — 좌·우 배경, 사용자 말풍선 모두 이 회색 하나만 쓴다 */
+:root {
+    --panel-gray: #F1F3F4;
+    --panel-title-size: 1.02rem;  /* "세션 상태" 같은 소제목 크기 */
+    --metric-value-size: 2rem;    /* HCX 콜 "8 / 70" 숫자 크기 — 제목보다 눈에 띄게 크게 */
+    --ui-red: #FF4B4B;            /* Streamlit 기본 테마 primaryColor — 대화 초기화 버튼과 같은 빨강 */
+}
+
+[data-testid="stColumn"]:has(.col-anchor-left),
+[data-testid="stColumn"]:has(.col-anchor-right) {
+    position: sticky; top: 4.5rem; align-self: flex-start;
+    max-height: calc(100vh - 6rem); overflow-y: auto;
+    background: var(--panel-gray); border-radius: 14px; padding: 0.9rem 1.05rem;
+    scrollbar-width: none;
+}
+[data-testid="stColumn"]:has(.col-anchor-left)::-webkit-scrollbar,
+[data-testid="stColumn"]:has(.col-anchor-right)::-webkit-scrollbar { display: none; }
+
+/* 왼쪽·오른쪽 안 글자·버튼·간격을 촘촘하게 — 스크롤을 줄인다 */
+[data-testid="stColumn"]:has(.col-anchor-left) h2, [data-testid="stColumn"]:has(.col-anchor-left) h3,
+[data-testid="stColumn"]:has(.col-anchor-left) h4,
+[data-testid="stColumn"]:has(.col-anchor-right) h2, [data-testid="stColumn"]:has(.col-anchor-right) h3,
+[data-testid="stColumn"]:has(.col-anchor-right) h4 {
+    font-size: var(--panel-title-size) !important; margin-top: .2rem !important; margin-bottom: .2rem !important;
+}
+[data-testid="stColumn"]:has(.col-anchor-left) p, [data-testid="stColumn"]:has(.col-anchor-left) .stMarkdown,
+[data-testid="stColumn"]:has(.col-anchor-left) [data-testid="stCaptionContainer"],
+[data-testid="stColumn"]:has(.col-anchor-right) p, [data-testid="stColumn"]:has(.col-anchor-right) .stMarkdown,
+[data-testid="stColumn"]:has(.col-anchor-right) [data-testid="stCaptionContainer"] {
+    font-size: .83rem !important; line-height: 1.35 !important;
+}
+[data-testid="stColumn"]:has(.col-anchor-left) button,
+[data-testid="stColumn"]:has(.col-anchor-right) button {
+    font-size: .82rem !important; padding: .3rem .55rem !important; min-height: 2rem !important;
+}
+[data-testid="stColumn"]:has(.col-anchor-left) [data-testid="stVerticalBlock"],
+[data-testid="stColumn"]:has(.col-anchor-right) [data-testid="stVerticalBlock"] {
+    gap: .35rem !important;
+}
+[data-testid="stColumn"]:has(.col-anchor-left) [data-testid="stMetricValue"] {
+    font-size: var(--metric-value-size) !important;
+}
+[data-testid="stColumn"]:has(.col-anchor-left) hr, [data-testid="stColumn"]:has(.col-anchor-right) hr {
+    margin: .5rem 0 !important;
+}
+/* 회색 배경 위 항목 카드는 흰색으로 — 배경과 구분 (근거조각·추천질문·도메인 카드 등).
+   `st.container(key=...)`에 "card-"로 시작하는 key를 주면 Streamlit이 그 컨테이너에
+   st-key-card-... 클래스를 그대로 붙여준다 — 이 훅으로 카드만 콕 집어 흰 배경을 준다. */
+[class*="st-key-card-"] {
+    background: #FFFFFF !important; border-radius: 10px !important;
+    padding: .5rem .65rem !important; margin-bottom: .4rem !important;
+}
+
+/* 업무별 추천 검색어(6×1)는 버튼별 특별 크기 규칙 없이 위 일반 버튼 규칙(font-size
+   .82rem · min-height 2rem)을 그대로 쓴다 — "지금 뜨는 검색어" 카드와 같은 크기가
+   된다. 한 줄 폭이 넓어져서(6×1) 라벨이 2줄로 넘어갈 일도 거의 없다. */
+
+/* 추천 질문 카드의 "Q." 만 현재 테마 빨강으로 — 버튼 라벨은 일반 텍스트라
+   문자 단위 스타일링이 안 되니 ::first-letter 로 첫 글자("Q")만 짚는다.
+   qcard- 접두사(위 _render_question_cards)로 이 카드들에만 걸리게 한다. */
+/* 실제 글자는 button > ... > p 안에 있다 — button 자체엔 ::first-letter가 안 먹는다
+   (라이브 DOM으로 확인: button::first-letter는 무효, button p::first-letter는 유효). */
+[class*="st-key-qcard-"] button p::first-letter { color: var(--ui-red) !important; }
+
+/* 하단 입력창 가운데 정렬 — 폭 자체는 아래 JS(components.html)가 중앙 컬럼 실측값으로
+   맞춘다. margin:auto만 CSS로 미리 걸어 두면 JS가 늦게 붙어도 어색하게 왼쪽에
+   붙어있지 않는다. */
+[data-testid="stBottomBlockContainer"] { margin-left: auto !important; margin-right: auto !important; }
+</style>
+""", unsafe_allow_html=True)
+
+title_col, report_col = st.columns([5, 1])
+with title_col:
+    st.title("💬 KDIC 안내 챗봇 — PoC")
+    st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
+with report_col:
+    st.write("")
+    if st.button("🚩 챗봇 오류 신고", key="top-report", width="stretch"):
+        st.session_state.report_confirm = True
 
 st.session_state.setdefault("history", [])
 st.session_state.setdefault("flow", qform_flow.new_state())
 st.session_state.setdefault("needs_regen", False)   # 슬롯 수정 후 재답변 대기 (T6)
+st.session_state.setdefault("session_id", f"sess_{uuid.uuid4().hex[:16]}")
+st.session_state.setdefault("report_confirm", False)
+st.session_state.setdefault("report_notice", None)
 
-with st.sidebar:
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def append_history(turn: dict) -> dict:
+    item = {**turn, "message_id": turn.get("message_id") or f"msg_{uuid.uuid4().hex[:16]}",
+            "timestamp": turn.get("timestamp") or _utc_now()}
+    st.session_state.history.append(item)
+    return item
+
+
+def last_answer_id() -> str:
+    for turn in reversed(st.session_state.history):
+        if turn.get("role") == "answer":
+            return str(turn.get("message_id") or "")
+    return ""
+
+
+def report_context() -> dict:
+    flow = st.session_state.flow
+    return {
+        "session_id": st.session_state.session_id,
+        "target_message_id": last_answer_id(),
+        "payload": {
+            "conversation": st.session_state.history,
+            "model_version": chain.MODEL_NAME,
+            "qform": flow.get("qform"),
+            "slot_origin": flow.get("slot_origin"),
+            "queue": flow.get("unit_queue"),
+            "qform_queue": flow.get("queue"),
+            "routing_history": flow.get("routing_history"),
+            "call_count": chain._calls,
+        },
+    }
+
+
+if st.session_state.report_notice:
+    level, message = st.session_state.report_notice
+    (st.success if level == "ok" else st.error)(message)
+    st.session_state.report_notice = None
+
+if st.session_state.report_confirm:
+    st.warning("오류 분석을 위해 현재 대화 내용과 답변 처리 기록이 저장됩니다.")
+    confirm_col, cancel_col, _ = st.columns([1, 1, 4])
+    if confirm_col.button("신고하기", key="report-confirm", type="primary", width="stretch"):
+        try:
+            ctx = report_context()
+            saved = oos_store.create_report(ctx["payload"], session_id=ctx["session_id"],
+                                            report_path="top_button",
+                                            target_message_id=ctx["target_message_id"])
+            st.session_state.report_notice = ("ok", f"오류 신고가 접수되었습니다 ({saved['report_id']}).")
+        except Exception:
+            st.session_state.report_notice = ("error", "오류 신고를 저장하지 못했습니다. 접수된 것으로 처리하지 않았습니다.")
+        st.session_state.report_confirm = False
+        st.rerun()
+    if cancel_col.button("취소", key="report-cancel", width="stretch"):
+        st.session_state.report_confirm = False
+        st.rerun()
+
+# 좌측(정보) / 중앙(대화) / 우측(추천 질문·근거 조각) — 예시 UI(서울 열린데이터광장
+# 챗봇) 레이아웃을 참고해 사이드바 대신 고정 3컬럼으로 구성한다.
+# 좌·우 폭은 서로 같게, 중앙은 그보다 조금 더 크게.
+left, center, right = st.columns([1.1, 2.3, 1.1])
+
+with left:
+    st.markdown('<span class="col-anchor-left"></span>', unsafe_allow_html=True)
+    if st.button("🔄 대화 초기화", key="btn-reset-top", type="primary", width="stretch"):
+        st.session_state.history = []
+        st.session_state.flow = qform_flow.new_state()
+        st.session_state.needs_regen = False
+        st.session_state.session_id = f"sess_{uuid.uuid4().hex[:16]}"
+        st.session_state["_pending_step"] = None
+        st.rerun()
+    st.divider()
+
     st.subheader("세션 상태")
     _left_calls = chain.CALL_BUDGET - chain._calls
     st.metric("HCX 콜 (재시도 포함)", f"{chain._calls} / {chain.CALL_BUDGET}")
@@ -115,40 +317,47 @@ with st.sidebar:
         st.error("모델 호출 예산 소진 — 새 답변을 만들 수 없습니다. "
                  "되묻기·선택지·슬롯 수정은 계속 동작합니다 (콜 0).")
     elif _left_calls <= LOW_CALL_WARN:
-        st.warning(f"남은 모델 호출 {_left_calls}회. 답변 1건당 2콜(분류+생성)을 씁니다.")
+        st.warning(f"남은 모델 호출 {_left_calls}회. "
+                   "경로에 따라 OOS 분류 또는 답변 생성에 호출을 씁니다.")
     st.caption("되묻기 턴은 ⓐ 모드에서 콜을 쓰지 않습니다. 예산 소진 시 앱 재시작으로 리셋됩니다.")
-    st.divider()
 
-    st.subheader("큐폼")
-    st.radio(
-        "되묻기 문구", list(ASK_MODES), index=0, key="ask_mode_label",
-        help="ⓐ는 조합 테이블 값을 CSV 문구에 끼워 넣습니다(LLM 콜 0). "
-             "ⓑ는 같은 판정 결과를 LLM이 한 문장으로 다듬습니다. 값 고정 가드를 어기면 "
-             "ⓐ로 폴백하고 사유를 남깁니다 — 어느 쪽이 나은지는 비교해 보고 정합니다.",
-    )
-    st.checkbox(
-        "쿼리 부스트 (실험)", value=False, key="boost",
-        help="슬롯 값을 검색 쿼리에 덧붙입니다. 검색 동작이 바뀌므로 450셋 회귀 수치가 "
-             "나오기 전까지는 기본 OFF입니다. 첨부 후단 필터는 토글과 무관하게 항상 동작합니다.",
-    )
-    st.checkbox("트레이스 패널", value=True, key="show_trace",
-                help="질의 1건이 어느 층에서 어떻게 갈렸는지 보여줍니다.")
-    st.caption("첨부 후단 필터는 항상 켜져 있습니다 (슬롯이 비면 자동으로 기존 동작).")
-
-    if st.button("대화 초기화"):
-        st.session_state.history = []
-        st.session_state.flow = qform_flow.new_state()
-        st.session_state.needs_regen = False
-        st.rerun()
-
-    st.divider()
-    st.caption(
-        "표시되는 유사도는 질문-문서 관련도이며 정답 확신도가 아닙니다. "
-        "검증 플래그는 참고용이며 답변을 차단하지 않습니다."
-    )
+    # 예시 UI처럼 좌측은 세션 상태 · 근거 문서만 상시 노출한다. 큐폼 설정(및 트레이스 토글)은
+    # 접어 둔다 — 기능은 그대로고, 접혀 있어도 위젯 상태는 유지된다(Streamlit 특성).
+    with st.expander("⚙️ 큐폼 설정"):
+        st.radio(
+            "되묻기 문구", list(ASK_MODES), index=0, key="ask_mode_label",
+            help="ⓐ는 조합 테이블 값을 CSV 문구에 끼워 넣습니다(LLM 콜 0). "
+                 "ⓑ는 같은 판정 결과를 LLM이 한 문장으로 다듬습니다. 값 고정 가드를 어기면 "
+                 "ⓐ로 폴백하고 사유를 남깁니다 — 어느 쪽이 나은지는 비교해 보고 정합니다.",
+        )
+        st.checkbox(
+            "쿼리 부스트 (실험)", value=False, key="boost",
+            help="슬롯 값을 검색 쿼리에 덧붙입니다. 검색 동작이 바뀌므로 450셋 회귀 수치가 "
+                 "나오기 전까지는 기본 OFF입니다. 첨부 후단 필터는 토글과 무관하게 항상 동작합니다.",
+        )
+        # ver4 M8-b — `QFORM_SCOPE` 는 M5 에서 SPEC 에 신설했는데 화면에 없었다.
+        # **종합 관리자 콘솔이 읽을 자리**라 여기에 노출한다. 기본값은 `msdr`(착오송금 단일) 유지 —
+        # 확장 전환은 `verify_qform_e2e.py`(동결) AC5 fixture 와 충돌해 보류돼 있다(HOLES H39).
+        st.selectbox(
+            "슬롯 추출 스코프", list(SCOPE_LABELS), index=0, key="qform_scope_label",
+            help="msdr=착오송금 단일(기본·현행). msdr+dpin=예금보험금 포함. "
+                 "확장은 실측만 끝났고 기본값 전환은 보류 상태입니다(HOLES H39).",
+        )
+        st.checkbox("트레이스 패널", value=False, key="show_trace",
+                    help="질의 1건이 어느 층에서 어떻게 갈렸는지 보여줍니다. "
+                         "좌측을 세션 상태·근거 문서 위주로 단순하게 유지하려고 기본은 꺼둡니다.")
+        st.caption("첨부 후단 필터는 항상 켜져 있습니다 (슬롯이 비면 자동으로 기존 동작).")
+        st.divider()
+        st.caption(
+            "표시되는 유사도는 질문-문서 관련도이며 정답 확신도가 아닙니다. "
+            "검증 플래그는 참고용이며 답변을 차단하지 않습니다."
+        )
 
 ASK_MODE = ASK_MODES[st.session_state.get("ask_mode_label", "ⓐ 템플릿 (콜 0)")]
 BOOST = bool(st.session_state.get("boost"))
+# 좌측 큐폼 설정 → 정책 오버라이드. `qform_config.resolve()` 가 허용범위 밖 값을 기본값으로 되돌린다.
+CONFIG = {"QFORM_SCOPE": SCOPE_LABELS[st.session_state.get("qform_scope_label",
+                                                          _SCOPE_DEFAULT_LABEL)]}
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -222,6 +431,25 @@ def render_attachments(atts: list, key_prefix: str) -> None:
                 st.markdown(f"- {kind}[{a.get('label') or fname}]({url}) — 원문 페이지에서 내려받기")
 
 
+def render_evidence_card(r: dict) -> None:
+    """근거 자료 카드 — 최종 답변의 근거 문서·검증 플래그. (첨부파일은 말풍선 쪽에 남는다.)
+
+    말풍선(render_answer)에서 그리던 것과 **완전히 같은 모양**(접이식 라벨 포함)을
+    그대로 우측 컬럼으로 옮긴 것뿐이다 — 데이터·판정 로직은 손대지 않았다.
+    """
+    if r.get("text") is None:
+        st.caption("이 답변은 오류로 근거 자료가 없습니다.")
+        return
+    if r["sources"]:
+        with st.expander("근거 문서"):
+            for i, s in enumerate(r["sources"], 1):
+                st.markdown(f"{i}. [{s['title']}]({s['url']})")
+    if not r["checks"]["ok"]:
+        with st.expander("⚑ 검증 플래그 (차단 아님)"):
+            for f in r["checks"]["flags"]:
+                st.markdown(f"- {f}")
+
+
 def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
                   search_q: str | None = None, editable: bool = False,
                   followups: list[dict] | None = None) -> dict:
@@ -246,16 +474,30 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
     )
     if search_q:
         st.caption(f"🔎 부스트 적용 검색어: `{search_q}`")
-    if r["sources"]:
-        with st.expander("근거 문서"):
-            for i, s in enumerate(r["sources"], 1):
-                st.markdown(f"{i}. [{s['title']}]({s['url']})")
+    # 근거 문서·검증 플래그는 우측 "근거 자료" 컬럼으로 옮겼다(render_evidence_card).
+    # 첨부파일 다운로드는 대화 흐름과 붙어 있는 게 자연스러워 말풍선에 그대로 둔다.
     render_attachments(r.get("attachments") or [], key_prefix)
-    if not r["checks"]["ok"]:
-        with st.expander("⚑ 검증 플래그 (차단 아님)"):
-            for f in r["checks"]["flags"]:
-                st.markdown(f"- {f}")
-
+    action = (r.get("_meta") or {}).get("action")
+    if action == "REFERRAL" and r.get("referral"):
+        ref = r["referral"]
+        st.caption(f"안내처 · {ref['org']}")
+        if ref.get("url"):
+            st.link_button("공식 안내 페이지", ref["url"])
+        if ref.get("phone"):
+            st.write(f"전화: {ref['phone']}")
+        if ref.get("hours"):
+            st.caption(f"운영시간: {ref['hours']}")
+    if action == "PHONE_GUIDE":
+        if st.button("유선 상담 안내", key=f"phone-{key_prefix}"):
+            st.session_state[f"phone-open-{key_prefix}"] = True
+        if st.session_state.get(f"phone-open-{key_prefix}"):
+            guide = r.get("phone_guide")
+            if guide:
+                st.write(guide["message"])
+                st.write(f"대표번호: {guide['phone']}")
+                st.caption(f"운영시간: {guide['hours']}")
+            else:
+                st.caption("현재 게시·활성화된 유선 상담 정보가 없습니다.")
     # reject 복구 경로 (T6 B4) — 소관 밖이라고 끝내면 그 화면이 막다른 길이 된다.
     # **타기관 이름·URL 을 붙이지 않는다.** HOLES H7 이 열려 있어 근거가 없고,
     # 없는 기관을 안내하는 순간 R2(참고문서에 있는 내용만) 위반이다.
@@ -300,6 +542,10 @@ def render_ask(turn: dict) -> None:
     st.caption(f"남은 후보 {turn['remaining']}개 · 건너뛰어도 답변합니다 · {tag}")
 
 
+_ESCAPE = "\x00escape"      # 렌더 층 내부 신호. 슬롯 값이 아니다(조합 테이블 밖으로 안 나간다)
+_PASS = "\x00pass"
+
+
 def render_options(opts: list[str], key_prefix: str) -> str | None:
     """되묻기 선택지 버튼 (T5 B1). 클릭된 값을 돌려준다.
 
@@ -326,22 +572,311 @@ def render_options(opts: list[str], key_prefix: str) -> str | None:
         with st.expander(f"다른 선택지 보기 ({len(tail)}개)"):
             for i in range(0, len(tail), 3):
                 _row(tail[i:i + 3], f"t{i}")
+    # K9 — 빠른 답변은 키 조합이 아니라 **버튼**. 탈출구 로직은 ver2부터 구현·검증돼 있어
+    # (verify_qform_e2e.py AC3) 여기서 하는 일은 **입구를 하나 더 여는 렌더링 변경**이다.
+    # K5 — ⏭ pass 는 "이 슬롯은 답하지 않겠다". X(오염 차단)와 역할이 다르다.
+    c1, c2 = st.columns(2)
+    if c1.button("이대로 답변받기", key=f"opt-{key_prefix}-escape", width="stretch"):
+        picked = _ESCAPE
+    if c2.button("⏭ 이건 넘어갈게요", key=f"opt-{key_prefix}-pass", width="stretch"):
+        picked = _PASS
     return picked
 
 
-def render_chips(key_prefix: str, per_row: int = 3) -> str | None:
-    """예시 질의 칩 (T5 B2). 클릭된 질의 문구를 돌려준다.
+_TERMS_CACHE: dict | None = None
 
-    문구는 `docs/qform_시험질의셋.md` 원문이다 — `EXAMPLE_CHIPS` 주석에 출처를 남겼다.
+
+def term_caption(value: str) -> str | None:
+    """선택지 값이 용어 사전의 `term` 이면 **`one_line` 전문**을 캡션으로 돌려준다.
+
+    M1 판정 3 — **버튼 라벨 = `term` · 캡션 = `one_line` 전문.** `one_line` 은 코퍼스
+    축자 문장이라 **자르지 않는다**(줄이는 순간 창작이다). 화면에서 줄이는 것은
+    말줄임이 아니라 캡션으로 내리는 것으로 해결한다.
+    현재 조합 테이블의 슬롯 값(본인·대리인·법인…)과 용어 사전의 term(예금보험금·
+    가지급금…)은 교집합이 없어 이 경로는 **아직 발동하지 않는다** — D 되묻기를 구현하지
+    않기로 했기 때문이다(08-18 M1 판정 1). 배선만 두고 재측정 대상으로 남긴다.
+    """
+    global _TERMS_CACHE
+    if _TERMS_CACHE is None:
+        import csv
+        try:
+            with (ROOT / "crawler" / "data" / "qform_terms_v0.csv").open(encoding="utf-8-sig") as fh:
+                _TERMS_CACHE = {r["term"]: r["one_line"] for r in csv.DictReader(fh)}
+        except Exception:
+            _TERMS_CACHE = {}
+    return _TERMS_CACHE.get(value)
+
+
+def render_memory_panel(flow: dict, key_prefix: str = "mem") -> tuple | None:
+    """메모리 패널 3구역 (ver4 M3). **렌더만 한다** — 모델·조작은 `qform_memory_panel`.
+
+    반환: 클릭된 조작 `(op, kwargs)` 또는 None. 호출자가 `qmp.apply()` 로 넘긴다.
+    `answer()` 는 어느 경로로도 호출되지 않는다(A3-2).
+    """
+    model = qmp.panel_model(flow)
+    action = None
+    st.subheader("기억")
+    st.caption(f"이월 유효 {model['ttl']}턴 · 만료 항목은 회색으로 남습니다")
+    for zone in model["zones"]:
+        st.markdown(f"**{zone['name']}**")
+        if not zone["items"]:
+            st.caption("(없음)")
+            continue
+        for i, it in enumerate(zone["items"]):
+            val = it.get("value")
+            shown = ", ".join(val) if isinstance(val, list) else (val or "—")
+            line = f"{it['label']} · {shown}"
+            if it["status"] != qmp.ST_ACTIVE:
+                st.caption(f"~~{line}~~  ({it['status']})")     # 회색 잔류 — 삭제하지 않는다
+            else:
+                st.write(line)
+            st.caption(f"고치면 → {it['effect']}" + ("" if it["actionable"] else "  (표시 전용)"))
+            cap = term_caption(shown)
+            if cap:
+                st.caption(cap)                                  # M1 판정 3 · one_line 전문
+            if not it["actionable"]:
+                continue
+            cols = st.columns(len(it["ops"]) or 1)
+            for col, op in zip(cols, it["ops"]):
+                label = {"edit": "✏️", "clear": "❌", "pass": "⏭",
+                         "move": "✏️ 순서", "drop": "❌"}[op]
+                if col.button(label, key=f"{key_prefix}-{zone['name']}-{i}-{op}"):
+                    if op in ("move", "drop"):
+                        action = (op, {"index": it["index"], "delta": -1})
+                    else:
+                        action = (op, {"field": it["field"]})
+    return action
+
+
+def render_chips(key_prefix: str, items: list[tuple[str, str]] | None = None,
+                 per_row: int = 3) -> str | None:
+    """질의 칩 (T5 B2). 클릭된 질의 문구를 돌려준다.
+
+    `items` 미지정 시 `EXAMPLE_CHIPS`(업무 6종, `docs/qform_시험질의셋.md` 원문) 사용.
+    다른 출처(예: 코퍼스 FAQ 원문) 문구를 넣을 때도 **같은 원칙** — 화면이 문구를
+    창작하지 않는다 — 을 지켜야 한다.
+    """
+    items = EXAMPLE_CHIPS if items is None else items
+    picked = None
+    for i in range(0, len(items), per_row):
+        chunk = list(enumerate(items[i:i + per_row], start=i))
+        for col, (idx, (label, query)) in zip(st.columns(len(chunk)), chunk):
+            with col:
+                # 버튼 자체가 이미 테두리 있는 박스라 st.container(border=True)로 한 번 더
+                # 감싸면 네모가 2겹이 된다 — 감싸지 않고 버튼 하나만 둔다.
+                # DOMAIN_ICONS에 있는 라벨(업무 6종)이면 이모지를 붙인다(우측 "업무별
+                # 추천 검색어"와 같은 스타일). 없는 라벨(에러 복구용 등)은 그냥 텍스트.
+                icon = DOMAIN_ICONS.get(label)
+                shown = f"{icon}  {label}" if icon else label
+                if st.button(shown, key=f"chip-{key_prefix}-{idx}", width="stretch",
+                             help=query):
+                    picked = query
+    return picked
+
+
+# ── 지금 뜨는 검색어 — 코퍼스 FAQ 페이지 원문에서만 뽑는다(EXAMPLE_CHIPS와 같은 원칙:
+# 창작 금지). 코퍼스에 FAQ 페이지가 있는 업무만 자연히 포함된다(현재: 예금자보호제도,
+# 은닉재산 신고 2종 — 나머지 업무는 FAQ 페이지 자체가 없어 후보에 안 뜬다).
+_FAQ_Q_RE = re.compile(r"질문\s*\n(.+?)\n\s*답변", re.S)
+_TRENDING_CACHE: list[str] | None = None
+
+
+def _load_trending_questions(limit: int = 6) -> list[str]:
+    global _TRENDING_CACHE
+    if _TRENDING_CACHE is None:
+        qs: list[str] = []
+        try:
+            with (ROOT / "crawler" / "data" / "chunks.jsonl").open(encoding="utf-8") as fh:
+                for line in fh:
+                    d = json.loads(line)
+                    if "FAQ" not in (d.get("page_title") or ""):
+                        continue
+                    m = _FAQ_Q_RE.search(d.get("text") or "")
+                    if m:
+                        q = m.group(1).strip()
+                        if q and q not in qs:
+                            qs.append(q)
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            qs = []
+        _TRENDING_CACHE = qs
+    return _TRENDING_CACHE[:limit]
+
+
+# ── 분류별 추천 검색어 — 업무 도메인마다 여러 질문. `testset_natural_450.jsonl` 원문만
+# 쓴다(팀 관례상 임의 창작 금지) — 이미 이 파일이 EXAMPLE_CHIPS 중 "고객 미수령금 신청"
+# 칩 문구의 원천으로 쓰던 파일과 같다.
+_DOMAIN_Q_CACHE: dict[str, list[str]] | None = None
+
+
+def _load_domain_questions(limit: int = 5) -> dict[str, list[str]]:
+    """업무별 자연어 질문(구어체 포함) — "현재 질문과 비슷한 질문"(문맥 추천) 전용.
+
+    직전 질의와 같은 결로 자연스럽게 이어지게 구어체 파라프레이즈를 그대로 쓴다.
+    """
+    global _DOMAIN_Q_CACHE
+    if _DOMAIN_Q_CACHE is None:
+        by_bf: dict[str, list[str]] = {}
+        try:
+            with (ROOT / "crawler" / "data" / "testset_natural_450.jsonl").open(encoding="utf-8") as fh:
+                for line in fh:
+                    d = json.loads(line)
+                    bf, q = d.get("business_function"), d.get("question")
+                    if not bf or not q:
+                        continue
+                    lst = by_bf.setdefault(bf, [])
+                    if q not in lst and len(lst) < limit:
+                        lst.append(q)
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            by_bf = {}
+        _DOMAIN_Q_CACHE = by_bf
+    return _DOMAIN_Q_CACHE
+
+
+# ── 업무별 추천 검색어 — "대표 질문"(origin_question) 전용 풀. testset_natural_450.jsonl의
+# 각 구어체 문항은 더 formal한 origin_question에서 파생됐다(예: "돌아가신 부모님 계좌가
+# 어디 있는지 확인하는 서비스 있나요?" ← origin_question "상속인 금융거래 조회서비스란?").
+# origin_question만 모으면 개인 사연이 섞인 구어체 없이 공적·대표적인 질문만 남고,
+# "현재 질문과 비슷한 질문"(위 함수, question 원문 사용)과 자연히 겹치지 않는다.
+_REP_DOMAIN_Q_CACHE: dict[str, list[str]] | None = None
+
+
+def _load_representative_domain_questions(limit: int = 6) -> dict[str, list[str]]:
+    global _REP_DOMAIN_Q_CACHE
+    if _REP_DOMAIN_Q_CACHE is None:
+        by_bf: dict[str, list[str]] = {}
+        try:
+            with (ROOT / "crawler" / "data" / "testset_natural_450.jsonl").open(encoding="utf-8") as fh:
+                for line in fh:
+                    d = json.loads(line)
+                    bf, oq = d.get("business_function"), d.get("origin_question")
+                    if not bf or not oq:
+                        continue
+                    lst = by_bf.setdefault(bf, [])
+                    if oq not in lst and len(lst) < limit:
+                        lst.append(oq)
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            by_bf = {}
+        _REP_DOMAIN_Q_CACHE = by_bf
+    return _REP_DOMAIN_Q_CACHE
+
+
+def _render_question_cards(questions: list[str], key_prefix: str) -> str | None:
+    """"Q. 문장" 카드 목록. 클릭된 질문 원문을 돌려준다.
+
+    key 에 공통으로 "qcard-" 를 붙인다 — CSS가 이 접두사 하나로 "Q." 글자만
+    빨갛게 물들인다(도메인 그리드 버튼처럼 이모지로 시작하는 버튼은 안 걸리게).
     """
     picked = None
-    for i in range(0, len(EXAMPLE_CHIPS), per_row):
-        chunk = EXAMPLE_CHIPS[i:i + per_row]
-        for col, (label, query) in zip(st.columns(len(chunk)), chunk):
-            if col.button(label, key=f"chip-{key_prefix}-{label}", width="stretch",
-                          help=query):
-                picked = query
+    for i, q in enumerate(questions):
+        if st.button(f"Q. {q}", key=f"qcard-{key_prefix}-{i}", width="stretch"):
+            picked = q
     return picked
+
+
+def _current_domain_context() -> str | None:
+    """최근 답변의 실제 라우팅 업무. 구형 히스토리만 로컬 판정으로 폴백한다."""
+    for turn in reversed(st.session_state.get("history") or []):
+        if turn.get("role") != "answer":
+            continue
+        result = turn.get("r") or {}
+        routing = turn.get("routing") or (result.get("_meta") or {}).get("routing")
+        if routing:
+            return routing.get("bf") if routing.get("triggered") else None
+        break
+
+    base_q = (st.session_state.get("flow") or {}).get("base_q")
+    if not base_q:
+        return None
+    try:
+        return qform_trace.bf_debug(base_q).get("bf")
+    except Exception:
+        return None
+
+
+def render_domain_questions(key_prefix: str) -> str | None:
+    """업무 도메인 목록(6×1) → 클릭 시 그 업무의 추천 질문 목록(예시 UI와 같은 2단 동작).
+
+    도메인 클릭은 **바로 질의로 안 나간다** — 그 업무의 질문 목록을 먼저 보여주고,
+    질문 카드를 클릭해야 실제 질의가 나간다. 뒤로가기로 도메인 목록에 돌아간다.
+    """
+    sel_key = f"{key_prefix}-sel"
+    selected = st.session_state.get(sel_key)
+    domain_qs = _load_representative_domain_questions()
+
+    if selected and domain_qs.get(selected):
+        if st.button("← 목록으로", key=f"{key_prefix}-back"):
+            st.session_state[sel_key] = None
+            st.rerun()
+        st.markdown(f"**{DOMAIN_ICONS.get(selected, '📁')} {selected}**")
+        return _render_question_cards(domain_qs[selected], f"{key_prefix}-q")
+
+    picked_domain = None
+    for lab, _ in EXAMPLE_CHIPS:
+        if st.button(f"{DOMAIN_ICONS.get(lab, '📁')}  {lab}",
+                     key=f"{key_prefix}-dom-{lab}", width="stretch"):
+            picked_domain = lab
+    if picked_domain:
+        st.session_state[sel_key] = picked_domain
+        st.rerun()
+    return None
+
+
+def render_recommended_questions(key_prefix: str) -> str | None:
+    """우측 '추천 질문' — 현재 질문과 비슷한 질문(업무 문맥) + 업무별 추천 검색어.
+
+    직전 질의의 업무 도메인을 판정할 수 있으면 그 업무의 질문을 보여주고("현재
+    질문과 비슷한 질문"), 아직 대화가 없거나 판정이 애매하면 FAQ 트렌드 목록으로
+    폴백한다("지금 뜨는 검색어") — 둘 다 콜 0(로컬 판정·코퍼스 원문)이다.
+    """
+    picked = None
+    ctx_bf = _current_domain_context()
+    domain_qs = _load_domain_questions()
+    ctx_questions = domain_qs.get(ctx_bf) if ctx_bf else None
+    if ctx_questions:
+        st.markdown("#### 🎯 현재 질문과 비슷한 질문")
+        picked = _render_question_cards(ctx_questions, f"{key_prefix}-ctx") or picked
+    else:
+        trending = _load_trending_questions()
+        if trending:
+            st.markdown("#### 🔥 지금 뜨는 검색어")
+            picked = _render_question_cards(trending, f"{key_prefix}-trend") or picked
+    st.divider()
+    st.markdown("#### 📂 업무별 추천 검색어")
+    picked = render_domain_questions(f"{key_prefix}-cat") or picked
+    return picked
+
+
+def render_evidence_chunks(r: dict) -> None:
+    """근거 조각 — 최종 답변 생성에 실제로 쓰인 검색 기록.
+
+    예시 UI의 '데이터셋' 대응. 카드는 요약(제목·유사도·본문 앞부분)만 보여주고,
+    "펼치기"를 눌러야 저장된 발췌·문서 ID·원문 링크가 나온다. 화면을 그리기 위해
+    검색을 다시 실행하지 않으므로 답변 당시의 BF 오버라이드와 결과가 어긋나지 않는다.
+    """
+    if r.get("text") is None:
+        st.caption("근거 조각 없음")
+        return
+    hits = (r.get("_meta") or {}).get("retrieval") or []
+    if not hits:
+        st.caption("근거 조각 없음")
+        return
+    for i, h in enumerate(hits, 1):
+        title = h.get("title") or h.get("doc_id") or "문서"
+        score = h.get("score")
+        badge = f" · 유사도 {score:.2f}" if isinstance(score, (int, float)) else ""
+        full = (h.get("text_excerpt") or "").strip()
+        with st.container(key=f"card-evidence-{i}"):
+            st.markdown(f"**{i}. {title}**{badge}")
+            snippet = full.replace("\n", " ")
+            if len(snippet) > 100:
+                snippet = snippet[:100] + "…"
+            st.caption(snippet)
+            with st.expander("펼치기 — 저장된 발췌·출처"):
+                st.markdown(full or "_본문 없음_")
+                st.caption(f"청크ID: {h.get('chunk_id') or '—'}"
+                           f"  ·  문서ID: {h.get('doc_id') or '—'}")
+                if h.get("url"):
+                    st.markdown(f"[원문 페이지 열기]({h['url']})")
 
 
 def build_trace(ev: dict, hcx_calls: int) -> dict | None:
@@ -367,36 +902,47 @@ def record(ev: dict, trace: dict | None = None) -> None:
     """전이 이벤트를 히스토리에 적재 — 렌더가 읽을 형태로만 옮긴다."""
     if ev["kind"] == "ask":
         a = ev["ask"]
-        st.session_state.history.append(
+        append_history(
             {"role": "ask", "prompt": ev["prompt"], "remaining": ev["remaining"],
              "mode": a["mode"], "calls": a["calls"], "fallback": a["fallback_reason"],
-             "trace": trace}
+             "trace": trace, "unit": ev.get("unit"), "routing": ev.get("routing")}
         )
     else:
         # 후속 추천은 여기서 **한 번** 계산해 히스토리에 굳힌다. 매 렌더마다 다시 뽑으면
         # 나중 턴의 슬롯이 과거 답변의 추천을 바꿔 버린다. 결정론이고 콜 0 이다.
-        st.session_state.history.append(
-            {"role": "answer", "r": ev["result"], "slots": ev["slots"],
-             "search_q": ev["boosted"], "trace": trace,
-             "followups": qform_followup.suggest(ev["slots"])}
+        append_history(
+            {
+                "role": "answer",
+                "r": ev["result"],
+                "slots": ev["slots"],
+                "search_q": ev["boosted"],
+                "query": ev.get("search_q"),
+                "trace": trace,
+                "followups": qform_followup.suggest(ev["slots"]),
+                "unit": ev.get("unit"),
+                "routing": ev.get("routing"),
+            }
         )
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 본문 — 좌측 대화 / 우측 트레이스 (st.chat_input은 컬럼 안에 못 들어가므로 최상위)
+# 본문 레이아웃 — 좌측(정보: 세션상태·큐폼·근거문서·기억·트레이스) /
+# 중앙(대화) / 우측(추천 질문 · 근거 조각)
+# (st.chat_input은 컬럼 안에 못 들어가므로 최상위)
 # ══════════════════════════════════════════════════════════════════════════
 flow = st.session_state.flow
 pending = flow["pending_slot"]
 SHOW_TRACE = bool(st.session_state.get("show_trace"))
 
-left, right = st.columns([3, 2]) if SHOW_TRACE else (st.container(), None)
-
 last_answer = max((i for i, t in enumerate(st.session_state.history)
                    if t["role"] == "answer"), default=None)
 
-with left:
+chip_q = None
+
+with center:
+    st.markdown('<span class="center-col-anchor"></span>', unsafe_allow_html=True)
+    st.subheader("💬 대화")
     unset_field = None
-    chip_q = None
     followup_q = None
     for ti, turn in enumerate(st.session_state.history):
         if turn["role"] == "user":
@@ -418,6 +964,32 @@ with left:
                 chip_q = act["chip"] or chip_q
                 followup_q = act["followup"] or followup_q
 
+    # 대기 중인 질의 처리 — 사용자 메시지는 위 루프에서 이미 그려졌다. 여기서 로딩
+    # 표시를 하고 실제 검색·생성을 돈다 — 메시지 목록 바로 아래(입력창 바로 위)라
+    # 자리가 자연스럽다("어시스턴트가 입력 중" 느낌).
+    pending_step = st.session_state.get("_pending_step")
+    if pending_step:
+        with st.chat_message("assistant"):
+            with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
+                c0 = chain._calls
+                st.session_state.needs_regen = False
+                if pending_step["is_reply"]:
+                    ev = qform_flow.reply(
+                        flow, pending_step["text"], ask_mode=ASK_MODE,
+                        boost=BOOST, config=CONFIG,
+                    )
+                else:
+                    ctx = report_context()
+                    ctx["target_message_id"] = pending_step.get("previous_target", "")
+                    ev = orchestrator.start_turn(
+                        flow, pending_step["text"], ask_mode=ASK_MODE,
+                        boost=BOOST, config=CONFIG, report_context=ctx,
+                    )
+                # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
+                record(ev, build_trace(ev, chain._calls - c0))
+        st.session_state["_pending_step"] = None
+        st.rerun()
+
     # 슬롯을 고친 뒤 되물을 것이 없으면 여기서 재생성을 **명시로** 받는다.
     # 자동 재생성을 안 하는 이유: 칩을 만질 때마다 HCX 2콜이 나가면 예산이 샌다(AC6-5).
     # 위젯 key 와 상태 플래그 이름을 반드시 갈라 둔다 — 같은 이름이면 버튼이 매 런
@@ -435,22 +1007,76 @@ with left:
         # 탈출구 상시 노출 — 기획서 §4. 미선택(null)은 결함이 아니라 정상 입력이다.
         skip = st.button("잘 모르겠어요 — 이대로 답변받기", key=f"skip-{flow['ask_turn']}")
     elif not st.session_state.history:
-        # 첫 화면 — 빈 입력창만 두면 무엇을 물어볼 수 있는지 알 수 없다(T5 B2)
-        st.caption("이런 걸 물어볼 수 있어요")
-        chip_q = render_chips("home")
+        # 첫 화면 — 업무 6종 대표 질문 카드(예시 UI의 초기 예시 카드 자리).
+        st.markdown("이런 걸 물어볼 수 있어요")
+        chip_q = render_chips("home", per_row=3) or chip_q
 
-if right is not None:
-    with right:
+with right:
+    st.markdown('<span class="col-anchor-right"></span>', unsafe_allow_html=True)
+    tab_reco, tab_evidence = st.tabs(["💡 추천 질문", "🧩 근거 조각"])
+    with tab_reco:
+        chip_q = render_recommended_questions("reco") or chip_q
+    with tab_evidence:
+        if last_answer is not None:
+            _last = st.session_state.history[last_answer]
+            render_evidence_chunks(_last["r"])
+        else:
+            st.caption("답변을 받으면 이 자리에 근거 조각이 표시됩니다.")
+
+with left:
+    st.divider()
+    st.subheader("📎 근거 문서")
+    if last_answer is not None:
+        render_evidence_card(st.session_state.history[last_answer]["r"])
+    else:
+        st.caption("답변을 받으면 이 자리에 근거 문서·검증 플래그가 표시됩니다.")
+
+    # ver4 M3 — 메모리 패널. 좌측 상시 노출은 세션 상태·근거 문서뿐이라 접어 둔다.
+    _panel_action = None
+    if st.session_state.history:
+        st.divider()
+        with st.expander("🧠 기억"):
+            _panel_action = render_memory_panel(flow)
+
+    if SHOW_TRACE:
+        st.divider()
         qform_panel.render([t["trace"] for t in st.session_state.history if t.get("trace")])
 
-# 대화가 시작되면 칩은 사이드바로 옮긴다 — 본문을 차지하지 않으면서 항상 닿는다.
-if st.session_state.history:
-    with st.sidebar:
-        st.divider()
-        st.subheader("예시 질의")
-        chip_q = render_chips("side", per_row=1) or chip_q
-
 q = st.chat_input("예: 착오송금 반환 신청 서류가 뭐예요?")
+
+# 하단 입력창 폭을 중앙 대화 컬럼 기준으로 맞추되, 살짝 더 여유 있게 좌·우로 조금씩
+# 더 넓힌다(WIDEN_PX) — 좌·우 패널 카드 패딩 안쪽 여유 공간만큼만 넓혀서 옆 칸을
+# 침범하지 않는 선에서 손해 안 보게. st.chat_input은 컬럼 밖(하단 고정 영역)에 그려져서
+# CSS만으론 "중앙 컬럼과 같은 폭"을 알 수 없어 실제 렌더된 폭을 재서 적용한다.
+# 가운데 정렬은 CSS margin:auto에 맡긴다(하단 바 자체가 뷰포트 전체 폭이라 auto만으로
+# 정확히 가운데 온다 — 이전에 JS로 getBoundingClientRect().left 를 그대로 margin-left에
+# 넣었더니 뷰포트 기준 좌표와 박스 기준 마진이 안 맞아 어긋났었다).
+components.html("""
+<script>
+const WIDEN_PX = 140;  // 중앙 컬럼 실측 폭보다 이만큼(좌우 합산) 더 넓힌다
+function syncInputWidth() {
+  try {
+    const doc = window.parent.document;
+    const anchor = doc.querySelector('.center-col-anchor');
+    const col = anchor && anchor.closest('[data-testid="stColumn"]');
+    const bottom = doc.querySelector('[data-testid="stBottomBlockContainer"]');
+    if (!col || !bottom) return;
+    const rect = col.getBoundingClientRect();
+    bottom.style.maxWidth = 'none';
+    bottom.style.width = (rect.width + WIDEN_PX) + 'px';
+    bottom.style.marginLeft = 'auto';
+    bottom.style.marginRight = 'auto';
+  } catch (e) {}
+}
+syncInputWidth();
+try {
+  const doc = window.parent.document;
+  new ResizeObserver(syncInputWidth).observe(doc.body);
+  window.parent.addEventListener('resize', syncInputWidth);
+} catch (e) {}
+setInterval(syncInputWidth, 400);
+</script>
+""", height=0)
 
 # 슬롯 해제(T6)와 후속 추천(T7 C안)은 **같은 경로**다 — 둘 다 슬롯을 고치고
 # 되묻기만 재판정한다. `answer()` 는 부르지 않으므로 HCX 콜 0 이다(AC6-5·AC7-1).
@@ -464,8 +1090,9 @@ elif followup_q:
 
 if _edit:
     field, value, source, note = _edit
-    ev = qform_flow.edit(flow, field, value, source=source, ask_mode=ASK_MODE)
-    st.session_state.history.append({"role": "user", "text": note})
+    ev = qform_flow.edit(flow, field, value, source=source, ask_mode=ASK_MODE,
+                         config=CONFIG)
+    append_history({"role": "user", "text": note})
     if ev["kind"] == "ask":
         st.session_state.needs_regen = False        # 되물으니 재생성 버튼은 필요 없다
         record(ev, build_trace(ev, 0))
@@ -484,34 +1111,73 @@ if regen:
 if skip and pending:
     with st.spinner("문서 검색·답변 생성 중…"):
         c0 = chain._calls
-        ev = qform_flow.skip(flow, boost=BOOST)
+        ev = qform_flow.skip(flow, boost=BOOST, config=CONFIG)
         st.session_state.needs_regen = False
         record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
-if chosen and pending:
-    # 버튼 경로 — `value=` 로 값을 직접 주입한다. 자연어 추출을 경유하지 않는다.
-    st.session_state.history.append({"role": "user", "text": chosen})
+if chosen == _ESCAPE and pending:
+    # K9 [이대로 답변받기] — ver2 탈출구(`skip`)를 버튼으로 한 번 더 연 것이다.
+    append_history({"role": "user", "text": "이대로 답변받기"})
     with st.spinner("처리 중…"):
         c0 = chain._calls
-        ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE, boost=BOOST)
+        ev = qform_flow.skip(flow, boost=BOOST, config=CONFIG)
         st.session_state.needs_regen = False
         record(ev, build_trace(ev, chain._calls - c0))
+    st.rerun()
+
+if chosen == _PASS and pending:
+    # K5 ⏭ pass — 이 슬롯은 답하지 않겠다. `asked` 에 기록해 재질문을 막는다.
+    # **`answer()` 를 부르지 않는다.** X(오염 차단)와 달리 여기서 대화가 멈춘다.
+    _slot = flow.get("pending_slot")
+    append_history({"role": "user", "text": "이건 넘어갈게요"})
+    qmp.apply(flow, "pass", field=_slot)
+    st.rerun()
+
+if chosen and pending:
+    # 버튼 경로 — `value=` 로 값을 직접 주입한다. 자연어 추출을 경유하지 않는다.
+    append_history({"role": "user", "text": chosen})
+    with st.spinner("처리 중…"):
+        c0 = chain._calls
+        ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE,
+                              boost=BOOST, config=CONFIG)
+        st.session_state.needs_regen = False
+        record(ev, build_trace(ev, chain._calls - c0))
+    st.rerun()
+
+if _panel_action:
+    # 패널 조작은 전부 `qmp.apply()` 한 곳으로 들어간다. **answer() 를 부르지 않는다**(A3-2).
+    _op, _kw = _panel_action
+    qmp.apply(flow, _op, **_kw)
     st.rerun()
 
 # 예시 칩은 되묻기 중이어도 **새 질의**다 — 사용자가 다른 걸 물으려고 누른 것이다.
 # (후속 추천은 새 질의가 아니라 슬롯 좁히기라 위 `_edit` 경로로 빠진다.)
 q_new, q_reply = (chip_q, None) if chip_q else ((None, q) if pending else (q, None))
 
-if q_new or q_reply:
-    text = q_new or q_reply
-    st.session_state.history.append({"role": "user", "text": text})
-    # 되묻기 턴이면 즉시 끝나고, 답변 턴이면 검색·생성이 돈다. 어느 쪽인지는 전이가 정한다.
-    with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
+next_queued = False
+if flow.get("unit_queue") and not pending:
+    with left:
+        st.info(f"대기 중인 용건이 {len(flow['unit_queue'])}개 있습니다.")
+        next_queued = st.button("다음 용건 처리", key="next-unit", type="primary")
+
+if next_queued:
+    with st.spinner("다음 용건 처리 중…"):
         c0 = chain._calls
-        step = qform_flow.reply if q_reply else qform_flow.start
-        st.session_state.needs_regen = False
-        ev = step(flow, text, ask_mode=ASK_MODE, boost=BOOST)
-        # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
-        record(ev, build_trace(ev, chain._calls - c0))
+        ev = orchestrator.next_unit(flow, ask_mode=ASK_MODE, boost=BOOST, config=CONFIG,
+                                    report_context=report_context())
+        if ev:
+            record(ev, build_trace(ev, chain._calls - c0))
+    st.rerun()
+
+if q_new or q_reply:
+    # 사용자 메시지를 먼저 렌더하고, 다음 rerun에서 중앙 대화창 안에 spinner를 표시한다.
+    text = q_new or q_reply
+    previous_target = last_answer_id()
+    append_history({"role": "user", "text": text})
+    st.session_state["_pending_step"] = {
+        "text": text,
+        "is_reply": bool(q_reply),
+        "previous_target": previous_target,
+    }
     st.rerun()

@@ -1,0 +1,46 @@
+{
+  "_note": "옛 gold 청크 → 그 청크에서 고른 근거 스팬. 원문에서 '고른' 것이며 생성하지 않았다. 표 청크(구비서류·보호대상)의 스팬은 최소 근거 문장이 아니라 해당 행을 특정하는 locator에 가깝다 — 표에는 근거 문장이라 할 단위가 없다.",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#02": "수취계좌 정보 (금융회사, 계좌번호 및 예금주)",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#03": "착오송금인의 인감 날인된 금융 거래정보제공요구(동의)서",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#04": "착오송금인의 인감 날인된 착오송금 반환지원 신청 등 위임장",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#05": "착오송금인의 인감증명서 1통 (반환지원 신청일 기준 최근 3개월내)",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#06": "고유번호증 사본 | 부가가치세법에 의하여 고유번호를 부여 받은 단체",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#07": "친권자 합의서 파일 업로드",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#08": "정부24, 대법원 전자 가족관계등록 시스템",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#09": "인감증명서제출이 불가능한경우 군복무 확인서(소속부대장발금) 파일업로드",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#10": "인감증명서제출이 불가능한경우 현지 공관장의 공증이 포함된 위임장 파일 업로드",
+  "kdic-fins-ir-aplygudn-MsdrprPossDcmntGudn-selectScrn#11": "구분, 온라인신청, 방문신청, 관련서식, 발급처 및 비고 항목으로 구성된 착오송금 반환지원 신청 철회 표",
+
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#00": "예를 들어, 실적 배당형 상품인 투자신탁 상품은 보호대상 금융상품이 아닙니다.",
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#01": "정기예금, 저축예금, 주택청약예금, 표지어음 등 저축성예금",
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#02": "특정금전신탁 등 실적배당형 신탁",
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#03": "자기신용대주담보금, 신용거래계좌 설정보증금, 신용공여담보금 등의 현금 잔액",
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#04": "랩어카운트, 주가지수연계증권(ELS), 주가연계 파생결합사채(ELB), 주식워런트증권(ELW)",
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#05": "변액보험계약 최저사망보험금·최저연금적립금·최저중도인출금·최저종신중도인출금 등 최저보증",
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#06": "보증보험계약, 재보험계약",
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#07": "종합금융회사 | 발행어음, 표지어음, 어음관리계좌(CMA) 등",
+  "kdic-www-sp-dpstrprot-selectProtSystProtTrgtPrdctSumr#08": "상호저축은행중앙회 발행 자기앞수표 등",
+
+  "kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#00": "예금자 본인의 도장",
+  "kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#01": "친권자 혹은 후견인이 예금보험금 수령",
+  "kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#02": "동의서 징구시 각 개인의 인감증명서가 첨부되어야 하며",
+  "kdic-www-sp-dpstrprot-DpsmIbamtAplyPossDcmnt-selectScrn#03": "현지 대사관의 공증을 받거나 해당국이 발급한 아포스티유를 첨부한 예금자 본인 명의의 위임",
+
+  "kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn#00": "예금보호대상 금융회사(은행, 보험회사, 투자매매업자·투자중개업자, 종합금융회사, 상호저축은행 등)가 파산한 경우 채무자의 연체대출금에 대한 채무조정을 지원",
+  "kdic-www-rb-lbltajmt-LbltAjmtSprtLbltAjmtSyst-selectScrn#02": "위임장, 신청인 인감증명서, 대리인 신분증",
+  "kdic-www-rb-lbltajmt-LbltAjmtSprtCredRcvrySprt-selectScrn#00": "상환기간의 연장, 분할상환, 이자율 조정,변제기 유예, 채무감면 등의 채무조정 수단을 통해 신용회복",
+  "kdic-www-rb-lbltajmt-LbltAjmtSprtCredRcvrySprt-selectScrn#01": "신청인이 채권금융회사 빚 독촉 및 회수 중지를 신용회복위원회에 신청",
+  "kdic-www-rb-lbltajmt-LbltAjmtSprtCredRcvrySprt-selectScrn#02": "구비서류 | 신용회복지원승인신청서",
+  "kdic-www-rb-lbltajmt-LbltAjmtSprtPsnBr-selectScrn#01": "면책결정·면책불허가결",
+  "kdic-www-rb-lbltajmt-LbltAjmtSprtPsnBr-selectScrn#03": "채무자가 허위의 채권자목록 그 밖의 신청서류를 제출하거나 법원에 대하여 그 재산 상태에 관하여 허위의 진술을 하는 행위",
+
+  "kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn#01": "부당이득반환채권과 관련된 소송 또는 채권보전을 위한 절차 등을 진행 중이거나 완료한 자",
+  "kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn#02": "「채무자 회생 및 파산에 관한 법률」에 따른 회생 또는 파산절차가 진행되는 경우",
+  "kdic-fins-ir-msdrpr-MsdrprAttnMttr-selectScrn#03": "가압류, 압류된경우 또는 강제집행, 체납처분 등",
+
+  "kdic-www-sp-dpstrprot-DpsmIbamtExpln-selectScrn#02": "본인명의 공인인증서, 금융인증서나 간편인증 등을 통해",
+  "kdic-www-sp-dpstrprot-ProtSystNramtInqAplyNramtGudn-selectScrn#00": "부실화된 금융회사의 예금자등이 찾아가지 아니한 금액을 고객 미수령금으로 분류하여 통합 관리",
+  "kdic-fins-ir-addrse-AddrseAttnMttr-selectScrn#00": "착오송금 자진반환의 경우, 송달받으신 양도통지문에 기재된 반환금액과 반환계좌를 확인하여",
+  "kdic-www-sp-kmrs-kmrsItrd-selectScrn#00": "잘못 보낸 돈 되찾기 서비스란 착오송금인이 실수로 잘못 보낸 돈을 최소한의 비용으로 빠르게 되찾을 수 있도록 도와드리는 제도입니다.",
+  "kdic-fins-ir-aplygudn-MtrsGvbkSprtProc-selectScrn#00": "착오송금인은 예금보험공사에게 반환지원신청(채권매입)"
+}

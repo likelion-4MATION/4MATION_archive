@@ -24,7 +24,14 @@ DOC_ATTACH_PATH = CRAWLER_DIR / "data" / "doc_attachments.json"
 
 # 큐폼 후단 필터(B안)용: 첨부 조합 좌표 원천(유상 태깅) + 스코프
 TAGGING_PATH = CRAWLER_DIR / "yesom_분기분석" / "attachment_tagging_template.csv"
-QFORM_SCOPE_BF = "착오송금 반환 신청"
+QFORM_SCOPE_BF = "착오송금 반환 신청"   # 하위호환 별칭 (ver1~3 단일 스코프)
+
+# ver4 M2 — 업무별 조합 테이블. **파일 분리 + combo_id prefix 로 네임스페이스를 가른다.**
+# 착오송금 CSV 는 동결이라 한 파일에 합치지 않는다(§9-7).
+QFORM_TABLES = {
+    "착오송금 반환 신청": CRAWLER_DIR / "data" / "qform_combos_msdr.csv",
+    "예금보험금 안내": CRAWLER_DIR / "data" / "qform_combos_dpin.csv",
+}
 
 # 다운로드 시 브라우저에 넘길 MIME (미지정·기타는 octet-stream = 강제 다운로드).
 MIME = {
@@ -63,6 +70,26 @@ def _key(a: dict):
 # 통과(graceful degradation) — 기존 동작으로 자연 복귀. 검색·생성엔 관여 안 함
 # (계약 4필드 불변, hit@k 불변). 첨부 목록만 정밀화한다.
 _tag_cache = None
+_combo_cache: dict | None = None
+
+
+def _load_combo_tables() -> dict:
+    """bf -> 조합행 리스트. 파일이 없으면 그 업무만 조용히 빠진다(앱은 안 깨진다)."""
+    global _combo_cache
+    if _combo_cache is None:
+        import csv
+        tables = {}
+        for bf, path in QFORM_TABLES.items():
+            try:
+                with path.open(encoding="utf-8-sig") as fh:
+                    # DPIN 조합표 머리의 설계 주석은 CSV 행이 아니다. 그대로 DictReader에
+                    # 넣으면 첫 주석이 헤더가 되어 sub_task 키가 사라진다.
+                    lines = [line for line in fh if not line.lstrip().startswith("#")]
+                    tables[bf] = list(csv.DictReader(lines))
+            except (FileNotFoundError, OSError):
+                continue
+        _combo_cache = tables
+    return _combo_cache
 
 
 def _load_tagging() -> dict:
@@ -104,23 +131,42 @@ def _joins_combo(combo: dict, coords: dict) -> bool:
 
 
 def _qform_narrow(out: list, qform: dict) -> list:
-    """collect() 결과를 큐폼 슬롯으로 후단 필터. 스코프 밖/미태깅 첨부는 보존."""
+    """collect() 결과를 큐폼 슬롯으로 후단 필터. 스코프 밖/미태깅 첨부는 보존.
+
+    **한 업무의 조합 테이블은 그 업무의 첨부만 좁힌다.** 그리고 사용자의 `sub_task` 가
+    그 테이블에 실재하는 값일 때만 발동한다 — 예: `sub_task='반환신청'` 이면 DPIN 테이블은
+    아예 관여하지 않고 예금보험금 첨부는 **ver3 와 동일하게 보존**된다. 이 조건이 없으면
+    "생존 조합 0개 → 전부 제외"가 되어 타업무 첨부가 조용히 사라진다(오추출 > 미추출, 규칙6).
+    """
     if not qform or not qform.get("sub_task"):
         return out                       # sub_task 없으면 좁히지 않음(D2, graceful)
     try:
-        from qform_state import survivors
+        from qform_state import survivors, _toks
     except Exception:
         return out                       # 상태 모듈 부재 시 무손실 통과
-    surv = survivors(qform)
+
+    want = _toks(qform.get("sub_task"))
+    surv_by_bf = {}
+    for bf, rows in _load_combo_tables().items():
+        have = set()
+        for r in rows:
+            have |= _toks(r["sub_task"])
+        if want & have:                  # 이 테이블이 다루는 용건일 때만 발동
+            surv_by_bf[bf] = survivors(qform, rows)
+
+    if not surv_by_bf:
+        return out                       # 어느 테이블도 모르는 sub_task → 무손실 통과
+
     idx = _load_tagging()
     kept = []
     for att in out:
         fname = att.get("orig_filename")
         stem = pathlib.Path(fname).stem if fname else None
         coords = idx.get((att.get("doc_id"), stem))
-        if coords is None or coords["business_function"].strip() != QFORM_SCOPE_BF:
+        bf = coords["business_function"].strip() if coords else None
+        if coords is None or bf not in surv_by_bf:
             kept.append(att)             # 미태깅·스코프 밖 → 보존
-        elif any(_joins_combo(c, coords) for c in surv):
+        elif any(_joins_combo(c, coords) for c in surv_by_bf[bf]):
             kept.append(att)             # 생존 조합에 조인 → 유지
         # else: 좌표는 있으나 어느 생존 조합과도 안 맞음 → 제외
     return kept

@@ -37,6 +37,23 @@ build/
 *.safetensors
 *.h5
 *.onnx
+# 라우터 체크포인트 — faq_bf_map.py --router 입력. 산출물 bf_map.jsonl은 커밋돼 있다.
+# 가중치 pytorch_model.bin(2.38GB)만 제외하고, 설정·토크나이저 8개(15.9MB)는 커밋한다.
+# 그래야 id2label 6대 업무 일치(faq_bf_map V1 검증)를 가중치 없이도 코드리뷰에서 확인할 수 있다.
+# 가중치 배포는 HF 프라이빗 repo — docs/router_checkpoint.md · crawler/router_source.py
+router_moai_embedding_model/*
+!router_moai_embedding_model/config.json
+!router_moai_embedding_model/tokenizer.json
+!router_moai_embedding_model/tokenizer_config.json
+!router_moai_embedding_model/special_tokens_map.json
+!router_moai_embedding_model/added_tokens.json
+!router_moai_embedding_model/vocab.json
+!router_moai_embedding_model/merges.txt
+!router_moai_embedding_model/chat_template.jinja
+# 리랭커 실험 입력 패키지 — rerank_colab/prepare_inputs.py 재생성 산출물
+rerank_colab/rerank_inputs.zip
+# 그리드서치 전량 결과(29만 행) — tune_params_v2.py로 50초에 재생성. 요약만 커밋.
+crawler/data/tune_v2_*.json
 wandb/
 mlruns/
 runs/
@@ -84,3 +101,10 @@ corpus/
 # local files
 .claude/
 backup/
+
+# ===== 관리자 콘솔 런타임 상태 =====
+# 설정 오버라이드·첨부 오버레이·잡 기록·업로드·백업은 기기별 상태다. 코드만 커밋한다.
+admin/data/*
+!admin/data/.gitkeep
+# 마운트 환경에서 git이 남긴 잠금 파일 치우는 자리(삭제 권한이 없어 옮겨만 둔다)
+_to_delete/

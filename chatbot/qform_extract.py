@@ -23,14 +23,44 @@ from __future__ import annotations
 
 IN_SCOPE_BF = "착오송금 반환 신청"
 
+# ver4 M5 — 스코프 파라미터화. **기본값은 착오송금 단일이라 ver1~ver4 현행과 완전 동일하다.**
+# 확장(`msdr+dpin`)은 `qform_config.QFORM_SCOPE` 토글로만 켠다 — 쿼리 부스트를 G13 때문에
+# 기본 OFF 로 둔 것과 같은 패턴이다. **배관은 깔되 밸브는 측정 후에 연다.**
+# 규칙을 추가하지 않았다 — 지금 있는 결정론 규칙이 예금보험금에 어떻게 작동하는지 재는 것이 목적이다.
+SCOPE_SETS = {
+    "msdr": (IN_SCOPE_BF,),
+    "msdr+dpin": (IN_SCOPE_BF, "예금보험금 안내"),
+}
+
+
+def scope_bfs(scope=None) -> tuple:
+    """현재 스코프의 허용 업무 튜플. `scope=None` 이면 `qform_config` 기본값을 읽는다."""
+    if scope is None:
+        try:
+            import qform_config
+            scope = qform_config.QFORM_SCOPE
+        except Exception:
+            scope = "msdr"
+    return SCOPE_SETS.get(scope, SCOPE_SETS["msdr"])
+
+
+def in_scope(bf, scope=None) -> bool:
+    """`bf` 가 슬롯 추출 대상인가. `None`(불명)은 게이트를 통과시킨다 — 기존 동작."""
+    return bf is None or bf in scope_bfs(scope)
+
 # ── 조합 테이블 허용값 (출력 자기검증용. '공통'은 테이블 와일드카드라 추출 안 함) ──
+# ver4 M7 — 태깅 스키마 §2 허용값 풀 **전량**으로 맞췄다.
+# ver3 까지는 착오송금이 실제로 쓰는 값만 적혀 있어 스키마의 부분집합이었고,
+# 스코프가 예금보험금으로 넓어지자 `보험금신청`·`사망 예금자` 가 "허용값 위반"으로 잡혔다.
+# **추출기가 스키마 밖 값을 낸 것이 아니라 이 상수가 스키마를 덜 옮겨 적고 있었다.**
 ALLOWED = {
     "party": {"송금인", "수취인"},
     "sub_task": {"제도안내", "반환신청", "신청철회", "매입계약해제",
-                 "수령계좌변경", "대리인변경", "이의제기", "이체수수료환급"},
+                 "수령계좌변경", "대리인변경", "이의제기", "이체수수료환급",
+                 "보험금신청", "부보금융회사조회", "부채증명"},
     "qualification": {"본인", "대리인"},
-    "subject": {"본인", "대리인", "미성년자", "군복무자",
-                "국외거주 또는 유학생", "법인", "비법인단체"},
+    "subject": {"본인", "대리인", "미성년자", "군복무자", "사망 예금자",
+                "국외거주 또는 유학생", "법인", "비법인단체", "공통"},
     "method": {"온라인", "방문", "우편", "이메일", "팩스"},
 }
 
@@ -71,6 +101,26 @@ _SUBTASK_RULES = [
     ("이체수수료환급", "any", ["이체수수료", "이체 수수료"]),
     ("이체수수료환급", "and", (["수수료"], ["환급", "돌려", "환불"])),
     ("이체수수료환급", "any", ["환급"]),  # 착오송금 게이트 안에서 환급=수수료환급
+    # ── 보험금신청 (ver4 M6-c · 예금보험금) ──────────────────────────────────
+    # **착오송금 규칙을 복사해 값만 바꾼 것이 아니다.** 두 축을 코퍼스에서 bottom-up 으로 뽑았다:
+    #   ① 업무 앵커 `보험금` — `DpsmIbamtExpln`·`DpsmIbamtAplyPossDcmnt`·`DpsmIbamtAplyProc`
+    #      전면에 등장하고, **450셋 착오송금 84건에는 0회**다(실측). 고정밀 판별자다.
+    #   ② 행위 어휘 — `DpsmIbamtAplyPossDcmnt`+`DpsmIbamtAplyProc` **본문에 실재하는 것만** 썼다.
+    #      신청10 · 수령10 · 증명30 · 도장14 · 동의서10 · 위임장7 · 발급3 · 제출3 · 찾4 · 청구1 ·
+    #      서류1 · 구비1. (`신분증` 은 0회라 **넣지 않았다** — 코퍼스에 없으면 안 쓴다, 규칙1)
+    #
+    # `반환신청` **앞에** 둔다. 그래야 `예금보험금 신청 서류` 가 `서류` 어휘를 타고
+    # 착오송금 전용 `반환신청` 으로 떨어지는 M5 오발동(13건)이 여기서 갈린다.
+    # 앵커가 `보험금` 이라 착오송금 질의는 이 규칙을 탈 수 없다(84건 중 0건 — 실측).
+    ("보험금신청", "and", (["보험금"],
+                       ["신청", "청구", "수령", "증명", "도장", "위임장", "동의서",
+                        "서류", "구비", "제출", "발급",
+                        # ver4 M7 — **어절 단위.** 맨 `찾` 은 형태소 경계를 안 지켜
+                        # `안 찾으면`(소멸시효)까지 삼킨다. 코퍼스에 실재하는 어절만 쓴다:
+                        #   `예금자 본인이 찾을 경우` · `대리인이 찾을 경우`
+                        #   `미성년자 본인이 찾아올 경우` · `모두 대행점에 찾아와야`
+                        # 형태소 경계를 지키는 일반 원칙이라 평가셋을 안 보고도 정당화된다.
+                        "찾을", "찾아올", "찾아와"])),
     # 반환신청 = 구비서류 intent OR 신청방법(채널+행위) intent
     ("반환신청", "any", ["서류", "구비", "준비물", "챙기", "챙겨", "제출", "들고", "가지고",
                      "가져", "필요한 게", "필요한가", "뭐 필요", "뭐가 필요", "인증서"]),
@@ -127,10 +177,12 @@ _METHOD_RULES = {
 _UNSET = object()
 
 
-def extract(query: str, business_function=_UNSET) -> dict:
+def extract(query: str, business_function=_UNSET, *, scope=None) -> dict:
     """자연어 → 슬롯 dict. LLM 호출 0. 못 잡으면 해당 키 None.
 
     business_function: 업무 판정값(str) · 불명 확정(None) · 미지정(생략 → 폴백 계산).
+    scope: 슬롯 추출 스코프 override(`"msdr"` / `"msdr+dpin"`). None 이면 `qform_config` 기본값.
+        **기본값은 `msdr` 이라 이 인자를 안 주면 ver4 M4 까지와 동작이 완전히 같다.**
     """
     hits: dict[str, list[str]] = {}
     out = {"party": None, "sub_task": None, "qualification": None,
@@ -145,7 +197,7 @@ def extract(query: str, business_function=_UNSET) -> dict:
         except Exception:
             bf = None  # rag 로드 실패 → 아래 도메인 어휘 게이트가 대신 막는다
     out["_bf"] = bf
-    if bf is not None and bf != IN_SCOPE_BF:
+    if not in_scope(bf, scope):
         out["_scope"] = "out"
         return out
     out["_scope"] = "in"
@@ -194,17 +246,22 @@ def extract(query: str, business_function=_UNSET) -> dict:
     #   subject=None 이면 survivors 가 C03~C08 6행으로 남아 T3 가 되묻는다.
     #   되묻지 못하고 종료돼도 첨부는 6→7건으로 **넓어질 뿐** 좁아지지 않아 안전하다.
 
-    # 4) party. sub_task 정의상 확정 → 없으면 방향 어휘.
-    if out["sub_task"] in _SUBTASK_PARTY:
-        out["party"] = _SUBTASK_PARTY[out["sub_task"]]
-        hits["party"] = [f"⟵sub_task:{out['sub_task']}"]
-    else:
-        for label, kws in _PARTY_RULES:
-            m = _hits_any(qn, kws)
-            if m:
-                out["party"] = label
-                hits["party"] = m
-                break
+    # 4) party. **근거 어휘가 질의에 있을 때만 채운다** (ver4 M6-a).
+    #
+    # ver3 까지는 `sub_task` 에서 유도했다(`반환신청 → 송금인`). 그 배선이 M2 판정 1과
+    # 정면 충돌한다 — 예금보험금은 `party` 축 자체를 안 쓰기로 했는데, 추출기가
+    # `sub_task` 오분류를 타고 **착오송금 전용 축을 자동으로 박아** 넣었다(M5 오발동 6/6).
+    # 스코프와 무관하게 틀린 배선이라 제거한다.
+    #
+    # 유도가 하던 일은 survivors 에 없다 — `sub_task` 가 이미 행 집합을 확정하고,
+    # 같은 `sub_task` 행은 party 가 전부 같기 때문이다(실측: 발동 9건·첨부 건수 무변동).
+    # 남은 소비처는 쿼리 부스트 직렬화(기본 OFF)와 패널 표시뿐이다.
+    for label, kws in _PARTY_RULES:
+        m = _hits_any(qn, kws)
+        if m:
+            out["party"] = label
+            hits["party"] = m
+            break
 
     # 5) method. 다중 허용.
     chans = [c for c in _METHOD_ORDER if _hits_any(qn, _METHOD_RULES[c])]
@@ -286,6 +343,8 @@ def validate_values(slots: dict) -> list[tuple[str, str]]:
 if __name__ == "__main__":
     import json
     import pathlib
+
+    import qform_config
 
     BASE = pathlib.Path(__file__).resolve().parent.parent  # repo root
     TESTSET = BASE / "crawler" / "data" / "testset_natural_450.jsonl"
@@ -370,9 +429,12 @@ if __name__ == "__main__":
     # 타 업무 질의에 착오송금 슬롯이 박히고, 첨부 후단 필터가 타 업무 서식을
     # 전부 탈락시킨다. 그래서 bf 미지정 경로를 따로 검사한다.
     print("\n── AC: 앱 경로(bf 미지정) 스코프 게이트 ──")
+    # ver4 M7 — `예금보험금은 어떻게 신청하나요?` 는 **스코프 안으로 들어왔다**(QFORM_SCOPE).
+    # 누출 fixture 에서 빼고 `DPIN_Q` 로 옮긴다. 나머지 4업무는 여전히 스코프 밖이다.
     OUT_Q = ["예금보호한도가 얼마인가요?", "채무조정 신청하려면 어떻게 해요?",
-             "은닉재산 신고하면 포상금 얼마나 받나요?", "예금보험금은 어떻게 신청하나요?",
+             "은닉재산 신고하면 포상금 얼마나 받나요?",
              "예금보험공사가 뭐하는 곳인가요?", "가지급금이 뭔가요?"]
+    DPIN_Q = ["예금보험금은 어떻게 신청하나요?"]
     IN_Q = ["착오송금 반환지원 제도가 뭔가요?", "착오송금 한도가 얼마까지예요?",
             "잘못 보낸 돈 돌려받을 수 있나요?", "착오송금 반환 신청을 철회하고 싶어요",
             "이체수수료 환급받을 수 있나요?", "반환금 받을 계좌를 바꾸고 싶어요"]
@@ -385,5 +447,9 @@ if __name__ == "__main__":
     print(f"  착오송금 {len(IN_Q)}건 중 슬롯 소실: {len(dead)}건 (기대 0)  {'OK' if not dead else 'DIFF'}")
     for q in dead:
         print(f"    ✗ 소실 @ {q}")
+    dpin_dead = [q for q in DPIN_Q if not any(extract(q).get(f) for f in SL)]
+    print(f"  예금보험금 {len(DPIN_Q)}건 중 슬롯 소실: {len(dpin_dead)}건 "
+          f"(기대 0 · QFORM_SCOPE={qform_config.QFORM_SCOPE})  "
+          f"{'OK' if not dpin_dead else 'DIFF'}")
 
     print("\n(LLM 호출 0 — 순수 키워드 매핑. 외부 네트워크·모델 호출 없음)")

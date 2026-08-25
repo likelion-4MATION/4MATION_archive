@@ -203,3 +203,209 @@
 - **`verify_docs.py` AC2 — 타입 주석 대입 인식**: `SPEC: dict = {...}` 같은 `ast.AnnAssign` 을
   심볼 수집에서 놓쳐, 문서에 적힌 실재 상수가 "코드에 없다"고 오탐했다. 검증기를 고쳤다.
   문서를 통과시키려고 검사를 느슨하게 한 것이 아니라, 주석 붙은 대입도 대입이라는 사실을 반영한 것이다.
+
+## D10 (08-18) — Qform_ver4 M1 (용어 판별 사전)
+
+- **D 되묻기를 구현하지 않는다 (08-18 판정)**: 논의정리 §5(K7)가 "설명 노출만으로 오분류 9건 중 몇 건이
+  잡히는지"를 D 되묻기 구현 여부의 판정 근거로 걸어 두었고, M1에서 그 수치가 나왔다 —
+  **설명만으로 해소 5 / 되묻기 필요 0 / 판별 불가 4** (400셋 9건 기준. 450셋 10건 기준은 6/0/4).
+  - `되묻기 필요` 가 **0건**이다. "사용자가 A라고 말했는데 실은 B였다"는 D-되묻기의 전형 사례가
+    9건 안에 하나도 없다. 사전 용어를 쓴 6건은 용어가 이미 정확했고, 나머지 3건은 사전 용어가 아예 없다.
+  - 따라서 **`one_line` 설명 노출로 종결**한다. 되묻기 층을 새로 만들지 않는다 — 안 고치는 버그를 위해
+    턴을 늘리지 않는다(K7의 "최악 +1턴"을 지불할 이유가 사라졌다).
+  - 논의정리 §10-3 미결을 **닫는다.**
+  - 남은 것: 판별 불가 4건은 용어 축이 아니라 **업무 간 경계** 문제다 → `crawler/HOLES.md` H30
+
+- **용어 사전 축자성 — "핵심 어구"가 아니라 완전 부분문자열로 검사**: 명세 T-AC3은 "핵심 어구가 근거 청크
+  원문에 존재"였으나 그 기준은 **어구를 골라내는 재량**이 들어가고, 그 재량이 창작이 새어드는 틈이다.
+  `verify_terms.py` 는 `one_line ⊂ evidence_chunks_v0[0] 본문` · `discriminator ⊂ 근거 중 어느 하나`를
+  완전 부분문자열로 판정한다. **검사를 느슨하게 한 것이 아니라 조인 것이다.**
+  - 부작용: `one_line` 이 22~66자로 길다. **줄이는 것이 곧 창작**이라 줄이지 않았고,
+    렌더는 `버튼 라벨 = term / 캡션 = one_line 전문` 구조로 M3에서 처리한다(08-18 판정 3).
+  - `one_line` 출처를 `evidence_chunks_v0[0]` 로 못 박은 것은 컬럼을 늘리지 않고
+    "정의가 흩어져 있어도 one_line 은 한 문장에서만 온다"를 담보하기 위한 규약이다.
+
+- **오분류 9건의 원문은 저장돼 있지 않았다 — 결정론 재실행으로 확보**: 수치만 세 문서에 남아 있고
+  질의 원문은 어디에도 없었다. `eval_softboost.py` 의 `cause()` 가 `rag.classify_query_bf` 키워드
+  매칭이라 임베딩·LLM 없이 재현 가능해 그대로 다시 돌렸다(`rag.py` 는 import만, 수정 0).
+  - **오분류 9 · 불명 120(30%)이 동시에 일치**해 같은 버킷임을 확인했다. 재구성이 아니다.
+  - **기준선이 400셋 수치임이 드러났다.** 450셋에서는 **10건**이다(§K12-1 셋 버전 병기 대상).
+    08-18 판정 2: 작업 기준선 = **450셋 10건**, 400셋 9건은 "기획서 인용치"로 출처 병기해 보존.
+
+- **커밋 메시지에 저자 트레일러를 넣지 않는다 (08-18 영구 규칙)**: `Co-Authored-By` 를 비롯한 어떤
+  저자 트레일러도 커밋 메시지에 넣지 않는다. **생성 주체 표기는 이 문서(`DECISIONS.md`)가 맡는다.**
+  CLAUDE.md §0-1에 반영. 이 스프린트의 코드·문서 산출은 CC(Claude Opus 5)가 작성하고 현욱이 판정·커밋했다.
+
+- **A2b-1 철회 — "제도안내 10건 복원" AC 는 잘못 세운 것이었다 (08-18)**: M2-b 착수 지시가
+  `제도안내` 혼합 hits 에서 `ver3 10건 → ver4 0건` 을 "좁힘 상실 방향의 회귀"로 보고 복원을 요구했으나,
+  1단계 실측에서 전제가 틀렸음이 드러났다.
+  - **ver3 의 10건은 전부 DPIN 문서 첨부이고, 좁혀진 결과가 아니라 스코프 면제로 남은 잔여다.**
+    ver3 코드는 `coords["business_function"] != "착오송금 반환 신청"` 이면 무조건 보존했으므로
+    MSDR 표는 예금보험금 문서에 **닿은 적이 없다.** 같은 질의에서 MSDR 첨부 18건은 ver3 에서도 0이었다.
+  - **ver4 는 `제도안내` 에서 MSDR 18 + DPIN 10 을 일관되게 제외한다.**
+    ver3 는 MSDR 만 좁히고 DPIN 은 스코프 밖이라 남긴 **비일관 상태**였다.
+  - → **A2b-1 은 미충족이 아니라 무효.** 복원할 실적이 없었다. M2 결과가 처음부터 옳았고 되돌리지 않는다.
+  - `DPIN-C01`(제도안내) **존치 확정** — 제거하면 10건이 되살아나지만 그것은 제도 질의에 신청서식을
+    계속 노출하는 것이다. **지표만 좋아지고 사용자가 보는 것은 나빠진다.**
+    근거 청크(`DpsmIbamtExpln#00`·`DpsmIbamtAplyProc#00`)를 가진 정당한 행을 지표 때문에 지우지 않는다.
+  - M2-b 가 남긴 실질 변경은 **후단 필터 테이블 선택을 질의 단위 → 문서 단위로 전환**한 것 하나다.
+    현 데이터에서 동작은 동일하고 근거가 단단해졌다 → `docs/QFORM_ARCH_설계스펙.md` §23
+
+## D11 (08-18) — Qform_ver4 M3 (메모리 패널) · 하니스 E1·E2·C6 개정
+
+- **개정 사유**: K4 가 X 의 의미를 "그만 물어봐"에서 **"메모리 오염 차단"**으로 확정했다.
+  한 대화에 용건이 여러 개일 수 있고, X 는 직전 용건의 값이 다음 용건으로 새는 것을 막는 조작이다.
+  지우자마자 다시 물으면 그 의도와 정면 충돌한다. K11 로 AC 개정 승인 완료(현욱, 08-17).
+
+- **개정 3건과 보존된 성질**
+
+  | 대상 | 개정 전 기대 | 개정 후 기대 | **보존된 성질** |
+  |---|---|---|---|
+  | **E1** | 해제 → 되묻기 즉시 재발동 | 해제 → **침묵**(값만 None) | "패널에서 만진 것이 상태에 실제로 반영된다" — 그대로다. 바뀐 것은 반영의 즉시 결과가 재질문이냐 침묵이냐뿐 |
+  | **E2** | `asked` 정리 + 상한 대화 재질문 | `asked`·`ask_turn` **무변동** | "상한에 닿은 대화가 되살아난다" → **pass 미사용 슬롯의 정상 경로로 이관.** 되살아나는 자리가 '해제 직후'에서 '다음 질의'로 옮겼다 |
+  | **C6** | `TTL=2` 기준 4원소 하드코딩 | `TTL` 기반 생성 (`TTL=3` → 5원소) | TTL 만료 판정 자체는 무변경. 값이 또 바뀌어도 기대 시퀀스가 따라온다 |
+
+- **범위 밖으로 나간 것 1건 — E5**: E5("해제 후 선택지 복구")는 `options()` 가 비어 있지 않은지를
+  봤는데, X 가 침묵하게 되면서 `pending_slot` 이 없어 `options()` 는 **빈 리스트가 정상**이 됐다.
+  개정하지 않으면 E5 가 실패한다. **성질은 보존**했다 — "해제한 값을 다시 고를 수 있는가"를
+  `qform_ask.survivor_values()`(렌더가 읽는 바로 그 원천)로 확인한다. 명세가 지정한
+  E1·E2·C6 범위 **밖이므로 사후 승인 대상**으로 올린다.
+
+- **X 이후 비대칭은 의도된 동작이다**: `asked` 를 안 건드리므로, **되묻기로 채운 슬롯은 X 후 다시
+  안 묻고**(결과적으로 pass 와 동일), **첫 발화에서 추출된 슬롯은 다시 물을 수 있다.**
+  두 번째가 K4 의 의도에 정확히 맞는다 — 오염만 끊고 새 용건에 필요한 것은 새로 묻는다.
+  첫 번째는 "이미 물어본 것을 또 묻지 않는다"는 기존 원칙이 이기는 자리이며, 사용자가 다시
+  답하고 싶으면 ✏️ 수정으로 값을 직접 넣으면 된다. **코드 주석(`qform_flow.edit`)에 명시했다.**
+
+- **결과 지문 변경**: `e6d0fe7ff4540b89` → **`246d07124d333c9b`**.
+  24행 중 **C6·E1·E2·E5 4행만** 문자열이 바뀌었고 나머지 20행은 바이트 동일이다.
+  지문은 `sid|ac|기대|실측|통과` 24행의 sha256 이라 이 4행이 변경 사유의 전부다.
+
+- **패널을 `qform_panel.py` 에 얹지 않았다**: 그 파일은 T6 **트레이스 패널**이고 이번 스프린트
+  동결이다(M0 판정 2·3). 메모리 패널은 신규 `chatbot/qform_memory_panel.py` 다. 이름이 비슷해
+  섞기 쉬운 자리라 두 파일 docstring 첫 문단에 서로를 명시했다.
+
+- **다중 의도 감지에서 `_SUBTASK_RULES` 직접 순회를 버렸다**: 전 규칙을 훑으면 `제도안내` 가
+  같이 걸린다 — 그 규칙은 코드 주석이 밝히듯 `fallback` 이고 어휘가 넓어("뭐예요"·"절차"·"얼마")
+  단일 의도 질의를 전부 다중으로 오판했다(실측: 단일 질의도 parallel 로 판정). **절 단위로
+  `extract()` 를 다시 돌려** 기존 우선순위를 재사용하는 방식으로 바꿨다. 450셋 오발동 실측
+  parallel **1건(0.2%)** · cross **2건(0.4%)**.
+
+- **업무 교차 판정은 절 분리에 기대지 않는다**: "착오송금 신청했는데 그 은행이 파산하면…" 처럼
+  접속 표지 없이 두 제도가 걸리는 문장이 정확히 이 유형이라 절을 못 가르면 놓친다.
+  `rag.BF_QUERY_KEYWORDS` 를 **읽어서**(rag.py 무수정) 동시 득점 업무 수를 본다.
+  문턱은 `rag.QBF_MIN_SCORE` 를 그대로 승계 — 교차 판정에서 문턱을 낮추면 오발동이 폭증한다.
+
+- **하니스 개정 허용 범위 확장 — E5 사후 승인 (08-18)**: 규칙 11의 개정 허용 범위를
+  **E1·E2·C6 → E1·E2·C6·E5** 로 개정한다.
+  **범위 확장 사후 승인 — E5 는 K4(X=오염 차단) 채택의 필연적 파생.**
+  `pending_slot` 소멸 시 `options()` 빈 리스트가 정상이 되며, 성질은 `survivor_values()` 로 보존.
+  - 즉 E5 는 "새로 손대고 싶어서" 건드린 것이 아니라, K4 를 채택하는 순간 판정식이
+    무효가 되는 항목이었다. E1·E2 와 같은 원인에서 나온 같은 종류의 파생이다.
+  - `CLAUDE.md` 규칙 11 본문을 함께 고쳤다.
+
+- **검증 상시 목록을 7종 → 10종으로 (08-18)**: `CLAUDE.md` §5 에
+  `verify_terms.py`(M1 신규) · `verify_qform_panel.py`(M3 신규) ·
+  `verify_qform_integration.py`(기존에 있었으나 §5 미등재분)를 더했다.
+  **목록에 없으면 안 돌린다** — 미등재 자산은 조용히 썩는다.
+
+## D12 (08-19) — Qform_ver4 M9-3b (스팬 이행 보완)
+
+- **K10 — `pick_anchor` 적용 범위 = 원 문자열이 없는 자산 한정 (08-19 판정)**: anchor 추출 규칙은
+  **combos 처럼 원 문자열이 없어 청크에서 뽑아내야 하는 자산에만** 적용한다. terms(정의문)·
+  prompts(버튼 라벨)는 원 문자열(one_line/discriminator/phrase)이 이미 있어 추출 규칙의 대상이 아니다.
+  M9-3 3-3 의 "26/28 스팬이 바뀌려 한다"는 불일치가 아니라 **규칙이 적용 범위를 벗어났을 때의 정상 반응**이다.
+  terms/prompts 를 anchor 로 갈아치우면 그 자산이 무엇을 주장하는지가 바뀐다(`본인`→`대리인` 역전이 증거).
+  **증거 모델 재설계는 다음 스프린트 사안.** 자산별 증거 모델은 `docs/Qform_ver4_M9_스팬이행_대조표.md` §9-7.
+
+- **K11 — 커밋 단위 = 마일스톤으로 쪼개지 않는다 (08-19 판정)**: `span_tools.py` 에 M9-1b·M9-2b·M9-3 이
+  누적돼 있어 마일스톤별 원자 커밋이 물리적으로 불가능하다. `add -p` 로 쪼개면 **실제로 통과한 적 없는
+  중간 상태**를 커밋하게 된다. → **tool → data → docs 3커밋으로 M9-1b~M9-3 구간을 통째로** 담는다.
+  마일스톤 계보는 대조표(`docs/Qform_ver4_M9_스팬이행_대조표.md`)가 진다.
+
+## D13 (08-24) — eval 통합: 6개 평가 스크립트 → `crawler/eval.py` 한 파일
+
+> 기존 엔트리 무수정. 아래는 추기분이다.
+
+- **문제 정의 — "같은 기능, 다른 파일"**: `crawler/` 에 평가기가 6개, 은퇴 사본이 17개 있었고
+  디렉토리마다 다른 파일을 참조했다. `admin/runner.py` 는 `eval_anchor_v3`, `tune_params*` 는
+  `eval_anchor_v3`, `exp_tablefix` 는 `eval_anchor_v3` + `eval_overlap`, `rerank_colab` 은
+  `eval_anchor_v3` 를 각각 잡고 있었다. 실측 중복: `eval.py` ↔ `eval_TF.py` 6함수
+  (`load_testset`·`first_hit_rank` 는 바이트 동일) · `eval_anchor_v3` ↔ `eval_anchor_span_multi`
+  ↔ `eval_anchor_gold` 3중 포크(`_load_jsonl`·`_format_ids`·`_pct_table`·`_get_gt_chunk_ids`
+  바이트 동일, `_empty/_add/_finalize_metrics`·`_error_analysis`·`write_report` 는 드리프트).
+
+- **`crawler/eval.py` 를 유일한 평가 모듈로 만들었다 (서브커맨드 `chunk`/`span`/`gold`)**:
+  - `chunk` = 구 `eval_anchor_v3.py` — **정본. 이름 변경 0건으로 이식**했다. 상수 `KS`·
+    `RECALL_KS`·`RETRIEVAL_DEPTH` 를 접두어 없이 둔 이유가 이것이다. 접두어를 붙였으면
+    본문 30개 함수를 전부 손봐야 했고, 그러면 "무변경 이식"이라는 주장이 검증 불가해진다.
+  - `span` = 구 `eval_anchor_span_multi.py` — `KS_SPAN`/`DEPTH_SPAN` 으로 분리. 집계 키가
+    다르다(`id_hit@k`·`total_spans`·`n_no_span`)서 누산기를 공유할 수 없어 `_span_*` 접두어.
+  - `gold` = 구 `eval_anchor_gold.py` — `wilson`·`ndcg`·`mcnemar` 는 §2 공용으로 올려
+    다른 서브커맨드도 쓸 수 있게 했다. 이 3개는 다른 어느 평가기에도 없던 유일 자산이다.
+  - 인자 없이 `python eval.py` 는 `chunk` 로 붙는다 — 구 `python eval_anchor_v3.py --gt …`
+    명령이 그대로 통한다.
+
+- **"판정 의미가 다른 것"은 합치지 않았다 — 중복만 합쳤다**: 앵커 평가기 3종은 같은 기능의
+  복제가 아니라 서로 다른 측정 축이다. `chunk` 는 앵커 + 앵커 미커버 gold 의 chunk_id 폴백,
+  `span` 은 `gt_anchor_spans` 전부 발견 AND, `gold` 은 앵커를 품은 **모든** 청크를 host 로
+  계산(gold id 무관). 하나로 접으면 기능이 사라진다. 정규화도 둘 다 남겼다 —
+  `_norm_text`(NFKC+공백, chunk 판정) vs `norm_ws`(공백만, span·gold 판정). NFKC 로 통일하면
+  두 평가기의 판정이 바뀌어 커밋된 리포트와 비교가 끊긴다. **규칙이 다른 것은 버그가 아니다.**
+  실제로 합친 것: 로더 7종 → `_load_jsonl` 1개 · 표 헬퍼 2종 → 1개 · GT 파서 2종 → 1개 ·
+  `_default_data_dir` 2종 → marker 인자 1개 · `_search_results` 2종 → `(depth, gold_bf)` 인자 1개.
+
+- **구세대 문서단위 평가기 3개는 archive 로 보냈다 — 실행 불가 상태였다**: `eval.py`(구) ·
+  `eval_TF.py` · `eval_pair.py` 의 기본 평가셋(`data/testset_natural_400.jsonl` ·
+  `data/router_trainset_v1.jsonl` · `data/testset_natural.jsonl`)이 **셋 다 디스크에 없다**
+  (baseline_v1/v2.lock 에 sha256 만 남아 있다). `docs/handoff/eval_유상.md` §3 이 이미
+  "폐기(참조용)"로 판정한 상태와 일치한다. 지표 함수 `first_hit_rank`·`_row`·`group_metrics`
+  만 통합 파일 §3 에 보존했다 — 되살릴 때 판정 로직을 다시 쓰지 않도록.
+
+- **07-21 계약의 "eval.py 코드 무수정" 조항을 개정한다 (사후 정정 포함)**: 그 조항은
+  `baseline_v1.lock`(merged .853 / natural .753)의 재현성을 지키려는 것이었다. 그런데 그
+  평가셋 두 개가 이미 디스크에 없어 **조항이 지키려던 대상이 존재하지 않는다.** 원본 코드는
+  `archive/superseded/eval_doc_legacy.py` 에 바이트 그대로 있고 `git log --follow` 로 이력이
+  이어지므로 재현 경로는 보존됐다. 새 `crawler/eval.py` 는 **같은 이름의 다른 파일**이다 —
+  기존 문서에서 "eval.py = 폐기된 구세대 평가"로 읽히는 서술은 archive 쪽을 가리킨다.
+  `rag.py` 무수정 원칙과 `chain.py` 동결은 **건드리지 않았다**(rag.py 는 이번 작업에서
+  단 한 줄도 수정하지 않았다 — 이력 주석의 옛 스크립트명도 그대로 뒀다).
+
+- **등가성을 회귀 테스트로 못박았다 — `crawler/tests/test_eval_equivalence.py`**:
+  faiss·numpy·검색 인덱스 **없이** 돈다. 판정 로직이 순수 함수라 `(gt, retrieved, chunk_meta)`
+  세 데이터만 있으면 검증되기 때문이다. 실제 GT(`gt_natural430_anchored` 430건 ·
+  `gt_testset_retrieval_450` 448건) + 실제 `data/chunks.jsonl` 로 **결정론적 합성 retrieved**
+  를 만들어(문항 인덱스로 gold 배치 위치를 0=완전miss … 7=완전hit 로 순환 → hit@1~50·부분회수·
+  미회수를 전부 훑는다) `archive/superseded/` 의 구 평가기와 반환 dict 를 재귀 비교한다.
+  - 통과 항목 16개: chunk 2GT×3score · 청크메타 없는 경로 · span 2 · gold · wilson/ndcg ·
+    문서단위 2함수 · **리포트 마크다운 바이트 동일(chunk 1.2MB · span 310KB)** · 하위호환 심볼
+    전수 · `admin/runner.run_eval()` 이 읽는 키.
+  - **`archive/superseded/eval_anchor_v3.py` 를 지우면 이 테스트가 못 돈다.** 대조군이다.
+    archive/README.md 에 경고를 박아 뒀다.
+  - 리포트 바이트 비교를 넣은 이유: 지표 dict 만 맞고 리포트 문구가 갈리면 사람이 읽는 산출물이
+    조용히 달라진다. 마크다운은 지표를 전부 문자열로 굽는 최종 스냅샷이라 회귀 검출력이 가장 높다.
+
+- **하위호환은 별칭으로 해결 — 호출부는 import 한 줄만 바뀐다**: `_load_jsonl = load_jsonl` ·
+  `write_report`(=chunk 리포트) · `_norm_text` · `_get_gt_chunk_ids` · `_anchor_hit_at_k` 등
+  기존 이름을 전부 유지했다. `admin/runner.py` 는 `ev._load_jsonl` 과 `ev.evaluate_retrieval`
+  을 쓰는데 둘 다 그대로 동작한다. 갱신한 import 16곳: `import eval_anchor_v3 as ev3` →
+  `import eval as ev3` (11파일) · `import rag, eval_anchor_v3 as ev3` (tune_params_v2) ·
+  `import eval_anchor_v3 as ev` (admin/runner) · `from eval_overlap/eval_tablefix import` →
+  `from exp_overlap/exp_tablefix import` (3곳).
+
+- **`eval_` 인데 평가기가 아닌 4개는 `exp_` 로 rename**: `eval_overlap`·`eval_tablefix`·
+  `eval_docinput`·`eval_router_facet` → `exp_*`. handoff §3 이 이미 "실험"으로 분류한
+  스크립트들이고, 통합 `eval.py` 옆에 `eval_*` 이 남아 있으면 통합의 의미가 반감된다.
+  `git mv` 라 이력은 이어지고, **산출 리포트 파일명(`data/eval_tablefix_report.md` 등)은
+  그대로 뒀다** — `admin/metrics.py` 가 그 파일들을 수치 근거로 인용하고 있어 이름을 바꾸면
+  기록된 수치의 출처가 끊긴다.
+
+- **은퇴 파일 22개는 삭제하지 않고 `archive/` 한 곳으로 모았다**: `crawler/archive_eval/` →
+  `archive/eval_retired/` · `archive_label/` → `archive/label_retired/` · 대체된 평가기 6개 →
+  `archive/superseded/`. `archive/README.md` 에 파일별 은퇴 사유·원 경로·대체 경로·되살리는
+  방법을 적었다. 삭제하지 않은 이유: 수치의 계보와 판정 변경 근거가 이 코드에만 남아 있다.
+
+- **리포트 기본 출력 파일명이 바뀌었다**: `eval_anchor_v3_report.md` → `eval_chunk_report.md` ·
+  `eval_anchor_span_multi_report.md` → `eval_span_report.md`. **기존 커밋된 리포트를 덮지 않는다**
+  (의도한 것 — handoff §4-B 가 경고한 "커밋된 .md 에 정본 수치가 없다" 문제와 섞이면 안 된다).
+  옛 이름으로 뽑아야 하면 `--report data/eval_anchor_v3_report.md` 로 지정한다.

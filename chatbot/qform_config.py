@@ -13,19 +13,30 @@ DB·원격 설정 로딩은 이번 범위 밖이며, `resolve()` 가 그 주입�
 호환: `qform_flow.MAX_ASK_TURNS` 는 **별칭으로 유지**한다(`verify_docs.py` 가 읽는다).
 
     from qform_config import resolve
-    cfg = resolve({"CARRYOVER_TTL": 3})     # 검증 + 기본값 병합
-    cfg["CARRYOVER_TTL"]                    # 3
-    resolve({"CARRYOVER_TTL": 99})          # 허용범위 밖 → 기본값 2 로 되돌리고 통과
+    cfg = resolve({"CARRYOVER_TTL": 4})     # 검증 + 기본값 병합
+    cfg["CARRYOVER_TTL"]                    # 4
+    resolve({"CARRYOVER_TTL": 99})          # 허용범위 밖 → 기본값 3 으로 되돌리고 통과
 """
 from __future__ import annotations
 
 # ── 기본값 (task_assignment T2 표) ──────────────────────────────────────────
 SLOT_CARRYOVER = True          # 슬롯 이월 사용 여부
-CARRYOVER_TTL = 2              # 슬롯이 설정된 후 몇 턴까지 유효한가
+CARRYOVER_TTL = 3              # 슬롯이 설정된 후 몇 턴까지 유효한가 (K6: 2→3)
 CARRYOVER_SCOPE = "bf_match"   # 업무 전환 시 정책
 MAX_ASK_TURNS = 2              # 되묻기 상한 (qform_flow 에서 이관)
 
+QFORM_SCOPE = "msdr"           # 슬롯 추출 스코프.
+# ⚠ M7 전환 시도 → **동결 파일이 막았다.** `chatbot/verify_qform_e2e.py` AC5 가
+#   `예금보험금은 어떻게 신청하나요?` 를 **소관밖 fixture 로 하드코딩**하고 큐폼 미개입을
+#   단언한다(ver2 기준선). 스코프를 넓히면 그 질의가 스코프 안으로 들어와 AC5 가 깨진다.
+#   그 파일은 규칙3 동결(어떤 이유로도 수정 금지)이라 CC 가 손댈 수 없다.
+#   → `crawler/HOLES.md` H39. 전환은 동결 해제 판정 후.
+MAX_QUEUE = 3                  # '대기 중인 용건' 큐 최대 길이 (K13)
+PANEL_EXPIRED = "gray"         # TTL 만료 항목 처리 — 회색 잔류 / 즉시 삭제
+
 SCOPE_VALUES = ("bf_match", "global", "off")
+EXPIRED_VALUES = ("gray", "drop")
+SCOPE_SET_VALUES = ("msdr", "msdr+dpin")
 
 # 콘솔이 읽을 메타. 라벨·허용값·설명이 코드와 한 곳에 있어야 UI 가 값을 창작하지 않는다.
 SPEC: dict[str, dict] = {
@@ -46,6 +57,26 @@ SPEC: dict[str, dict] = {
     "MAX_ASK_TURNS": {
         "label": "되묻기 상한", "type": "int", "default": MAX_ASK_TURNS, "range": (1, 3),
         "help": "한 질의에서 되물을 수 있는 최대 턴 수. 상한에 닿으면 미채움이어도 진행한다.",
+    },
+    # ── ver4 M5 슬롯 추출 스코프 ────────────────────────────────────────────
+    "QFORM_SCOPE": {
+        "label": "슬롯 추출 스코프", "type": "enum", "default": QFORM_SCOPE,
+        "values": SCOPE_SET_VALUES,
+        "help": ("msdr=착오송금 단일(**현 기본**) · msdr+dpin=착오송금+예금보험금. "
+                 "M7 전환은 `verify_qform_e2e.py`(동결) AC5 fixture 와 충돌해 보류됐다 "
+                 "→ HOLES H39. 토글로는 지금도 켤 수 있다."),
+    },
+    # ── ver4 M3 메모리 패널 파라미터 ────────────────────────────────────────
+    "MAX_QUEUE": {
+        "label": "대기 용건 최대", "type": "int", "default": MAX_QUEUE, "range": (0, 5),
+        "help": ("다중 의도에서 '대기 중인 용건' 구역에 쌓아 둘 최대 개수. "
+                 "0 이면 큐를 쓰지 않는다(ver3 동작)."),
+    },
+    "PANEL_EXPIRED": {
+        "label": "만료 항목 처리", "type": "enum", "default": PANEL_EXPIRED,
+        "values": EXPIRED_VALUES,
+        "help": ("gray=TTL 만료 항목을 회색으로 남긴다(기본) · drop=화면에서 지운다. "
+                 "조용한 삭제는 '아무것도 안 했는데 사라졌다'로 읽혀 기본값이 gray 다."),
     },
 }
 
@@ -105,8 +136,9 @@ if __name__ == "__main__":
         print(f"  {k:18} {str(s['default']):10} {allowed:28} {s['label']}")
 
     print("\n── AC. 기본값이 명세서 표와 일치 ──")
-    WANT = {"SLOT_CARRYOVER": True, "CARRYOVER_TTL": 2,
-            "CARRYOVER_SCOPE": "bf_match", "MAX_ASK_TURNS": 2}
+    WANT = {"SLOT_CARRYOVER": True, "CARRYOVER_TTL": 3,
+            "CARRYOVER_SCOPE": "bf_match", "MAX_ASK_TURNS": 2,
+            "QFORM_SCOPE": "msdr", "MAX_QUEUE": 3, "PANEL_EXPIRED": "gray"}
     got = {k: v for k, v in resolve().items() if k != "_invalid"}
     ok_def = got == WANT
     print(f"  {got}\n  기대 {WANT}  → {'OK' if ok_def else 'DIFF ⛔'}")
@@ -115,11 +147,14 @@ if __name__ == "__main__":
 
     print("\n── AC. 허용범위 밖 값은 기본값 복귀 (예외 없음) ──")
     CASES = [
-        ({"CARRYOVER_TTL": 99}, "CARRYOVER_TTL", 2),
-        ({"CARRYOVER_TTL": 0}, "CARRYOVER_TTL", 2),
+        ({"CARRYOVER_TTL": 99}, "CARRYOVER_TTL", 3),
+        ({"CARRYOVER_TTL": 0}, "CARRYOVER_TTL", 3),
         ({"CARRYOVER_SCOPE": "무엇"}, "CARRYOVER_SCOPE", "bf_match"),
         ({"MAX_ASK_TURNS": 9}, "MAX_ASK_TURNS", 2),
         ({"SLOT_CARRYOVER": "예"}, "SLOT_CARRYOVER", True),
+        ({"MAX_QUEUE": 99}, "MAX_QUEUE", 3),
+        ({"PANEL_EXPIRED": "숨김"}, "PANEL_EXPIRED", "gray"),
+        ({"QFORM_SCOPE": "전업무"}, "QFORM_SCOPE", "msdr"),
         ({"없는키": 1}, None, None),
     ]
     ok_clamp = True
