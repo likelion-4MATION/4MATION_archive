@@ -82,7 +82,8 @@ def _load_combo_tables() -> dict:
         for bf, path in QFORM_TABLES.items():
             try:
                 with path.open(encoding="utf-8-sig") as fh:
-                    tables[bf] = list(csv.DictReader(fh))
+                    lines = [ln for ln in fh if not ln.lstrip().startswith("#")]
+                tables[bf] = list(csv.DictReader(lines))
             except (FileNotFoundError, OSError):
                 continue
         _combo_cache = tables
