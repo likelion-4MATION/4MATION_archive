@@ -82,7 +82,10 @@ def _load_combo_tables() -> dict:
         for bf, path in QFORM_TABLES.items():
             try:
                 with path.open(encoding="utf-8-sig") as fh:
-                    tables[bf] = list(csv.DictReader(fh))
+                    # DPIN 조합표 머리의 설계 주석은 CSV 행이 아니다. 그대로 DictReader에
+                    # 넣으면 첫 주석이 헤더가 되어 sub_task 키가 사라진다.
+                    lines = [line for line in fh if not line.lstrip().startswith("#")]
+                    tables[bf] = list(csv.DictReader(lines))
             except (FileNotFoundError, OSError):
                 continue
         _combo_cache = tables
