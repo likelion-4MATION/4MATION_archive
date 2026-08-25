@@ -40,14 +40,23 @@ SQLite 파일은 `admin/data/oos.sqlite3`이며 Git에 포함하지 않는다.
 리포지토리 루트에서 챗봇과 관리자 콘솔을 각각 실행한다.
 
 ```bash
-make chat
-cd admin && uvicorn main:app --reload --port 8600
+# 터미널 1 — 관리자
+source .venv/bin/activate
+cd admin
+python -m uvicorn main:app --host 127.0.0.1 --port 8600
+
+# 터미널 2 — 리포지토리 루트에서 챗봇
+source .venv/bin/activate
+python -m streamlit run chatbot/app.py \
+  --server.address 127.0.0.1 --server.port 8501
 ```
+
+공통 의존성 설치와 인덱스 생성은 [RUNBOOK](./RUNBOOK.md#0-공통-준비)을 따른다.
 
 OOS 단위 테스트:
 
 ```bash
-python3 -m unittest tests.test_oos -v
+python -m pytest tests/test_oos.py -q
 ```
 
 운영 점검 순서는 다음과 같다.
@@ -57,4 +66,3 @@ python3 -m unittest tests.test_oos -v
 3. 챗봇에서 정상 예시를 입력해 레지스트리의 고정 응답만 노출되는지 확인한다.
 4. 챗봇 상단 신고 버튼과 “챗봇 답변이 틀렸다” 문장으로 각각 신고를 만든다.
 5. 신고함에서 마스킹, 검색 근거·점수, 라우팅 기록, 30일 삭제 시각을 확인한다.
-

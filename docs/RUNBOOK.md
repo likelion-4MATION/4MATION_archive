@@ -1,7 +1,7 @@
-# RUNBOOK — 5개 축 실행 명령어 모음
+# RUNBOOK — 현재 통합 버전 실행 명령어 모음
 
-`feature/merge` 기준. 다섯 축(라우팅 · RAG · 크롤링+청킹 · 관리자 UI · 챗봇)과
-평가·검증을 실행하는 명령어만 모았다. 설계 근거는 각 모듈 docstring과
+`feature/merge_v1` 기준(2026-08-25). 여섯 축(라우팅 · RAG · 크롤링+청킹 ·
+관리자 UI · 챗봇 · OOS)과 평가·검증을 실행하는 명령어만 모았다. 설계 근거는 각 모듈 docstring과
 `docs/handoff/eval_유상.md` · `docs/router_checkpoint.md` 를 본다.
 
 > **경로 규칙** — `crawler/` 스크립트는 전부 **cwd 상대경로**(`data/...`)를 쓴다.
@@ -13,20 +13,55 @@
 ## 0. 공통 준비
 
 ```bash
-# 검색 스택 (faiss · numpy · rank_bm25 · sentence-transformers · kiwi)
-pip install -r crawler/requirements.txt
+# 리포지토리 루트에서 단일 가상환경 생성·활성화
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 
-# 관리자 콘솔 (FastAPI · uvicorn)
-pip install -r admin/requirements.txt
+# 검색·라우터 + 관리자 + 챗봇·테스트
+python -m pip install -r crawler/requirements.txt
+python -m pip install -r admin/requirements.txt
+python -m pip install streamlit python-dotenv pytest
 
 # HCX 키 — .env (루트). chatbot/* 가 load_dotenv 로 읽는다
-#   CLOVA_API_KEY · CLOVA_API_URL · CLOVA_MODEL
-cp .env.example .env && $EDITOR .env
+# 기존 .env가 있으면 덮어쓰지 않는다
+test -f .env || cp .env.example .env
+# CLOVA_API_KEY · CLOVA_API_URL · CLOVA_MODEL을 편집한다
+$EDITOR .env
 ```
 
 `admin` 과 `chatbot` 은 **같은 파이썬 환경**에 깔아야 한다. 콘솔의 `settings.apply_runtime()`
 이 `rag` · `chain` · `qform_config` 모듈 상수에 값을 주입하는 방식이라, 환경이 갈리면
 파라미터 조절이 챗봇에 닿지 않는다(`admin/runner.py:_need_stack`).
+
+현재 저장소에는 `Makefile`이 없다. 이 문서의 `python -m ...` 명령이 정본이며,
+예전 문서나 개인 셸 기록의 `make chat`, `make setup`은 그대로 실행되지 않는다.
+
+### 0-1. 현재 버전 바로 실행
+
+이미 `crawler/data/index`와 `.env`가 준비된 개발 환경에서는 터미널 두 개만 연다.
+
+터미널 1 — 관리자 콘솔:
+
+```bash
+source .venv/bin/activate
+cd admin
+python -m uvicorn main:app --host 127.0.0.1 --port 8600
+# http://127.0.0.1:8600
+```
+
+터미널 2 — 챗봇:
+
+```bash
+source .venv/bin/activate
+python -m streamlit run chatbot/app.py \
+  --server.address 127.0.0.1 --server.port 8501
+# http://127.0.0.1:8501
+```
+
+관리자 서버는 `admin/data/oos.sqlite3`를 최초 실행 때 자동 생성한다. 이 파일은 Git에
+올리지 않는다. 실제 기관명·URL·전화번호는 시드하지 않으므로, 관리자 ⑧ 탭에서 공식 근거로
+검증한 뒤 `published + 활성 + 링크 정상` 상태로 게시해야 챗봇에 노출된다.
 
 ---
 
@@ -170,9 +205,11 @@ cd crawler && python build_dataset.py --crawl \
 ## 4. 관리자 UI — eval.py + rag.py 파라미터 조절 + 청킹 연결
 
 ```bash
-export KDIC_REPO=$PWD            # 리포 루트 (기본값: admin/ 상위)
-cd admin && uvicorn main:app --reload --port 8600
-# → http://localhost:8600
+# 리포 루트에서 가상환경을 활성화한 상태
+export KDIC_REPO=$PWD
+cd admin
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8600
+# → http://127.0.0.1:8600
 ```
 
 콘솔 버튼이 실제로 돌리는 것은 `admin/runner.py` 다. 서브프로세스로 직접 실행할 수도 있다:
@@ -212,8 +249,9 @@ python runner.py --mode files   --config '{}'
 ## 5. 챗봇 — HCX LLM 호출
 
 ```bash
-# 데모 UI (Streamlit) — 큐폼 E2E 배선
-streamlit run chatbot/app.py
+# 데모 UI — 절별 6-BF/OOS 오케스트레이션 + 큐폼 E2E
+python -m streamlit run chatbot/app.py \
+  --server.address 127.0.0.1 --server.port 8501
 
 # answer() 계약 관통 3문항 (정상·트랩·롤렛)
 python3 chatbot/chain.py
@@ -234,6 +272,32 @@ python3 chatbot/rag_hcx.py batch    # 대표 6문항 × {rag, bare} → chatbot/
 
 `CALL_BUDGET` 은 프로세스 단위 안전장치다(`chain.py` 70콜, `rag_hcx.py` 20콜).
 소진되면 즉시 중단되고, Streamlit 은 앱 재시작으로 리셋한다.
+
+### 5-1. 현재 OOS 운영 경로
+
+```text
+사용자 입력
+  → 보수적 절 분리
+  → 모든 절을 기존 6-BF 라우터로 먼저 판정
+  → BF: Qform → BF 고정 RAG
+  → 비-BF: BOT_FEEDBACK / REFERRAL / CASUAL / FAR_OOS / PHONE_GUIDE
+  → 뒤 절은 unit_queue에서 순서대로 처리
+```
+
+- OOS 경로는 RAG 검색·답변 생성을 호출하지 않는다.
+- 기관명·URL·전화·운영시간은 ⑧ OOS 안내처에 게시된 값만 사용한다.
+- 상단 신고 버튼과 자연어 오류 신고는 ⑨ 오류 신고함에 저장되며, 저장 전에 개인정보를
+  마스킹하고 생성 30일 뒤 자동 삭제한다.
+- BF/OOS 임계값은 이번 통합에서 바꾸지 않았다. 현재 라우터가 OOS를 BF로 과다 통과시키는
+  문제는 별도 라우터 트랙의 범위이며, OOS 동작 확인 때 이 제약을 함께 기록한다.
+
+API 생존 확인:
+
+```bash
+curl -fsS http://127.0.0.1:8600/api/oos/schema
+curl -fsS http://127.0.0.1:8600/api/oos/referrals
+curl -fsS http://127.0.0.1:8600/api/oos/reports
+```
 
 ---
 
@@ -298,6 +362,12 @@ score_mode     : anchor
 ## 7. 검증 · 테스트
 
 ```bash
+# 현재 OOS + 기존 가드 + 평가 등가성 묶음
+python -m pytest \
+  tests/test_oos.py \
+  crawler/tests/test_guards.py \
+  crawler/tests/test_eval_equivalence.py -q
+
 # eval.py 등가성 회귀 — archive/superseded/ 구 평가기와 판정이 같은지. 검색 스택 불필요
 python3 crawler/tests/test_eval_equivalence.py
 pytest crawler/tests/test_eval_equivalence.py
@@ -320,6 +390,14 @@ python3 chatbot/verify_qform_panel.py
 python3 chatbot/verify_docs.py
 python3 chatbot/answer_checks.py
 ```
+
+현재 기준 기대값:
+
+- 위 pytest 묶음: **14 passed**
+- `verify_qform_e2e.py`: 104조합 통과
+- `verify_qform_panel.py`: 11/11 통과
+- `verify_qform_multiturn.py`: 기존 첨부 후단 필터 C2(`26→26`) 때문에 23/24. OOS
+  라우팅 변경과는 별개인 추적 이슈다.
 
 ---
 

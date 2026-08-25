@@ -23,8 +23,8 @@
 | 단계 | 이름 | 내용 | 상태 |
 |------|------|------|------|
 | 실전 1 | **데이터 파이프라인** | 크롤링 → 본문 파싱 → 메타데이터 태깅 → 청킹 → 벡터DB 적재 | ✅ v0 완료 — [`crawler/`](./crawler/) |
-| 실전 2 | **RAG 챗봇** | 6개 업무 질의응답, 출처 표시, 민원 처리 안내 | 진행 예정 |
-| 종합 | **관리자 기능** | 데이터 CRUD·재수집 트리거, RAG 파라미터(Top-K, Chunk Size) 테스트 UI | 예정 |
+| 실전 2 | **RAG 챗봇** | 6개 업무 질의응답, 출처 표시, Qform, 절별 BF/OOS 처리 | ✅ PoC 통합 |
+| 종합 | **관리자 기능** | 데이터 운영, RAG 파라미터, OOS 안내처, 오류 신고함 | ✅ PoC 통합 |
 
 ## 🏗 서비스 아키텍처
 
@@ -66,15 +66,15 @@ flowchart LR
 
 ## 🛠 기술 스택
 
-| 분류 | 실전 1 확정 (v0) | 이후 단계 후보 |
+| 분류 | 현재 PoC | 비고 |
 |------|------|------|
 | Language | Python 3.11+ | — |
 | 수집/전처리 | requests · BeautifulSoup(lxml) — 규칙 기반, LLM 미사용 | Playwright (동적 페이지 필요 시) |
-| 임베딩 | `jhgan/ko-sroberta-multitask` (로컬, 768d) | CLOVA 임베딩 (프로덕션) |
-| 검색 | FAISS + BM25(kiwipiepy) 하이브리드, RRF 융합 — 직접 구현 | Reranking (cross-encoder / CLOVA) |
-| LLM | — | **CLOVA Studio 우선** (실전 2) |
-| UI | — | Streamlit (데모) → React (관리자) |
-| Backend | — | FastAPI |
+| 임베딩 | `dragonkue/BGE-m3-ko` (로컬, 1024d) | 최초 실행 시 HF 캐시 다운로드 |
+| 검색 | FAISS + BM25(kiwipiepy) + RRF + 6-BF soft boost | `crawler/rag.py` 정본 |
+| LLM | CLOVA Studio HCX | `.env` 설정 필요 |
+| UI | Streamlit 챗봇 + HTML/JS 관리자 | 로컬 PoC |
+| Backend | FastAPI + SQLite(OOS 운영 데이터) | 관리자 프로세스 |
 | Infra / 협업 | GitHub, Notion, Discord | — |
 
 ## 📂 프로젝트 구조
@@ -84,25 +84,31 @@ flowchart LR
 ├── crawler/        # 실전 1: 데이터 파이프라인 (수집→파싱→청킹→인덱스→평가)
 │   ├── README.md   #   실행 순서·산출물 안내
 │   ├── DECISIONS.md · HOLES.md   # 판단 로그 · 이슈/팀 이관
-│   └── data/       #   chunks.jsonl · testset.jsonl · eval_report.md (커밋분)
-├── docs/           # 기획·회의록·발표자료
-├── 산출물_D1.md     # D1 산출물 총람
+│   └── data/       #   chunks.jsonl · 인덱스 · 평가 리포트
+├── chatbot/        # Streamlit 챗봇 · Qform · 절별 BF/OOS 오케스트레이션
+├── admin/          # FastAPI 관리자 콘솔 · OOS 안내처 · 오류 신고 저장소
+├── docs/           # RUNBOOK · 운영 가이드 · 설계 문서
 └── CONTRIBUTING.md # 협업 규칙
-
-(예정) chatbot/ — 실전 2 RAG 챗봇 · admin/ — 종합 관리자 대시보드
 ```
 
 ## 🚀 실행 방법
 
-실전 1 데이터 파이프라인 (상세: [`crawler/README.md`](./crawler/README.md)):
+현재 통합 버전의 설치·데이터 빌드·관리자·챗봇·테스트 명령은
+[`docs/RUNBOOK.md`](./docs/RUNBOOK.md)를 정본으로 사용합니다. 이미 인덱스와 `.env`가 준비된
+개발 환경에서는 다음 두 프로세스를 실행합니다.
 
 ```bash
-git clone https://github.com/likelion-4MATION/4MATION.git
-cd 4MATION/crawler
-pip install -r requirements.txt
-python pipeline.py --rebuild   # 수집→파싱→청킹→임베딩→인덱스 원커맨드
-python eval.py                 # 검색 평가 리포트
+# 터미널 1
+source .venv/bin/activate
+cd admin && python -m uvicorn main:app --host 127.0.0.1 --port 8600
+
+# 터미널 2 — 리포지토리 루트
+source .venv/bin/activate
+python -m streamlit run chatbot/app.py --server.port 8501
 ```
+
+새 로컬의 전체 설치는 [`SETUP.md`](./SETUP.md), OOS 운영 절차는
+[`docs/OOS_구현_운영가이드.md`](./docs/OOS_구현_운영가이드.md)를 참고합니다.
 
 ## 🤝 협업 규칙
 
