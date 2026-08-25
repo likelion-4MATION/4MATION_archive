@@ -56,7 +56,7 @@ SLOT_FIELDS = ("party", "sub_task", "qualification", "subject", "method")
 _NEVER_ASK = ("party", "method")
 _ASK_ORDER = ("qualification", "subject")
 
-# 하위호환 별칭 — `docs/ARCH_통합_v0.md` §3 실배선표와 `verify_docs.py` AC2 가 이 이름을 읽는다.
+# 하위호환 별칭 — `docs/records/ARCH_통합_v0.md` §3 실배선표와 `verify_docs.py` AC2 가 이 이름을 읽는다.
 _ASK_GATES = [(slot, None) for slot in _ASK_ORDER]
 
 

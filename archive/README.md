@@ -28,7 +28,7 @@ git log --oneline <통합커밋>^ -- crawler/eval.py  # 구세대 eval.py 만의
 | `eval_anchor_v3.py` | `crawler/` | `crawler/eval.py chunk` | **정본이었다.** 로직을 이름 변경 0건으로 통합 파일 §4 에 이식. 여기 사본은 등가성 회귀 테스트의 기준값 역할을 한다 — 지우면 `crawler/tests/test_eval_equivalence.py` 가 못 돈다 |
 | `eval_anchor_span_multi.py` | `crawler/` | `crawler/eval.py span` | `gt_anchor_spans` 다중 span AND 판정. 외부 참조 0건이었다. 통합 파일 §5 |
 | `eval_anchor_gold.py` | `crawler/` | `crawler/eval.py gold` | 앵커-host 판정 + Wilson CI · 등급 nDCG · McNemar. 참조 0건이었다. 통합 파일 §6 (통계 3종은 §2 로 올려 모든 서브커맨드가 쓴다) |
-| `eval_doc_legacy.py` | `crawler/eval.py` | (없음) | 구세대 `parent_doc_id` 판정. `docs/handoff/eval_유상.md` §3 이 "폐기(참조용)"로 판정했고, 기본 평가셋 `data/testset_natural_400.jsonl` 이 디스크에 없어 **실행 불가**였다. 지표 함수 `first_hit_rank`·`_row`·`group_metrics` 만 통합 파일 §3 에 보존 |
+| `eval_doc_legacy.py` | `crawler/eval.py` | (없음) | 구세대 `parent_doc_id` 판정. `docs/records/handoff/eval_유상.md` §3 이 "폐기(참조용)"로 판정했고, 기본 평가셋 `data/testset_natural_400.jsonl` 이 디스크에 없어 **실행 불가**였다. 지표 함수 `first_hit_rank`·`_row`·`group_metrics` 만 통합 파일 §3 에 보존 |
 | `eval_TF.py` | `crawler/` | (없음) | `eval_doc_legacy.py` 의 드리프트 포크. 6개 함수를 복제하고 `ANALYZE_MODE`·오류분석만 더한 상위집합이었다. 기본 평가셋 `data/router_trainset_v1.jsonl` 이 없어 실행 불가 |
 | `eval_pair.py` | `crawler/` | (없음) | 원본 vs 자연어화 질문쌍 페어 평가. 기본 평가셋 `data/testset_natural.jsonl` 이 없어 실행 불가. `from eval import first_hit_rank, group_metrics` 를 쓰므로 되살릴 때 임포트를 통합 파일 기준으로 고쳐야 한다 |
 
@@ -80,4 +80,4 @@ git mv archive/eval_retired/eval_mmr.py crawler/eval_mmr.py   # 되살리기
 
 현행 라벨링 도구는 `crawler/promote_gt_anchors.py` · `crawler/fill_anchors.py` ·
 `crawler/audit_anchors.py` 이며, 정답셋 정본은 `final_testset/` 아래에 있다
-(`docs/handoff/eval_유상.md` §2 참조).
+(`docs/records/handoff/eval_유상.md` §2 참조).

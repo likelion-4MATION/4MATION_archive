@@ -13,7 +13,7 @@ archive/superseded/ 에 원본이 그대로 남아 있다.
 
 ⚠ 이름 주의 — 이 `eval.py` 는 **구세대 `eval.py`(parent_doc_id 판정, 폐기)가 아니다.**
 기존 문서에서 "eval.py = 폐기된 구세대 평가"로 읽히는 서술은 archive/superseded/
-eval_doc_legacy.py 를 가리킨다. 판정 기준은 `docs/handoff/eval_유상.md` §5 #3 을 따른다.
+eval_doc_legacy.py 를 가리킨다. 판정 기준은 `docs/records/handoff/eval_유상.md` §5 #3 을 따른다.
 
 세 판정의 의미가 서로 달라 "중복 제거"로 하나만 남기지 않았다. 실제로 중복이던
 것(로더·정규화·표 헬퍼·GT 파서·검색 실행)만 §2 로 합쳐 단일 지점을 만들었다.
@@ -235,7 +235,7 @@ def mcnemar(base: list[dict], new: list[dict], blabel: str, nlabel: str) -> None
 # §3. 문서단위(parent_doc_id) 지표 — 구세대 평가기의 잔존 계약.
 #
 # 구 eval.py / eval_TF.py / eval_pair.py 는 기본 평가셋이 디스크에서 사라져
-# 실행 불가 상태이며 archive/superseded/ 로 옮겼다(docs/handoff/eval_유상.md §3
+# 실행 불가 상태이며 archive/superseded/ 로 옮겼다(docs/records/handoff/eval_유상.md §3
 # 이 이미 "폐기(참조용)"로 판정). 다만 아래 3개 함수는 다른 코드가 임포트할 수
 # 있는 순수 지표 함수라 여기 남긴다 — 되살릴 때 판정 로직을 다시 쓰지 않도록.
 #
@@ -908,7 +908,7 @@ def _anchor_report_lines(result: dict) -> list[str]:
     lines = ["", "## 앵커텍스트(골드텍스트) 판정", "",
              "적중 = top-k 청크가 `gt_anchors`를 포함하는지로 판정(공백 정규화 후 부분문자열).",
              "정답 내용이 여러 청크에 정당히 존재해도 적중으로 잡히며, 재청킹으로 `chunk_id`가",
-             "밀려도 판정이 유지된다. 출처: `docs/앵커텍스트_정답라벨링_파이프라인.md` ⑤.", "",
+             "밀려도 판정이 유지된다. 출처: `docs/records/앵커텍스트_정답라벨링_파이프라인.md` ⑤.", "",
              "- `single`/`or`: 앵커 하나라도 발견되면 적중",
              "- `and`: 앵커 **전부** 발견 + 앵커 없는 gold 청크 **전부** top-k에 존재"]
     if result.get("id_fallback") is False:
