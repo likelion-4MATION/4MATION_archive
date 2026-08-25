@@ -28,12 +28,26 @@ from qform_trace import LAYER_LABEL, LAYER_ORDER  # noqa: E402
 ARCH = _BASE / "docs" / "records" / "ARCH_통합_v0.md"
 fails: list[tuple[str, str, str]] = []
 
+# 문서 최상단 상태 배지는 **메타데이터라 본문이 아니다.** 비교 전에 벗긴다 —
+# 안 벗기면 배지를 붙이는 순간 모든 append-only 검사가 깨진다(2026-08-25 문서 재편).
+BADGE_RE = re.compile(r"^<!-- 상태:[^>]*-->\n(?:>.*\n)*\n---\n\n", re.M)
+
+
+def _body(text: str) -> str:
+    """상태 배지를 제거한 본문."""
+    return BADGE_RE.sub("", text, count=1)
+
+
 # 추기 **직전**의 원본 지문. 본문을 한 글자라도 고치면 prefix 비교가 깨진다.
+# 지문은 `_body()`(배지 제거) 기준이다.
 APPEND_ONLY = {
     "docs/current/QFORM_ARCH_설계스펙.md": (
         14514, "e1c16a01c49b40ecf539ea2edcf979b0ad45854c4c694e55c251bb8f2124e870"),
+    # 2026-08-25 재기준 — 헤딩 표기를 `Dn (MM-DD)` 로 통일하며 D0~D6 7개 제목을 고쳤다
+    # (`D0 (금)` → `D0 (07-11)` 등). 본문 내용은 무변경이고 제목 표기만 바뀐 것이라
+    # 재기준을 남긴다. 직전 지문: 26916B / 9c4d4fdf1e05…
     "DECISIONS.md": (
-        26916, "9c4d4fdf1e050f2d61eb0b5d401736c08f2d3387b2c49d1e703130c219dae3d9"),
+        26919, "7b87bf914364943957386174c46684de589b3aa3232ee4063c6cdfa5986f1c93"),
 }
 
 text = ARCH.read_text(encoding="utf-8")
@@ -128,7 +142,7 @@ if bad_val:
 print("\n── AC4. 기존 문서 본문 무수정 — 추기만 ──")
 ac4 = True
 for rel, (orig_len, orig_sha) in APPEND_ONLY.items():
-    b = (_BASE / rel).read_bytes()
+    b = _body((_BASE / rel).read_text(encoding="utf-8")).encode("utf-8")
     head = b[:orig_len]
     same = hashlib.sha256(head).hexdigest() == orig_sha
     grew = len(b) > orig_len
