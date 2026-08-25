@@ -45,10 +45,8 @@ PARAMS = [
        "엄격: 출처 목록에 없는 링크는 본문에 있었더라도 경고 표시(권장).", tab=1),
 
     # ── ② 응답 속도·비용 ───────────────────────────────────────────
-    _p("earlyBlock", "소관 밖 질문 즉시 안내", "bool", True, "normal", "runtime",
-       "chatbot/chain.py:_route", "소관 밖 질문은 검색·생성 없이 바로 안내합니다. 가장 큰 속도 개선.", tab=2),
-    _p("linkRoute", "타기관 연락처 안내", "bool", True, "normal", "runtime",
-       "chatbot/chain.py:_route (link)", "워크아웃·보이스피싱·휴면계좌 등은 담당기관 연락처까지 안내.", tab=2),
+    # OOS 조기차단과 안내처 사용은 확정 정책이라 토글하지 않는다. ⑧ OOS 안내처의
+    # 게시·활성 상태가 실제 노출을 결정한다(옛 earlyBlock/linkRoute 설정은 폐기).
     _p("askMode", "되묻기 문구 생성 방식", "enum", "template", "normal", "runtime",
        "chatbot/qform_ask.py:build_question(mode=)",
        "정해진 문구=추가 비용 0 / AI 생성=되물을 때마다 비용 발생.",

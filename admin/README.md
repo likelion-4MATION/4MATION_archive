@@ -30,6 +30,7 @@ admin/
   runner.py      재빌드·평가·재검증 실행체 (crawler 모듈에 상수 주입)
   jobs.py        잡 관리 — runner 를 단계별로 띄우고 stdout 을 스트리밍으로 읽어 진행률 갱신
   metrics.py     대시보드 지표 + 실측 A/B 근거
+  oos_store.py   OOS 안내처·유선 상담·오류 신고 SQLite 저장소와 마스킹
   static/        index.html · app.js · style.css
   data/          admin_config.json · guards.json · attachments.json · uploads/ · backup/ · jobs/
 ```
@@ -80,6 +81,8 @@ admin/
 | ⑤ 첨부문서 | 양식 현황 · 표시명 정제 필요 건수 · 갱신 알림 | 일반 |
 | ⑥ 고급 | 검색 5축 개별값 · 라우터 임계값 · 콜 예산 | **잠금** |
 | ⑦ 문서 처리 | 청크 크기·겹침·표 처리 · 조합별 측정 근거 | **잠금·재빌드** |
+| ⑧ OOS 안내처 | 검증된 고정 안내처 · 유선 상담 정보 · 게시 상태 | 일반(게시 검증 필요) |
+| ⑨ 오류 신고함 | 마스킹된 오류 신고 · 상태/담당자/메모 · 중복 묶기 | 일반 |
 | (고정) 변경 사항 · 실행 | 전 탭 미저장 변경 + 예상 결과 + **실행 버튼·진행 상황** | 항상 표시 |
 
 ### 기준 설정으로 되돌리기 (초기화)

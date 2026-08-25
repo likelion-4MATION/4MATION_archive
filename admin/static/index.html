@@ -28,6 +28,8 @@
     <div class="tab" data-p="p5">⑤ 첨부문서</div>
     <div class="tab lock" data-p="p6">⑥ 고급 🔒</div>
     <div class="tab lock" data-p="p7">⑦ 문서 처리 🔒</div>
+    <div class="tab" data-p="p8">⑧ OOS 안내처</div>
+    <div class="tab" data-p="p9">⑨ 오류 신고함</div>
   </div>
 
   <!-- ① 답변 품질 -->
@@ -146,8 +148,8 @@
       <div style="margin-top:12px"><button class="btn" id="axSave">추가</button></div>
     </div>
 
-    <div class="card form">
-      <h2>타기관 안내 사전</h2>
+    <div class="card form" style="display:none" aria-hidden="true">
+      <h2>이전 타기관 안내 사전 (사용 중지)</h2>
       <div class="sub">소관이 아닌 질문에 안내할 기관·연락처입니다. 여기에 없는 주제는 자동으로 일반 거절 문구로 내려갑니다.</div>
       <table id="linkTbl"></table>
       <div class="grid2" style="margin-top:14px">
@@ -239,6 +241,98 @@
       <h2>지금 서비스 중인 조합</h2>
       <div class="sub">위 두 표는 <b>과거 A/B 기록</b>입니다. 실제 운영 값은 여기를 보세요.</div>
       <div id="evLive"></div>
+    </div>
+  </div>
+
+  <!-- ⑧ OOS 안내처 -->
+  <div class="pane" id="p8">
+    <div class="card">
+      <h2>OOS 안내처 레지스트리</h2>
+      <div class="sub">게시·활성화되고 트리거 검증을 통과한 행만 챗봇에 노출됩니다. row_id는 생성 후 바꿀 수 없습니다.</div>
+      <table id="rfTbl"></table>
+    </div>
+    <div class="card form">
+      <h2 id="rfTitle">안내처 작성</h2>
+      <div class="grid2">
+        <div><label>row_id <small>영문 소문자·숫자·밑줄, 생성 후 변경 불가</small>
+          <input type="text" id="rfId" placeholder="personal_rehabilitation"></label></div>
+        <div><label>표시 제목<input type="text" id="rfName" maxlength="100"></label></div>
+      </div>
+      <div class="grid2">
+        <div><label>기관명<input type="text" id="rfOrg" maxlength="100"></label></div>
+        <div><label>상태<select id="rfStatus"><option value="draft">초안</option><option value="published">게시</option><option value="disabled">비활성</option></select></label></div>
+      </div>
+      <label class="chk"><input type="checkbox" id="rfActive"><span>활성 상태</span></label>
+      <div class="grid2">
+        <div><label>필수 트리거 <small>쉼표로 구분, 전부 일치해야 발동</small><input type="text" id="rfRequired"></label></div>
+        <div><label>제외 트리거 <small>하나라도 있으면 미발동</small><input type="text" id="rfExcluded"></label></div>
+      </div>
+      <div class="grid2">
+        <div><label>정상 발동 예시 <small>줄바꿈으로 구분</small><textarea id="rfPositive" rows="4"></textarea></label></div>
+        <div><label>미발동 반례 <small>줄바꿈으로 구분</small><textarea id="rfNegative" rows="4"></textarea></label></div>
+      </div>
+      <label>사용자 안내문 <small>답변에 그대로 표시됩니다</small><textarea id="rfMessage" rows="3"></textarea></label>
+      <div class="grid2">
+        <div><label>공식 URL<input type="text" id="rfUrl" placeholder="https://…"></label></div>
+        <div><label>전화번호<input type="text" id="rfPhone"></label></div>
+      </div>
+      <div class="grid2">
+        <div><label>운영시간<input type="text" id="rfHours"></label></div>
+        <div><label>링크 상태<select id="rfLinkState"><option value="unknown">미확인</option><option value="ok">정상</option><option value="bad">이상</option></select></label></div>
+      </div>
+      <label>공식 근거<input type="text" id="rfEvidence"></label>
+      <label>마지막 확인일<input type="date" id="rfVerified"></label>
+      <div id="rfErr"></div><div id="rfPreview"></div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button class="btn ghost" id="rfPreviewBtn">검증 미리보기</button>
+        <button class="btn" id="rfSave">저장</button>
+        <button class="btn ghost" id="rfClear">새로 작성</button>
+      </div>
+    </div>
+    <div class="card form">
+      <h2>유선 상담 안내</h2>
+      <div class="sub">PHONE_GUIDE는 이 정보가 게시·활성화됐을 때만 번호와 운영시간을 표시합니다.</div>
+      <label>안내 문구<textarea id="pgMessage" rows="2"></textarea></label>
+      <div class="grid2">
+        <div><label>공식 대표번호<input type="text" id="pgPhone"></label></div>
+        <div><label>운영시간<input type="text" id="pgHours"></label></div>
+      </div>
+      <label>공식 근거<input type="text" id="pgEvidence"></label>
+      <div class="grid2">
+        <div><label>마지막 확인일<input type="date" id="pgVerified"></label></div>
+        <div><label>상태<select id="pgStatus"><option value="draft">초안</option><option value="published">게시</option><option value="disabled">비활성</option></select></label></div>
+      </div>
+      <label class="chk"><input type="checkbox" id="pgActive"><span>활성 상태</span></label>
+      <div id="pgErr"></div><button class="btn" id="pgSave" style="margin-top:12px">상담 안내 저장</button>
+    </div>
+  </div>
+
+  <!-- ⑨ 오류 신고함 -->
+  <div class="pane" id="p9">
+    <div class="card">
+      <h2>챗봇 오류 신고함</h2>
+      <div class="sub">대화와 처리 기록은 저장 전에 마스킹되며 생성일 기준 30일 후 자동 삭제됩니다.</div>
+      <div class="grid2">
+        <div><label>상태 필터<select id="rpFilter"><option value="">전체</option></select></label></div>
+        <div><label>검색<input type="text" id="rpQuery" placeholder="신고 ID·세션·대화"></label></div>
+      </div>
+      <div style="margin:10px 0"><button class="btn ghost sm" id="rpSearch">조회</button></div>
+      <table id="rpTbl"></table>
+    </div>
+    <div class="card form" id="rpDetail" style="display:none">
+      <h2>신고 상세 <span class="badge" id="rpId">—</span></h2>
+      <div id="rpMeta" class="sub"></div>
+      <div class="grid2">
+        <div><label>처리 상태<select id="rpStatus"></select></label></div>
+        <div><label>담당자<input type="text" id="rpAssignee"></label></div>
+      </div>
+      <label>중복 기준 신고 ID<input type="text" id="rpDuplicate" placeholder="상태가 ‘중복’일 때 원본 신고 ID"></label>
+      <label>관리자 메모<textarea id="rpNote" rows="2"></textarea></label>
+      <button class="btn" id="rpSave" style="margin:10px 0">처리 내용 저장</button>
+      <h2>마스킹된 대화·처리 기록</h2>
+      <pre class="log" id="rpPayload"></pre>
+      <h2 style="margin-top:12px">관리자 메모 이력</h2>
+      <div id="rpNotes"></div>
     </div>
   </div>
 </div>
