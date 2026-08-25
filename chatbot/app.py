@@ -21,7 +21,7 @@ MoAI 라우터가 꽂힐 자리다. 부스트 ON 으로 검색 쿼리가 바뀌�
 
 ver3 T5 — 되묻기 선택지 버튼과 예시 질의 칩을 붙였다. 둘 다 **콜 0**이고, 값·문구를
 이 파일이 만들지 않는다. 버튼 값은 `qform_flow.options()`(조합 테이블 생존 행),
-칩 문구는 `docs/qform_시험질의셋.md` 원문이다. 렌더가 값을 창작하면 그 순간
+칩 문구는 `docs/current/qform_시험질의셋.md` 원문이다. 렌더가 값을 창작하면 그 순간
 "근거 있는 답변"이라는 주장이 무너진다.
 
 실행: streamlit run chatbot/app.py
@@ -85,7 +85,7 @@ def humanize_error(code) -> str:
     return "일시적인 오류로 답변을 만들지 못했습니다. 잠시 후 다시 시도해 주세요."
 
 # ── 예시 질의 칩 (T5 B2) ────────────────────────────────────────────────────
-# 문구는 `docs/qform_시험질의셋.md` 에서 **그대로** 가져온다. 임의 창작 금지 —
+# 문구는 `docs/current/qform_시험질의셋.md` 에서 **그대로** 가져온다. 임의 창작 금지 —
 # 조합 테이블·시험 질의셋 밖 문구를 만들지 않는다(CLAUDE.md §2-4·§2-5).
 #
 #   착오송금 반환 신청  ← 시험 질의셋 B1 (되묻기 1턴 경로. 선택지 버튼이 바로 보이는 진입점)
@@ -522,7 +522,7 @@ def render_memory_panel(flow: dict, key_prefix: str = "mem") -> tuple | None:
 def render_chips(key_prefix: str, per_row: int = 3) -> str | None:
     """예시 질의 칩 (T5 B2). 클릭된 질의 문구를 돌려준다.
 
-    문구는 `docs/qform_시험질의셋.md` 원문이다 — `EXAMPLE_CHIPS` 주석에 출처를 남겼다.
+    문구는 `docs/current/qform_시험질의셋.md` 원문이다 — `EXAMPLE_CHIPS` 주석에 출처를 남겼다.
     """
     picked = None
     for i in range(0, len(EXAMPLE_CHIPS), per_row):

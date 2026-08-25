@@ -25,7 +25,7 @@ test -f .env || cp .env.example .env
 `.env`에 CLOVA 키를 채운 뒤([4절](#4-env-작성)), 데이터가 없는 새 클론이면 [6절](#6-크롤링--인덱스)을
 먼저 실행한다. 이미 인덱스가 있는 개발 환경은 [8절](#8-현재-통합-버전-실행)로 바로 간다.
 
-전체 명령과 평가·운영 절차는 [docs/RUNBOOK.md](./docs/RUNBOOK.md)를 본다.
+전체 명령과 평가·운영 절차는 [docs/current/RUNBOOK.md](./docs/current/RUNBOOK.md)를 본다.
 
 ---
 
@@ -174,7 +174,7 @@ python crawler/router_source.py
 python scripts/download_router_hf.py --verify-sha
 ```
 
-상세는 [docs/router_checkpoint.md](./docs/router_checkpoint.md).
+상세는 [docs/current/router_checkpoint.md](./docs/current/router_checkpoint.md).
 
 ## 8. 현재 통합 버전 실행
 
@@ -282,5 +282,5 @@ python -m streamlit run chatbot/app.py
 | [crawler/README.md](./crawler/README.md) | 파이프라인 단계별 실행·재수집·매니페스트 |
 | [crawler/DECISIONS.md](./crawler/DECISIONS.md) | 설계 판단 근거 |
 | [crawler/HOLES.md](./crawler/HOLES.md) | 미해결 이슈 |
-| [docs/router_checkpoint.md](./docs/router_checkpoint.md) | 라우터 배포·업로드·제약 |
+| [docs/current/router_checkpoint.md](./docs/current/router_checkpoint.md) | 라우터 배포·업로드·제약 |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | 협업 규칙 |

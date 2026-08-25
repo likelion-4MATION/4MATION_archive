@@ -140,7 +140,7 @@
 - **검색측 업무 재분류 갭(미해결)**: 부스트 ON이면 `rag.search`가 **바뀐 쿼리로 업무를 재분류**해
   app이 쓴 bf와 갈린다(실측 **13건**/450, 전부 착오송금). `rag.py`·`chain.py` 무수정 제약상
   이번 범위 밖이며 **부스트 기본 OFF로 회피**한다. 패널은 두 값을 나란히 표기한다.
-  → `docs/ARCH_통합_v0.md` §4 G13 · `docs/QFORM_ARCH_설계스펙.md` §13.
+  → `docs/records/ARCH_통합_v0.md` §4 G13 · `docs/current/QFORM_ARCH_설계스펙.md` §13.
 
 
 ## D9 (08-11) — Sprint Demo v3 (`Qform_ver3`)
@@ -188,7 +188,7 @@
   - `edit()` 은 어느 경로로도 `answer()` 를 부르지 않는다. 재생성은 사용자 명시 요청(`answer_now()`)으로만.
 
 - **예시 질의 칩 6번째 — 원천이 다른 유일한 칩**: 6업무 중 `고객 미수령금 신청` 만
-  `docs/qform_시험질의셋.md` 에 항목이 없다. 지어내는 대신 `crawler/data/testset_natural_450.jsonl`
+  `docs/current/qform_시험질의셋.md` 에 항목이 없다. 지어내는 대신 `crawler/data/testset_natural_450.jsonl`
   수록 문구를 그대로 가져왔다(해당 업무 77건 중 `classify_query_bf` 판정이 일치하는 것).
   - 나머지 5개는 시험 질의셋 원문. **칩 6개 전건이 저장소 기존 자산에서 온다 — 창작 0.**
   - 질의셋에 항목이 없다는 사실 자체는 구멍으로 남긴다 → `crawler/HOLES.md` H28
@@ -198,7 +198,7 @@
   `is_definitional()` 은 **오늘 고치는 버그가 없는 방어 장치**다. 성과로 계상하지 않는다.
   - 명세가 제시한 좁은 패턴을 그대로 쓰면 `"착오송금 반환 신청 서류가 뭐예요?"`(데모 주력)가
     "뭐예요"에 걸려 되묻기가 사라진다. **절차·서류 어휘 배제 조항**을 추가했다(명세에 없던 조건).
-  - → `docs/QFORM_ARCH_설계스펙.md` §19
+  - → `docs/current/QFORM_ARCH_설계스펙.md` §19
 
 - **`verify_docs.py` AC2 — 타입 주석 대입 인식**: `SPEC: dict = {...}` 같은 `ast.AnnAssign` 을
   심볼 수집에서 놓쳐, 문서에 적힌 실재 상수가 "코드에 없다"고 오탐했다. 검증기를 고쳤다.
@@ -249,7 +249,7 @@
     계속 노출하는 것이다. **지표만 좋아지고 사용자가 보는 것은 나빠진다.**
     근거 청크(`DpsmIbamtExpln#00`·`DpsmIbamtAplyProc#00`)를 가진 정당한 행을 지표 때문에 지우지 않는다.
   - M2-b 가 남긴 실질 변경은 **후단 필터 테이블 선택을 질의 단위 → 문서 단위로 전환**한 것 하나다.
-    현 데이터에서 동작은 동일하고 근거가 단단해졌다 → `docs/QFORM_ARCH_설계스펙.md` §23
+    현 데이터에서 동작은 동일하고 근거가 단단해졌다 → `docs/current/QFORM_ARCH_설계스펙.md` §23
 
 ## D11 (08-18) — Qform_ver4 M3 (메모리 패널) · 하니스 E1·E2·C6 개정
 
@@ -316,12 +316,12 @@
   prompts(버튼 라벨)는 원 문자열(one_line/discriminator/phrase)이 이미 있어 추출 규칙의 대상이 아니다.
   M9-3 3-3 의 "26/28 스팬이 바뀌려 한다"는 불일치가 아니라 **규칙이 적용 범위를 벗어났을 때의 정상 반응**이다.
   terms/prompts 를 anchor 로 갈아치우면 그 자산이 무엇을 주장하는지가 바뀐다(`본인`→`대리인` 역전이 증거).
-  **증거 모델 재설계는 다음 스프린트 사안.** 자산별 증거 모델은 `docs/Qform_ver4_M9_스팬이행_대조표.md` §9-7.
+  **증거 모델 재설계는 다음 스프린트 사안.** 자산별 증거 모델은 `docs/records/Qform_ver4_M9_스팬이행_대조표.md` §9-7.
 
 - **K11 — 커밋 단위 = 마일스톤으로 쪼개지 않는다 (08-19 판정)**: `span_tools.py` 에 M9-1b·M9-2b·M9-3 이
   누적돼 있어 마일스톤별 원자 커밋이 물리적으로 불가능하다. `add -p` 로 쪼개면 **실제로 통과한 적 없는
   중간 상태**를 커밋하게 된다. → **tool → data → docs 3커밋으로 M9-1b~M9-3 구간을 통째로** 담는다.
-  마일스톤 계보는 대조표(`docs/Qform_ver4_M9_스팬이행_대조표.md`)가 진다.
+  마일스톤 계보는 대조표(`docs/records/Qform_ver4_M9_스팬이행_대조표.md`)가 진다.
 
 ## D13 (08-24) — eval 통합: 6개 평가 스크립트 → `crawler/eval.py` 한 파일
 
@@ -358,7 +358,7 @@
 - **구세대 문서단위 평가기 3개는 archive 로 보냈다 — 실행 불가 상태였다**: `eval.py`(구) ·
   `eval_TF.py` · `eval_pair.py` 의 기본 평가셋(`data/testset_natural_400.jsonl` ·
   `data/router_trainset_v1.jsonl` · `data/testset_natural.jsonl`)이 **셋 다 디스크에 없다**
-  (baseline_v1/v2.lock 에 sha256 만 남아 있다). `docs/handoff/eval_유상.md` §3 이 이미
+  (baseline_v1/v2.lock 에 sha256 만 남아 있다). `docs/records/handoff/eval_유상.md` §3 이 이미
   "폐기(참조용)"로 판정한 상태와 일치한다. 지표 함수 `first_hit_rank`·`_row`·`group_metrics`
   만 통합 파일 §3 에 보존했다 — 되살릴 때 판정 로직을 다시 쓰지 않도록.
 

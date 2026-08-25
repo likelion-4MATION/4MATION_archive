@@ -25,12 +25,12 @@ for _p in (_BASE / "chatbot", _BASE / "crawler"):
 
 from qform_trace import LAYER_LABEL, LAYER_ORDER  # noqa: E402
 
-ARCH = _BASE / "docs" / "ARCH_통합_v0.md"
+ARCH = _BASE / "docs" / "records" / "ARCH_통합_v0.md"
 fails: list[tuple[str, str, str]] = []
 
 # 추기 **직전**의 원본 지문. 본문을 한 글자라도 고치면 prefix 비교가 깨진다.
 APPEND_ONLY = {
-    "docs/QFORM_ARCH_설계스펙.md": (
+    "docs/current/QFORM_ARCH_설계스펙.md": (
         14514, "e1c16a01c49b40ecf539ea2edcf979b0ad45854c4c694e55c251bb8f2124e870"),
     "DECISIONS.md": (
         26916, "9c4d4fdf1e050f2d61eb0b5d401736c08f2d3387b2c49d1e703130c219dae3d9"),

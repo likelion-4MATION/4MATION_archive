@@ -94,7 +94,7 @@ flowchart LR
 ## 🚀 실행 방법
 
 현재 통합 버전의 설치·데이터 빌드·관리자·챗봇·테스트 명령은
-[`docs/RUNBOOK.md`](./docs/RUNBOOK.md)를 정본으로 사용합니다. 이미 인덱스와 `.env`가 준비된
+[`docs/current/RUNBOOK.md`](./docs/current/RUNBOOK.md)를 정본으로 사용합니다. 이미 인덱스와 `.env`가 준비된
 개발 환경에서는 다음 두 프로세스를 실행합니다.
 
 ```bash
@@ -108,7 +108,7 @@ python -m streamlit run chatbot/app.py --server.port 8501
 ```
 
 새 로컬의 전체 설치는 [`SETUP.md`](./SETUP.md), OOS 운영 절차는
-[`docs/OOS_구현_운영가이드.md`](./docs/OOS_구현_운영가이드.md)를 참고합니다.
+[`docs/current/OOS_구현_운영가이드.md`](./docs/current/OOS_구현_운영가이드.md)를 참고합니다.
 
 ## 🤝 협업 규칙
 

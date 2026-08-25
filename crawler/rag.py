@@ -120,7 +120,7 @@ QBF_MARGIN = 2             # 키워드 분류(폴백) 1위–2위 마진
 # 레포에 없다. router_source.resolve()가 로컬 디렉토리 → HF 프라이빗 repo 순으로
 # 위치를 정하고(from_pretrained가 둘 다 받는다), 셋 다 없으면 None을 돌려준다.
 # None이면 get_router()가 키워드 분류로 폴백한다(클론 직후에도 검색은 동작).
-# 설정·트러블슈팅: docs/router_checkpoint.md
+# 설정·트러블슈팅: docs/current/router_checkpoint.md
 ROUTER_PATH = router_source.resolve()
 # MSP 임계. 주의: 이 체크포인트는 held-out 450셋에서 MSP 최솟값 0.9991·중앙값 1.0000으로
 # 체계적 과신 상태라 사실상 한 건도 걸러내지 못한다(θ 0.00~0.99 결과 동일). 소관밖(OOS)
