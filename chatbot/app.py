@@ -217,11 +217,10 @@ body { min-height: 100vh; }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("💬 KDIC 안내 챗봇 — PoC")
-st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
 title_col, report_col = st.columns([5, 1])
 with title_col:
-  
+    st.title("💬 KDIC 안내 챗봇 — PoC")
+    st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
 with report_col:
     st.write("")
     if st.button("🚩 챗봇 오류 신고", key="top-report", width="stretch"):
@@ -499,12 +498,6 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
                 st.caption(f"운영시간: {guide['hours']}")
             else:
                 st.caption("현재 게시·활성화된 유선 상담 정보가 없습니다.")
-#    if not r["checks"]["ok"]:
-#        with st.expander("⚑ 검증 플래그 (차단 아님)"):
-#            for f in r["checks"]["flags"]:
-#                st.markdown(f"- {f}")
-#    우측 근거 
-
     # reject 복구 경로 (T6 B4) — 소관 밖이라고 끝내면 그 화면이 막다른 길이 된다.
     # **타기관 이름·URL 을 붙이지 않는다.** HOLES H7 이 열려 있어 근거가 없고,
     # 없는 기관을 안내하는 순간 R2(참고문서에 있는 내용만) 위반이다.
@@ -781,12 +774,16 @@ def _render_question_cards(questions: list[str], key_prefix: str) -> str | None:
 
 
 def _current_domain_context() -> str | None:
-    """가장 최근 질의의 업무 도메인 — 결정론 재분류(HCX 콜 0)로 얻는다.
+    """최근 답변의 실제 라우팅 업무. 구형 히스토리만 로컬 판정으로 폴백한다."""
+    for turn in reversed(st.session_state.get("history") or []):
+        if turn.get("role") != "answer":
+            continue
+        result = turn.get("r") or {}
+        routing = turn.get("routing") or (result.get("_meta") or {}).get("routing")
+        if routing:
+            return routing.get("bf") if routing.get("triggered") else None
+        break
 
-    `qform_trace.bf_debug` 는 검색측 업무 판정에도 쓰는 로컬 키워드 분류기라
-    `_load_domain_questions()` 의 키(테스트셋 business_function)와 라벨이 1:1이다.
-    판정이 애매(점수·마진 미달)하면 None — 호출부가 트렌드 목록으로 자연히 폴백한다.
-    """
     base_q = (st.session_state.get("flow") or {}).get("base_q")
     if not base_q:
         return None
@@ -849,50 +846,37 @@ def render_recommended_questions(key_prefix: str) -> str | None:
     return picked
 
 
-def _fetch_evidence_chunks(query: str, k: int) -> list[dict]:
-    """근거 조각 재조달 — 검색은 결정론이라 다시 돌려도 같은 결과다(HCX 콜 0).
-
-    `answer()` 는 검색 hits(청크 단위)를 반환값에 담지 않으므로(계약 4필드 불변),
-    `qform_trace._default_search` 와 같은 방식으로 필요할 때만 재호출해서 얻는다.
-    """
-    try:
-        return chain.get_searcher().search(query, k=k, mode="hybrid_bf")
-    except Exception:
-        return []
-
-
-def render_evidence_chunks(r: dict, query: str | None) -> None:
-    """근거 조각 — 최종 답변 생성에 실제로 쓰인 검색 결과(청크) 목록.
+def render_evidence_chunks(r: dict) -> None:
+    """근거 조각 — 최종 답변 생성에 실제로 쓰인 검색 기록.
 
     예시 UI의 '데이터셋' 대응. 카드는 요약(제목·유사도·본문 앞부분)만 보여주고,
-    "펼치기"를 눌러야 청크 전문·업무구분·원문 링크가 나온다(예시 UI의 데이터
-    구성요소·속성 펼치기와 같은 자리).
+    "펼치기"를 눌러야 저장된 발췌·문서 ID·원문 링크가 나온다. 화면을 그리기 위해
+    검색을 다시 실행하지 않으므로 답변 당시의 BF 오버라이드와 결과가 어긋나지 않는다.
     """
-    if r.get("text") is None or not query:
+    if r.get("text") is None:
         st.caption("근거 조각 없음")
         return
-    k = (r.get("_meta") or {}).get("k") or 3
-    hits = _fetch_evidence_chunks(query, k)
+    hits = (r.get("_meta") or {}).get("retrieval") or []
     if not hits:
         st.caption("근거 조각 없음")
         return
     for i, h in enumerate(hits, 1):
-        title = h.get("page_title") or h.get("parent_doc_id") or "문서"
-        score = h.get("_score")
+        title = h.get("title") or h.get("doc_id") or "문서"
+        score = h.get("score")
         badge = f" · 유사도 {score:.2f}" if isinstance(score, (int, float)) else ""
-        full = (h.get("text") or "").strip()
+        full = (h.get("text_excerpt") or "").strip()
         with st.container(key=f"card-evidence-{i}"):
             st.markdown(f"**{i}. {title}**{badge}")
             snippet = full.replace("\n", " ")
             if len(snippet) > 100:
                 snippet = snippet[:100] + "…"
             st.caption(snippet)
-            with st.expander("펼치기 — 청크 전문·출처"):
+            with st.expander("펼치기 — 저장된 발췌·출처"):
                 st.markdown(full or "_본문 없음_")
-                st.caption(f"업무구분: {h.get('business_function') or '—'}"
-                           f"  ·  문서ID: {h.get('parent_doc_id') or '—'}")
-                if h.get("source_url"):
-                    st.markdown(f"[원문 페이지 열기]({h['source_url']})")
+                st.caption(f"청크ID: {h.get('chunk_id') or '—'}"
+                           f"  ·  문서ID: {h.get('doc_id') or '—'}")
+                if h.get("url"):
+                    st.markdown(f"[원문 페이지 열기]({h['url']})")
 
 
 def build_trace(ev: dict, hcx_calls: int) -> dict | None:
@@ -926,25 +910,19 @@ def record(ev: dict, trace: dict | None = None) -> None:
     else:
         # 후속 추천은 여기서 **한 번** 계산해 히스토리에 굳힌다. 매 렌더마다 다시 뽑으면
         # 나중 턴의 슬롯이 과거 답변의 추천을 바꿔 버린다. 결정론이고 콜 0 이다.
-        #append_history(
-        #    {"role": "answer", "r": ev["result"], "slots": ev["slots"],
-        #     "search_q": ev["boosted"], "trace": trace,
-        #     "followups": qform_followup.suggest(ev["slots"]),
-        #     "unit": ev.get("unit"), "routing": ev.get("routing")}
-        #)
         append_history(
             {
                 "role": "answer",
                 "r": ev["result"],
                 "slots": ev["slots"],
                 "search_q": ev["boosted"],
-                "query": ev["search_q"],
+                "query": ev.get("search_q"),
                 "trace": trace,
                 "followups": qform_followup.suggest(ev["slots"]),
                 "unit": ev.get("unit"),
                 "routing": ev.get("routing"),
             }
-          )
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -994,9 +972,19 @@ with center:
         with st.chat_message("assistant"):
             with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
                 c0 = chain._calls
-                step_fn = qform_flow.reply if pending_step["is_reply"] else qform_flow.start
                 st.session_state.needs_regen = False
-                ev = step_fn(flow, pending_step["text"], ask_mode=ASK_MODE, boost=BOOST, config=CONFIG)
+                if pending_step["is_reply"]:
+                    ev = qform_flow.reply(
+                        flow, pending_step["text"], ask_mode=ASK_MODE,
+                        boost=BOOST, config=CONFIG,
+                    )
+                else:
+                    ctx = report_context()
+                    ctx["target_message_id"] = pending_step.get("previous_target", "")
+                    ev = orchestrator.start_turn(
+                        flow, pending_step["text"], ask_mode=ASK_MODE,
+                        boost=BOOST, config=CONFIG, report_context=ctx,
+                    )
                 # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
                 record(ev, build_trace(ev, chain._calls - c0))
         st.session_state["_pending_step"] = None
@@ -1031,7 +1019,7 @@ with right:
     with tab_evidence:
         if last_answer is not None:
             _last = st.session_state.history[last_answer]
-            render_evidence_chunks(_last["r"], _last.get("query"))
+            render_evidence_chunks(_last["r"])
         else:
             st.caption("답변을 받으면 이 자리에 근거 조각이 표시됩니다.")
 
@@ -1182,17 +1170,8 @@ if next_queued:
             record(ev, build_trace(ev, chain._calls - c0))
     st.rerun()
 
-#if q_new or q_reply:
-    # 2단계 렌더: 여기서는 사용자 메시지만 히스토리에 넣고 바로 rerun한다 — 그래야
-    # 답변을 기다리는 동안에도 "내가 방금 뭘 물어봤는지"가 대화창에 바로 보인다.
-    # 실제 검색·생성은 `with center:` 안, 메시지 목록 바로 아래(입력창 바로 위)에서
-    # `_pending_step`을 보고 처리한다 — 그래야 로딩 표시가 그 자리에 뜬다.
-#    text = q_new or q_reply
-#    st.session_state.history.append({"role": "user", "text": text})
-#    st.session_state["_pending_step"] = {"text": text, "is_reply": bool(q_reply)}
-#    st.rerun()
-    
 if q_new or q_reply:
+    # 사용자 메시지를 먼저 렌더하고, 다음 rerun에서 중앙 대화창 안에 spinner를 표시한다.
     text = q_new or q_reply
     previous_target = last_answer_id()
     append_history({"role": "user", "text": text})
@@ -1201,4 +1180,4 @@ if q_new or q_reply:
         "is_reply": bool(q_reply),
         "previous_target": previous_target,
     }
-    st.rerun()    
+    st.rerun()
