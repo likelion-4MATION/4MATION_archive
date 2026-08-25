@@ -143,7 +143,8 @@ body { min-height: 100vh; }
 /* 색 하나로 통일 — 좌·우 배경, 사용자 말풍선 모두 이 회색 하나만 쓴다 */
 :root {
     --panel-gray: #F1F3F4;
-    --panel-title-size: 1.02rem;  /* "세션 상태" 같은 소제목 크기 — 숫자 크기를 여기 맞춘다 */
+    --panel-title-size: 1.02rem;  /* "세션 상태" 같은 소제목 크기 */
+    --metric-value-size: 2rem;    /* HCX 콜 "8 / 70" 숫자 크기 — 제목보다 눈에 띄게 크게 */
     --ui-red: #FF4B4B;            /* Streamlit 기본 테마 primaryColor — 대화 초기화 버튼과 같은 빨강 */
 }
 
@@ -179,7 +180,7 @@ body { min-height: 100vh; }
     gap: .35rem !important;
 }
 [data-testid="stColumn"]:has(.col-anchor-left) [data-testid="stMetricValue"] {
-    font-size: var(--panel-title-size) !important;
+    font-size: var(--metric-value-size) !important;
 }
 [data-testid="stColumn"]:has(.col-anchor-left) hr, [data-testid="stColumn"]:has(.col-anchor-right) hr {
     margin: .5rem 0 !important;
@@ -199,7 +200,9 @@ body { min-height: 100vh; }
 /* 추천 질문 카드의 "Q." 만 현재 테마 빨강으로 — 버튼 라벨은 일반 텍스트라
    문자 단위 스타일링이 안 되니 ::first-letter 로 첫 글자("Q")만 짚는다.
    qcard- 접두사(위 _render_question_cards)로 이 카드들에만 걸리게 한다. */
-[class*="st-key-qcard-"] button::first-letter { color: var(--ui-red) !important; }
+/* 실제 글자는 button > ... > p 안에 있다 — button 자체엔 ::first-letter가 안 먹는다
+   (라이브 DOM으로 확인: button::first-letter는 무효, button p::first-letter는 유효). */
+[class*="st-key-qcard-"] button p::first-letter { color: var(--ui-red) !important; }
 
 /* 하단 입력창 가운데 정렬 — 폭 자체는 아래 JS(components.html)가 중앙 컬럼 실측값으로
    맞춘다. margin:auto만 CSS로 미리 걸어 두면 JS가 늦게 붙어도 어색하게 왼쪽에
@@ -560,8 +563,14 @@ def render_chips(key_prefix: str, items: list[tuple[str, str]] | None = None,
     for i in range(0, len(items), per_row):
         chunk = list(enumerate(items[i:i + per_row], start=i))
         for col, (idx, (label, query)) in zip(st.columns(len(chunk)), chunk):
-            with col, st.container(border=True):
-                if st.button(label, key=f"chip-{key_prefix}-{idx}", width="stretch",
+            with col:
+                # 버튼 자체가 이미 테두리 있는 박스라 st.container(border=True)로 한 번 더
+                # 감싸면 네모가 2겹이 된다 — 감싸지 않고 버튼 하나만 둔다.
+                # DOMAIN_ICONS에 있는 라벨(업무 6종)이면 이모지를 붙인다(우측 "업무별
+                # 추천 검색어"와 같은 스타일). 없는 라벨(에러 복구용 등)은 그냥 텍스트.
+                icon = DOMAIN_ICONS.get(label)
+                shown = f"{icon}  {label}" if icon else label
+                if st.button(shown, key=f"chip-{key_prefix}-{idx}", width="stretch",
                              help=query):
                     picked = query
     return picked
@@ -602,6 +611,10 @@ _DOMAIN_Q_CACHE: dict[str, list[str]] | None = None
 
 
 def _load_domain_questions(limit: int = 5) -> dict[str, list[str]]:
+    """업무별 자연어 질문(구어체 포함) — "현재 질문과 비슷한 질문"(문맥 추천) 전용.
+
+    직전 질의와 같은 결로 자연스럽게 이어지게 구어체 파라프레이즈를 그대로 쓴다.
+    """
     global _DOMAIN_Q_CACHE
     if _DOMAIN_Q_CACHE is None:
         by_bf: dict[str, list[str]] = {}
@@ -619,6 +632,34 @@ def _load_domain_questions(limit: int = 5) -> dict[str, list[str]]:
             by_bf = {}
         _DOMAIN_Q_CACHE = by_bf
     return _DOMAIN_Q_CACHE
+
+
+# ── 업무별 추천 검색어 — "대표 질문"(origin_question) 전용 풀. testset_natural_450.jsonl의
+# 각 구어체 문항은 더 formal한 origin_question에서 파생됐다(예: "돌아가신 부모님 계좌가
+# 어디 있는지 확인하는 서비스 있나요?" ← origin_question "상속인 금융거래 조회서비스란?").
+# origin_question만 모으면 개인 사연이 섞인 구어체 없이 공적·대표적인 질문만 남고,
+# "현재 질문과 비슷한 질문"(위 함수, question 원문 사용)과 자연히 겹치지 않는다.
+_REP_DOMAIN_Q_CACHE: dict[str, list[str]] | None = None
+
+
+def _load_representative_domain_questions(limit: int = 6) -> dict[str, list[str]]:
+    global _REP_DOMAIN_Q_CACHE
+    if _REP_DOMAIN_Q_CACHE is None:
+        by_bf: dict[str, list[str]] = {}
+        try:
+            with (ROOT / "crawler" / "data" / "testset_natural_450.jsonl").open(encoding="utf-8") as fh:
+                for line in fh:
+                    d = json.loads(line)
+                    bf, oq = d.get("business_function"), d.get("origin_question")
+                    if not bf or not oq:
+                        continue
+                    lst = by_bf.setdefault(bf, [])
+                    if oq not in lst and len(lst) < limit:
+                        lst.append(oq)
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            by_bf = {}
+        _REP_DOMAIN_Q_CACHE = by_bf
+    return _REP_DOMAIN_Q_CACHE
 
 
 def _render_question_cards(questions: list[str], key_prefix: str) -> str | None:
@@ -658,7 +699,7 @@ def render_domain_questions(key_prefix: str) -> str | None:
     """
     sel_key = f"{key_prefix}-sel"
     selected = st.session_state.get(sel_key)
-    domain_qs = _load_domain_questions()
+    domain_qs = _load_representative_domain_questions()
 
     if selected and domain_qs.get(selected):
         if st.button("← 목록으로", key=f"{key_prefix}-back"):
@@ -826,6 +867,22 @@ with center:
                 chip_q = act["chip"] or chip_q
                 followup_q = act["followup"] or followup_q
 
+    # 대기 중인 질의 처리 — 사용자 메시지는 위 루프에서 이미 그려졌다. 여기서 로딩
+    # 표시를 하고 실제 검색·생성을 돈다 — 메시지 목록 바로 아래(입력창 바로 위)라
+    # 자리가 자연스럽다("어시스턴트가 입력 중" 느낌).
+    pending_step = st.session_state.get("_pending_step")
+    if pending_step:
+        with st.chat_message("assistant"):
+            with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
+                c0 = chain._calls
+                step_fn = qform_flow.reply if pending_step["is_reply"] else qform_flow.start
+                st.session_state.needs_regen = False
+                ev = step_fn(flow, pending_step["text"], ask_mode=ASK_MODE, boost=BOOST, config=CONFIG)
+                # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
+                record(ev, build_trace(ev, chain._calls - c0))
+        st.session_state["_pending_step"] = None
+        st.rerun()
+
     # 슬롯을 고친 뒤 되물을 것이 없으면 여기서 재생성을 **명시로** 받는다.
     # 자동 재생성을 안 하는 이유: 칩을 만질 때마다 HCX 2콜이 나가면 예산이 샌다(AC6-5).
     # 위젯 key 와 상태 플래그 이름을 반드시 갈라 둔다 — 같은 이름이면 버튼이 매 런
@@ -992,14 +1049,11 @@ if _panel_action:
 q_new, q_reply = (chip_q, None) if chip_q else ((None, q) if pending else (q, None))
 
 if q_new or q_reply:
+    # 2단계 렌더: 여기서는 사용자 메시지만 히스토리에 넣고 바로 rerun한다 — 그래야
+    # 답변을 기다리는 동안에도 "내가 방금 뭘 물어봤는지"가 대화창에 바로 보인다.
+    # 실제 검색·생성은 `with center:` 안, 메시지 목록 바로 아래(입력창 바로 위)에서
+    # `_pending_step`을 보고 처리한다 — 그래야 로딩 표시가 그 자리에 뜬다.
     text = q_new or q_reply
     st.session_state.history.append({"role": "user", "text": text})
-    # 되묻기 턴이면 즉시 끝나고, 답변 턴이면 검색·생성이 돈다. 어느 쪽인지는 전이가 정한다.
-    with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
-        c0 = chain._calls
-        step = qform_flow.reply if q_reply else qform_flow.start
-        st.session_state.needs_regen = False
-        ev = step(flow, text, ask_mode=ASK_MODE, boost=BOOST, config=CONFIG)
-        # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
-        record(ev, build_trace(ev, chain._calls - c0))
+    st.session_state["_pending_step"] = {"text": text, "is_reply": bool(q_reply)}
     st.rerun()
