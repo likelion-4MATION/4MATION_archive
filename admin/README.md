@@ -6,17 +6,21 @@
 ## 설치·실행
 
 ```bash
-cd admin
-pip install -r requirements.txt
+# 리포지토리 루트에서 챗봇과 같은 가상환경을 쓴다
+source .venv/bin/activate
+python -m pip install -r admin/requirements.txt
 
 # 리포지토리 경로를 알려준다 (기본값: admin/ 의 상위 폴더)
-export KDIC_REPO=/path/to/4MATION
+export KDIC_REPO=$PWD
 
-uvicorn main:app --reload --port 8600
-# → http://localhost:8600
+cd admin
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8600
+# → http://127.0.0.1:8600
 ```
 
 챗봇(Streamlit)과 **별도 프로세스**로 뜬다. 포트만 겹치지 않으면 동시에 띄워도 된다.
+`fastapi`가 없다는 오류가 나면 다른 Python으로 실행 중인 것이므로 `which python`이
+리포지토리의 `.venv/bin/python`을 가리키는지 먼저 확인한다.
 
 ## 구조
 
@@ -26,10 +30,11 @@ admin/
   registry.py    파라미터 레지스트리 — 콘솔의 단일 진실 소스 (31종)
   settings.py    저장소 + 런타임 주입 + 실측 기록 (원본 코드 미수정)
   guards.py      최신성 가드 CRUD·검증·프롬프트 블록·화이트리스트
-  attachments.py 첨부 표시명 오버레이 · 파일 업로드 · 타기관 안내 사전
+  attachments.py 첨부 표시명 오버레이 · 파일 업로드 · 레거시 링크 데이터
   runner.py      재빌드·평가·재검증 실행체 (crawler 모듈에 상수 주입)
   jobs.py        잡 관리 — runner 를 단계별로 띄우고 stdout 을 스트리밍으로 읽어 진행률 갱신
   metrics.py     대시보드 지표 + 실측 A/B 근거
+  oos_store.py   OOS 안내처·유선 상담·오류 신고 SQLite 저장소와 마스킹
   static/        index.html · app.js · style.css
   data/          admin_config.json · guards.json · attachments.json · uploads/ · backup/ · jobs/
 ```
@@ -80,6 +85,8 @@ admin/
 | ⑤ 첨부문서 | 양식 현황 · 표시명 정제 필요 건수 · 갱신 알림 | 일반 |
 | ⑥ 고급 | 검색 5축 개별값 · 라우터 임계값 · 콜 예산 | **잠금** |
 | ⑦ 문서 처리 | 청크 크기·겹침·표 처리 · 조합별 측정 근거 | **잠금·재빌드** |
+| ⑧ OOS 안내처 | 검증된 고정 안내처 · 유선 상담 정보 · 게시 상태 | 일반(게시 검증 필요) |
+| ⑨ 오류 신고함 | 마스킹된 오류 신고 · 상태/담당자/메모 · 중복 묶기 | 일반 |
 | (고정) 변경 사항 · 실행 | 전 탭 미저장 변경 + 예상 결과 + **실행 버튼·진행 상황** | 항상 표시 |
 
 ### 기준 설정으로 되돌리기 (초기화)
@@ -120,12 +127,16 @@ admin/
 | GET/POST | `/api/job` | 잡 실행(`kind` = `eval` `rebuild` `verify` `chain` `recrawl` `files`) 및 상태 폴링 |
 | POST | `/api/job/{id}/resume` | 판정 게이트에서 멈춘 체인을 계속(`go:true`) / 중단(`go:false`) |
 | GET | `/api/dashboard` | 코퍼스·첨부·신선도·운영상태·업무분포·실측 근거 |
+| GET/POST | `/api/oos/referrals…` | OOS 안내처 목록·검증 미리보기·저장 |
+| GET/POST | `/api/oos/phone-guide` | 유선 상담 고정 정보 조회·저장 |
+| GET/POST | `/api/oos/reports…` | 마스킹된 오류 신고 조회·상태·담당자·중복·메모 처리 |
 
 ---
 
-## 챗봇 연동 — 남은 작업 3가지
+## 챗봇 연동 상태
 
-콘솔 자체는 이대로 동작한다. 아래 3개를 붙여야 **저장한 값이 실제 답변에 반영**된다.
+OOS 안내처와 오류 신고는 현재 챗봇에 연결돼 있다. 아래 두 항목은 기존 관리자 설정과
+최신성 가드에 남아 있는 별도 배선 작업이다.
 
 ### ① 챗봇 기동 시 설정 로드 (필수)
 
@@ -156,16 +167,12 @@ if gs:
 `check_numbers()` 가 컨텍스트에 없는 금액을 잡기 때문이다. `answer_checks.run_all()` 에
 `extra_allowed: set[str] = frozenset()` 파라미터를 추가하고 `_amount_in()` 비교에 합치면 된다.
 
-### ③ 타기관 안내 사전 연결 (선택)
+### OOS 안내처·오류 신고 (연결 완료)
 
-`link` route 를 붙일 때 연락처를 코드에 하드코딩하지 말고 사전에서 가져온다.
-
-```python
-import attachments as att
-links = att.match_links(query, business=label)   # 발동 키워드가 걸린 안내처만
-```
-
-사전에 없는 주제는 빈 리스트가 돌아오므로 자동으로 일반 거절 문구로 내려간다.
+`chatbot/orchestrator.py`가 비-BF 절을 `chatbot/oos_policy.py`로 보내고,
+`admin/oos_store.py`의 게시·활성·링크 정상 안내처만 고정 응답에 사용한다. ⑤ 첨부 탭의
+옛 링크 데이터는 이 경로에서 사용하지 않는다. 사용자 오류 신고는 같은 저장소에 마스킹 후
+30일 보관되며 ⑨ 오류 신고함에서 처리한다.
 
 > **`chunk.py` 패치는 더 이상 필요 없다.** 초기 설계는 환경변수 4줄을 요구했지만,
 > `runner.py` 가 모듈 상수를 직접 주입하는 방식으로 바뀌어 원본 무수정으로 동작한다.
@@ -305,7 +312,6 @@ dict 로 받는다. 재빌드가 성공하면 그 값이 `settings.record_measur
 | **교체** | 새 파일을 올려 그 자리를 대신하게 한다. 원본은 지우지 않아 언제든 되돌린다 |
 | 파일 업로드 | pdf·hwp·docx·xlsx 등 · 최대 30MB. `data/uploads/` 에 저장 |
 | 외부 링크 추가 | `http(s)://` 만 허용 |
-| 타기관 안내 사전 | OOS `link` route 가 쓰는 연락처. 주소·전화 중 하나는 필수 |
 
 ### ⚠️ 첨부 다운로드는 크롤링에 포함되지 않는다
 
@@ -359,8 +365,8 @@ crawler/data/files/manifest.json             (doc_id, enc_real, enc_temp) → st
 `attachments.resolved(doc_id)` 가 **챗봇이 부를 함수**다: 숨김 제외 · 교체 반영 ·
 관리자 추가분 포함한 최종 목록을 돌려준다(`GET /api/attachments/resolved/{doc_id}`).
 
-안내 사전 초기 시드 5건(신용회복위원회·전국은행연합회 휴면계좌·보이스피싱·법원·예보 상담센터)은
-전부 **크롤링 원문에 실재하는 값**이다. 하드코딩이 아니라 관리자가 지우고 고칠 수 있다.
+`data/attachments.json`에 남아 있을 수 있는 옛 안내 사전 시드는 레거시 데이터다. 현재 사용자
+OOS 응답은 이를 읽지 않으며, ⑧ OOS 안내처에 별도로 검증·게시한 행만 사용한다.
 
 ## 실측 근거의 출처
 

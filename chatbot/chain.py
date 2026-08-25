@@ -221,8 +221,54 @@ def answer(query: str, k: int = 3, qform: dict | None = None) -> dict:
         "checks": checks,           # 부가 필드(계약 외 추가 — 축소 아님)
         "attachments": attach,      # 부가 필드 — 근거 문서 첨부(다운로드용). 없으면 []
         "_meta": {"model": MODEL_NAME, "cls_label": label, "cls_reason": reason, **cls_meta,
-                  **meta, "k": k, "qform": qform},  # qform 부가 기록(§1-5: _meta 허용)
+                  **meta, "k": k, "qform": qform, "retrieval": _retrieval_meta(hits)},
     }
+
+
+def answer_in_scope(query: str, k: int = 3, qform: dict | None = None,
+                    bf: str | None = None) -> dict:
+    """상단 6-BF 라우터가 IN으로 확정한 절만 검색·생성한다.
+
+    OOS 분류를 다시 수행하지 않으며, ``bf``가 있으면 검색의 업무 부스트에도 같은 값을
+    전달한다. 이 함수 자체에는 BF/OOS 임계값이 없다.
+    """
+    hits = get_searcher().search(query, k=k, mode="hybrid_bf", bf_override=bf)
+    context = "\n\n".join(f"[출처{i}] {h['page_title']}\n{h['text']}" for i, h in enumerate(hits, 1))
+    messages = [{"role": "system", "content": SYS_PROMPT_V2},
+                {"role": "user", "content": f"[참고문서]\n{context}\n\n[질문]\n{query}"}]
+    text, meta = _hcx(messages, req_id="chain-in")
+
+    sources, seen = [], set()
+    for h in hits:
+        if h["parent_doc_id"] not in seen:
+            seen.add(h["parent_doc_id"])
+            sources.append({"title": h["page_title"], "url": h["source_url"],
+                            "doc_id": h["parent_doc_id"]})
+    checks = (answer_checks.run_all(text, hits, allow_context_urls=False)
+              if text is not None else {"ok": False, "flags": ["생성 실패 — 검증 생략"], "results": {}})
+    attach = attachments.collect(hits, qform=qform)
+    return {
+        "text": text, "sources": sources, "confidence": _confidence(query), "route": "rag",
+        "checks": checks, "attachments": attach,
+        "_meta": {"model": MODEL_NAME, "cls_label": bf, "cls_reason": "상단 6-BF 라우터 확정",
+                  "cls_calls": 0, "cls_parse_fail": 0, "cls_latency_ms": 0,
+                  **meta, "k": k, "qform": qform, "business_function": bf,
+                  "retrieval": _retrieval_meta(hits)},
+    }
+
+
+def _retrieval_meta(hits: list[dict]) -> list[dict]:
+    """오류 재현용 최소 검색 기록. 원문 전체 대신 짧은 발췌와 점수만 남긴다."""
+    out = []
+    for rank, h in enumerate(hits, 1):
+        try:
+            score = float(h.get("_score")) if h.get("_score") is not None else None
+        except (TypeError, ValueError):
+            score = None
+        out.append({"rank": rank, "score": score, "chunk_id": h.get("chunk_id"),
+                    "doc_id": h.get("parent_doc_id"), "title": h.get("page_title"),
+                    "url": h.get("source_url"), "text_excerpt": str(h.get("text") or "")[:500]})
+    return out
 
 
 def _confidence(query: str) -> float:

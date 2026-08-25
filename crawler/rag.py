@@ -543,7 +543,8 @@ class Searcher:
                 seen[d] = seen.get(d, 0) + 1
         return out
 
-    def search(self, query: str, k: int = 5, mode: str = "hybrid") -> list[dict]:
+    def search(self, query: str, k: int = 5, mode: str = "hybrid",
+               bf_override: str | None = None) -> list[dict]:
         if mode == "dense":
             hits = self.dense(query, k)
         elif mode == "bm25":
@@ -557,7 +558,10 @@ class Searcher:
             #   2) 키워드 분류        라우터 미보유 시 폴백. 기권 28.6%
             #   3) PRF 역추론         1·2가 모두 기권했을 때. 아래 블록
             # 라우터가 로드되면 3단은 사실상 안 탄다(비용 0). 미보유 환경에서만 살아난다.
-            bf = classify_query_bf(query)
+            # 상단 절별 라우터가 이미 BF를 확정한 경우 그 값을 재사용한다. 다시 분류하면
+            # 오케스트레이터와 검색 부스트가 서로 다른 업무를 보는 이중 판정이 생긴다.
+            # None은 기존 동작(내부 분류)을 뜻하므로 기존 평가 호출은 완전히 동일하다.
+            bf = bf_override if bf_override is not None else classify_query_bf(query)
             if BF_MODE == "soft":
                 # 융합을 1회만 돌리고, PRF는 그 결과(부스트 전 랭킹)를 재사용한다.
                 rrf, dsc = self._fuse(query)
