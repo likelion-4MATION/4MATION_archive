@@ -154,6 +154,30 @@ class Router:
                     for j, p in zip(idx.tolist(), msp.tolist())]
         return out
 
+    def predict_scores(self, questions: list[str]) -> list[dict]:
+        """질문별 6개 BF 원점수(logit)와 확률을 모두 반환한다.
+
+        기존 ``predict`` 계약과 임계값은 건드리지 않는다. OOS 오케스트레이터가 당시
+        라우터 원점수를 처리 로그에 남길 수 있도록 관측값만 추가한다.
+        """
+        out: list[dict] = []
+        for i in range(0, len(questions), self.batch_size):
+            batch = questions[i:i + self.batch_size]
+            enc = self.tok(batch, padding=True, truncation=True,
+                           max_length=128, return_tensors="pt").to(self.device)
+            with self.torch.no_grad():
+                logits = self.model(**enc).logits.float().cpu()
+            probs = self.torch.softmax(logits, dim=-1)
+            for raw, prob in zip(logits.tolist(), probs.tolist()):
+                idx = max(range(len(prob)), key=prob.__getitem__)
+                out.append({
+                    "label": self.labels[idx],
+                    "msp": float(prob[idx]),
+                    "scores": {label: float(raw[j]) for j, label in enumerate(self.labels)},
+                    "probabilities": {label: float(prob[j]) for j, label in enumerate(self.labels)},
+                })
+        return out
+
 
 # ── 기존 산출물 재사용 (문서 I5) ─────────────────────────────
 def load_existing(path: str) -> dict[str, dict]:
