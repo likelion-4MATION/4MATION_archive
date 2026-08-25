@@ -322,3 +322,90 @@
   누적돼 있어 마일스톤별 원자 커밋이 물리적으로 불가능하다. `add -p` 로 쪼개면 **실제로 통과한 적 없는
   중간 상태**를 커밋하게 된다. → **tool → data → docs 3커밋으로 M9-1b~M9-3 구간을 통째로** 담는다.
   마일스톤 계보는 대조표(`docs/Qform_ver4_M9_스팬이행_대조표.md`)가 진다.
+
+## D13 (08-24) — eval 통합: 6개 평가 스크립트 → `crawler/eval.py` 한 파일
+
+> 기존 엔트리 무수정. 아래는 추기분이다.
+
+- **문제 정의 — "같은 기능, 다른 파일"**: `crawler/` 에 평가기가 6개, 은퇴 사본이 17개 있었고
+  디렉토리마다 다른 파일을 참조했다. `admin/runner.py` 는 `eval_anchor_v3`, `tune_params*` 는
+  `eval_anchor_v3`, `exp_tablefix` 는 `eval_anchor_v3` + `eval_overlap`, `rerank_colab` 은
+  `eval_anchor_v3` 를 각각 잡고 있었다. 실측 중복: `eval.py` ↔ `eval_TF.py` 6함수
+  (`load_testset`·`first_hit_rank` 는 바이트 동일) · `eval_anchor_v3` ↔ `eval_anchor_span_multi`
+  ↔ `eval_anchor_gold` 3중 포크(`_load_jsonl`·`_format_ids`·`_pct_table`·`_get_gt_chunk_ids`
+  바이트 동일, `_empty/_add/_finalize_metrics`·`_error_analysis`·`write_report` 는 드리프트).
+
+- **`crawler/eval.py` 를 유일한 평가 모듈로 만들었다 (서브커맨드 `chunk`/`span`/`gold`)**:
+  - `chunk` = 구 `eval_anchor_v3.py` — **정본. 이름 변경 0건으로 이식**했다. 상수 `KS`·
+    `RECALL_KS`·`RETRIEVAL_DEPTH` 를 접두어 없이 둔 이유가 이것이다. 접두어를 붙였으면
+    본문 30개 함수를 전부 손봐야 했고, 그러면 "무변경 이식"이라는 주장이 검증 불가해진다.
+  - `span` = 구 `eval_anchor_span_multi.py` — `KS_SPAN`/`DEPTH_SPAN` 으로 분리. 집계 키가
+    다르다(`id_hit@k`·`total_spans`·`n_no_span`)서 누산기를 공유할 수 없어 `_span_*` 접두어.
+  - `gold` = 구 `eval_anchor_gold.py` — `wilson`·`ndcg`·`mcnemar` 는 §2 공용으로 올려
+    다른 서브커맨드도 쓸 수 있게 했다. 이 3개는 다른 어느 평가기에도 없던 유일 자산이다.
+  - 인자 없이 `python eval.py` 는 `chunk` 로 붙는다 — 구 `python eval_anchor_v3.py --gt …`
+    명령이 그대로 통한다.
+
+- **"판정 의미가 다른 것"은 합치지 않았다 — 중복만 합쳤다**: 앵커 평가기 3종은 같은 기능의
+  복제가 아니라 서로 다른 측정 축이다. `chunk` 는 앵커 + 앵커 미커버 gold 의 chunk_id 폴백,
+  `span` 은 `gt_anchor_spans` 전부 발견 AND, `gold` 은 앵커를 품은 **모든** 청크를 host 로
+  계산(gold id 무관). 하나로 접으면 기능이 사라진다. 정규화도 둘 다 남겼다 —
+  `_norm_text`(NFKC+공백, chunk 판정) vs `norm_ws`(공백만, span·gold 판정). NFKC 로 통일하면
+  두 평가기의 판정이 바뀌어 커밋된 리포트와 비교가 끊긴다. **규칙이 다른 것은 버그가 아니다.**
+  실제로 합친 것: 로더 7종 → `_load_jsonl` 1개 · 표 헬퍼 2종 → 1개 · GT 파서 2종 → 1개 ·
+  `_default_data_dir` 2종 → marker 인자 1개 · `_search_results` 2종 → `(depth, gold_bf)` 인자 1개.
+
+- **구세대 문서단위 평가기 3개는 archive 로 보냈다 — 실행 불가 상태였다**: `eval.py`(구) ·
+  `eval_TF.py` · `eval_pair.py` 의 기본 평가셋(`data/testset_natural_400.jsonl` ·
+  `data/router_trainset_v1.jsonl` · `data/testset_natural.jsonl`)이 **셋 다 디스크에 없다**
+  (baseline_v1/v2.lock 에 sha256 만 남아 있다). `docs/handoff/eval_유상.md` §3 이 이미
+  "폐기(참조용)"로 판정한 상태와 일치한다. 지표 함수 `first_hit_rank`·`_row`·`group_metrics`
+  만 통합 파일 §3 에 보존했다 — 되살릴 때 판정 로직을 다시 쓰지 않도록.
+
+- **07-21 계약의 "eval.py 코드 무수정" 조항을 개정한다 (사후 정정 포함)**: 그 조항은
+  `baseline_v1.lock`(merged .853 / natural .753)의 재현성을 지키려는 것이었다. 그런데 그
+  평가셋 두 개가 이미 디스크에 없어 **조항이 지키려던 대상이 존재하지 않는다.** 원본 코드는
+  `archive/superseded/eval_doc_legacy.py` 에 바이트 그대로 있고 `git log --follow` 로 이력이
+  이어지므로 재현 경로는 보존됐다. 새 `crawler/eval.py` 는 **같은 이름의 다른 파일**이다 —
+  기존 문서에서 "eval.py = 폐기된 구세대 평가"로 읽히는 서술은 archive 쪽을 가리킨다.
+  `rag.py` 무수정 원칙과 `chain.py` 동결은 **건드리지 않았다**(rag.py 는 이번 작업에서
+  단 한 줄도 수정하지 않았다 — 이력 주석의 옛 스크립트명도 그대로 뒀다).
+
+- **등가성을 회귀 테스트로 못박았다 — `crawler/tests/test_eval_equivalence.py`**:
+  faiss·numpy·검색 인덱스 **없이** 돈다. 판정 로직이 순수 함수라 `(gt, retrieved, chunk_meta)`
+  세 데이터만 있으면 검증되기 때문이다. 실제 GT(`gt_natural430_anchored` 430건 ·
+  `gt_testset_retrieval_450` 448건) + 실제 `data/chunks.jsonl` 로 **결정론적 합성 retrieved**
+  를 만들어(문항 인덱스로 gold 배치 위치를 0=완전miss … 7=완전hit 로 순환 → hit@1~50·부분회수·
+  미회수를 전부 훑는다) `archive/superseded/` 의 구 평가기와 반환 dict 를 재귀 비교한다.
+  - 통과 항목 16개: chunk 2GT×3score · 청크메타 없는 경로 · span 2 · gold · wilson/ndcg ·
+    문서단위 2함수 · **리포트 마크다운 바이트 동일(chunk 1.2MB · span 310KB)** · 하위호환 심볼
+    전수 · `admin/runner.run_eval()` 이 읽는 키.
+  - **`archive/superseded/eval_anchor_v3.py` 를 지우면 이 테스트가 못 돈다.** 대조군이다.
+    archive/README.md 에 경고를 박아 뒀다.
+  - 리포트 바이트 비교를 넣은 이유: 지표 dict 만 맞고 리포트 문구가 갈리면 사람이 읽는 산출물이
+    조용히 달라진다. 마크다운은 지표를 전부 문자열로 굽는 최종 스냅샷이라 회귀 검출력이 가장 높다.
+
+- **하위호환은 별칭으로 해결 — 호출부는 import 한 줄만 바뀐다**: `_load_jsonl = load_jsonl` ·
+  `write_report`(=chunk 리포트) · `_norm_text` · `_get_gt_chunk_ids` · `_anchor_hit_at_k` 등
+  기존 이름을 전부 유지했다. `admin/runner.py` 는 `ev._load_jsonl` 과 `ev.evaluate_retrieval`
+  을 쓰는데 둘 다 그대로 동작한다. 갱신한 import 16곳: `import eval_anchor_v3 as ev3` →
+  `import eval as ev3` (11파일) · `import rag, eval_anchor_v3 as ev3` (tune_params_v2) ·
+  `import eval_anchor_v3 as ev` (admin/runner) · `from eval_overlap/eval_tablefix import` →
+  `from exp_overlap/exp_tablefix import` (3곳).
+
+- **`eval_` 인데 평가기가 아닌 4개는 `exp_` 로 rename**: `eval_overlap`·`eval_tablefix`·
+  `eval_docinput`·`eval_router_facet` → `exp_*`. handoff §3 이 이미 "실험"으로 분류한
+  스크립트들이고, 통합 `eval.py` 옆에 `eval_*` 이 남아 있으면 통합의 의미가 반감된다.
+  `git mv` 라 이력은 이어지고, **산출 리포트 파일명(`data/eval_tablefix_report.md` 등)은
+  그대로 뒀다** — `admin/metrics.py` 가 그 파일들을 수치 근거로 인용하고 있어 이름을 바꾸면
+  기록된 수치의 출처가 끊긴다.
+
+- **은퇴 파일 22개는 삭제하지 않고 `archive/` 한 곳으로 모았다**: `crawler/archive_eval/` →
+  `archive/eval_retired/` · `archive_label/` → `archive/label_retired/` · 대체된 평가기 6개 →
+  `archive/superseded/`. `archive/README.md` 에 파일별 은퇴 사유·원 경로·대체 경로·되살리는
+  방법을 적었다. 삭제하지 않은 이유: 수치의 계보와 판정 변경 근거가 이 코드에만 남아 있다.
+
+- **리포트 기본 출력 파일명이 바뀌었다**: `eval_anchor_v3_report.md` → `eval_chunk_report.md` ·
+  `eval_anchor_span_multi_report.md` → `eval_span_report.md`. **기존 커밋된 리포트를 덮지 않는다**
+  (의도한 것 — handoff §4-B 가 경고한 "커밋된 .md 에 정본 수치가 없다" 문제와 섞이면 안 된다).
+  옛 이름으로 뽑아야 하면 `--report data/eval_anchor_v3_report.md` 로 지정한다.

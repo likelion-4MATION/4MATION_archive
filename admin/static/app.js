@@ -20,6 +20,7 @@ let PLAN = null;                 // [한 번에 실행] 이 무엇을 돌릴지 
 let GOLDEN_DIFF = [];            // 기준 설정과 다른 항목
 let ATT = null, ATT_DIRTY_ONLY = false, AX_KIND = 'file', AX_FILE = '';
 let REP_KEY = null;              // 교체 대상 첨부의 key
+let OOS_SCHEMA = null, REFERRALS = [], PHONE_GUIDE = null, REPORTS = [], SELECTED_REPORT = null;
 
 /* ── 값 포맷 ───────────────────────────────────────────── */
 const ENUM_LABEL = {
@@ -39,7 +40,9 @@ const fmt = (key, v) => {
   return String(v);
 };
 const val = k => (k in DRAFT ? DRAFT[k] : SAVED[k]);
-/* 지표 계열 — "anchor hit@5"(옛 A/B 표)와 "hit@5"(재빌드 실측)는 서로 뺄 수 없다 */
+/* 지표 계열 — 앵커 계열(anchor…)과 청크 계열(hit@…)은 서로 뺄 수 없다.
+   재빌드 실측도 이제 앵커 판정이라 두 계열이 같아졌지만, 옛 기록에는 청크 계열이
+   남아 있으므로 판별은 그대로 둔다(metric 문자열이 스스로 계열을 밝힌다). */
 const fam = m => !m ? null : (String(m).startsWith("anchor") ? "anchor" : "chunk");
 const changedKeys = () => Object.keys(DRAFT).filter(k => String(DRAFT[k]) !== String(SAVED[k]));
 
@@ -113,7 +116,7 @@ async function paint() {
   const baseAcc = base.acc === null || base.acc === undefined ? "?" : base.acc.toFixed(4);
   // 지표 이름을 고정하지 않는다 — k 를 바꾸면 hit@3 ↔ hit@5 로 잣대 자체가 달라진다
   const accLab = "정확도 " + (base.acc_metric && acc.metric && base.acc_metric !== acc.metric
-    ? `${base.acc_metric} → ${acc.metric}` : (acc.metric || base.acc_metric || "hit@5"));
+    ? `${base.acc_metric} → ${acc.metric}` : (acc.metric || base.acc_metric || "anchor hit@5"));
   $("#projTbl").innerHTML = `
     <tr><th>지표</th><th class="n">현재</th><th class="n">변경 후</th><th></th></tr>
     ${line(accLab, baseAcc, acc.value === null ? "?" : acc.value.toFixed(4), acc.grade)}
@@ -191,7 +194,7 @@ function paintTab7(acc, measured) {
      ${row("앵커 정확도(전체)", num(cur.all), g("all"))}
      ${row("단일 조건 질문", num(cur.single), g("single"))}
      ${row("복합 조건 질문", num(cur.and), g("and"))}
-     ${cur.chunk_hit5 != null ? `<tr><td>청크 hit@5</td>
+     ${cur.chunk_hit5 != null ? `<tr><td>청크 hit@5 <span class="hint">(참고 · 판정 미사용)</span></td>
         <td class="n">${Number(cur.chunk_hit5).toFixed(4)}</td>
         <td class="n">—</td><td class="n">—</td></tr>` : ""}`;
 
@@ -240,7 +243,7 @@ const hit5 = m => (m && m["hit@5"] != null) ? Number(m["hit@5"]).toFixed(4) : "�
 function stageBlock(s) {
   const done = s.steps.filter(x => x.status === "done").length;
   const pct = Math.round(done / (s.steps.length || 1) * 100);
-  const right = s.metrics && s.metrics["hit@5"] != null ? "hit@5 " + hit5(s.metrics)
+  const right = s.metrics && s.metrics["hit@5"] != null ? "앵커 hit@5 " + hit5(s.metrics)
     : s.status === "running" ? pct + "%" : s.status === "skipped" ? "건너뜀" : "";
   return `<div class="stage ${s.status}">
     <div class="stagehead">
@@ -250,8 +253,8 @@ function stageBlock(s) {
       <div class="steps">${s.steps.map(x =>
         `<span class="${x.status}">${esc(x.name)}</span>`).join("")}</div>` : ""}
     ${s.status === "done" && s.metrics && !s.metrics.error
-      ? `<div style="font-size:11px;color:var(--tx3);margin-top:5px">hit@1 ${s.metrics["hit@1"]}
-         · hit@3 ${s.metrics["hit@3"]} · MRR ${s.metrics["mrr@10"]} · ${s.chunks ?? "—"}청크</div>` : ""}
+      ? `<div style="font-size:11px;color:var(--tx3);margin-top:5px">앵커 hit@1 ${s.metrics["hit@1"]}
+         · hit@3 ${s.metrics["hit@3"]} · MRR ${s.metrics["mrr@10"]} · ${s.chunks ?? "—"}청크${s.metrics["n_evaluated"] ? ` · 채점 ${s.metrics["n_evaluated"]}문항` : ""}</div>` : ""}
     ${s.error ? `<div class="note bad" style="margin-top:8px">${esc(s.error)}</div>` : ""}
   </div>`;
 }
@@ -279,7 +282,7 @@ function cmpBlock(j) {
     return `<span style="color:${c}">${v > 0 ? "+" : ""}${v.toFixed(4)}</span>`;
   };
   return `<table style="margin-top:10px">
-    <tr><th>단계</th><th class="n">hit@5</th><th class="n">청크</th><th class="n">실행 전 대비</th></tr>
+    <tr><th>단계</th><th class="n">앵커 hit@5</th><th class="n">청크</th><th class="n">실행 전 대비</th></tr>
     ${b ? `<tr><td style="color:var(--tx3)">실행 전</td>
         <td class="n">${Number(b["hit@5"]).toFixed(4)}</td>
         <td class="n">${b.chunks ?? "—"}</td><td class="n">—</td></tr>` : ""}
@@ -698,6 +701,11 @@ $("#gClear").onclick = () => guardForm(null);
 
 /* ── ⑤ 첨부문서 · 링크 ─────────────────────────────────── */
 const esc = t => String(t ?? "").replace(/[<>&"]/g, c => ({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
+const kst = value => {
+  if (!value) return "—";
+  const d = new Date(value); if (Number.isNaN(d.getTime())) return String(value);
+  return new Intl.DateTimeFormat("ko-KR", {timeZone:"Asia/Seoul", dateStyle:"medium", timeStyle:"medium"}).format(d);
+};
 
 function renderAtt() {
   if (!ATT) return;
@@ -899,8 +907,125 @@ document.addEventListener("blur", async e => {
   toast("표시명을 저장했습니다."); await loadAtt();
 }, true);
 
+/* ── ⑧ OOS 안내처 ───────────────────────────────────────── */
+const csvVals = s => String(s || "").split(",").map(x => x.trim()).filter(Boolean);
+const lineVals = s => String(s || "").split("\n").map(x => x.trim()).filter(Boolean);
+
+function collectReferral() {
+  return {row_id: $("#rfId").value.trim(), title: $("#rfName").value.trim(),
+    org: $("#rfOrg").value.trim(), status: $("#rfStatus").value, active: $("#rfActive").checked,
+    required_triggers: csvVals($("#rfRequired").value), excluded_triggers: csvVals($("#rfExcluded").value),
+    positive_examples: lineVals($("#rfPositive").value), negative_examples: lineVals($("#rfNegative").value),
+    message: $("#rfMessage").value.trim(), url: $("#rfUrl").value.trim(),
+    phone: $("#rfPhone").value.trim(), hours: $("#rfHours").value.trim(),
+    evidence: $("#rfEvidence").value.trim(), last_verified_at: $("#rfVerified").value,
+    link_state: $("#rfLinkState").value};
+}
+
+function referralForm(r) {
+  $("#rfTitle").textContent = r ? `안내처 수정 · v${r.version}` : "안내처 작성";
+  $("#rfId").value = r?.row_id || ""; $("#rfId").disabled = !!r;
+  $("#rfName").value = r?.title || ""; $("#rfOrg").value = r?.org || "";
+  $("#rfStatus").value = r?.status || "draft"; $("#rfActive").checked = !!r?.active;
+  $("#rfRequired").value = (r?.required_triggers || []).join(", ");
+  $("#rfExcluded").value = (r?.excluded_triggers || []).join(", ");
+  $("#rfPositive").value = (r?.positive_examples || []).join("\n");
+  $("#rfNegative").value = (r?.negative_examples || []).join("\n");
+  $("#rfMessage").value = r?.message || ""; $("#rfUrl").value = r?.url || "";
+  $("#rfPhone").value = r?.phone || ""; $("#rfHours").value = r?.hours || "";
+  $("#rfEvidence").value = r?.evidence || ""; $("#rfVerified").value = (r?.last_verified_at || "").slice(0,10);
+  $("#rfLinkState").value = r?.link_state || "unknown"; $("#rfErr").innerHTML = ""; $("#rfPreview").innerHTML = "";
+}
+
+function renderReferrals() {
+  $("#rfTbl").innerHTML = `<tr><th>row_id / 안내처</th><th>트리거</th><th>상태</th><th></th></tr>` +
+    (REFERRALS.length ? REFERRALS.map(r => `<tr><td><code>${esc(r.row_id)}</code><br><b>${esc(r.title)}</b><br><small>${esc(r.org)}</small></td>
+      <td><small>${r.required_triggers.map(esc).join(" + ")}${r.excluded_triggers.length ? `<br>제외: ${r.excluded_triggers.map(esc).join(", ")}` : ""}</small></td>
+      <td><span class="tag ${r.status === "published" && r.active ? "ok" : r.status === "disabled" ? "bad" : "warn"}">${esc(r.status)}</span>
+        <br><small>v${r.version} · ${esc(kst(r.updated_at))}</small></td>
+      <td class="n"><button class="btn sm ghost" data-rfe="${esc(r.row_id)}">수정</button></td></tr>`).join("")
+      : `<tr><td colspan="4"><small>등록된 안내처가 없습니다.</small></td></tr>`);
+}
+
+function phoneForm(p) {
+  $("#pgMessage").value = p?.message || ""; $("#pgPhone").value = p?.phone || "";
+  $("#pgHours").value = p?.hours || ""; $("#pgEvidence").value = p?.evidence || "";
+  $("#pgVerified").value = (p?.last_verified_at || "").slice(0,10);
+  $("#pgStatus").value = p?.status || "draft"; $("#pgActive").checked = !!p?.active;
+}
+
+async function loadOOS() {
+  const [schema, refs, phone] = await Promise.all([api("/api/oos/schema"), api("/api/oos/referrals"), api("/api/oos/phone-guide")]);
+  OOS_SCHEMA = schema; REFERRALS = refs.referrals; PHONE_GUIDE = phone.phone_guide;
+  renderReferrals(); phoneForm(PHONE_GUIDE);
+  $("#rpFilter").innerHTML = `<option value="">전체</option>` + schema.report_statuses.map(s => `<option>${esc(s)}</option>`).join("");
+  $("#rpStatus").innerHTML = schema.report_statuses.map(s => `<option>${esc(s)}</option>`).join("");
+  await loadReports();
+}
+
+document.addEventListener("click", async e => {
+  const t = e.target;
+  if (t.dataset.rfe) { referralForm(REFERRALS.find(r => r.row_id === t.dataset.rfe)); $("#rfTitle").scrollIntoView({behavior:"smooth"}); return; }
+  if (t.id === "rfClear") { referralForm(null); return; }
+  if (t.id === "rfPreviewBtn") {
+    const r = await api("/api/oos/referrals/preview", {referral: collectReferral()});
+    $("#rfErr").innerHTML = r.errors.length ? `<div class="note bad">${r.errors.map(esc).join("<br>")}</div>` : "";
+    $("#rfPreview").innerHTML = !r.errors.length ? `<div class="note ok">정상 예시 ${r.positive.filter(x=>x.matched).length}/${r.positive.length} 발동 · 반례 ${r.negative.filter(x=>!x.matched).length}/${r.negative.length} 미발동</div>
+      <div class="note"><b>사용자에게 보일 고정 응답</b><br>${esc(r.response.message)}<br><b>${esc(r.response.org)}</b>${r.response.url ? `<br>${esc(r.response.url)}` : ""}${r.response.phone ? `<br>전화 ${esc(r.response.phone)}` : ""}${r.response.hours ? `<br>운영시간 ${esc(r.response.hours)}` : ""}</div>` : ""; return;
+  }
+  if (t.id === "rfSave") {
+    const r = await api("/api/oos/referrals", {referral: collectReferral()});
+    if (!r.ok) { $("#rfErr").innerHTML = `<div class="note bad">${r.errors.map(esc).join("<br>")}</div>`; return; }
+    toast("안내처를 저장했습니다."); referralForm(null); await loadOOS(); return;
+  }
+  if (t.id === "pgSave") {
+    const phone_guide = {message: $("#pgMessage").value, phone: $("#pgPhone").value,
+      hours: $("#pgHours").value, evidence: $("#pgEvidence").value,
+      last_verified_at: $("#pgVerified").value, status: $("#pgStatus").value,
+      active: $("#pgActive").checked};
+    const r = await api("/api/oos/phone-guide", {phone_guide});
+    if (!r.ok) { $("#pgErr").innerHTML = `<div class="note bad">${r.errors.map(esc).join("<br>")}</div>`; return; }
+    $("#pgErr").innerHTML = ""; toast("유선 상담 안내를 저장했습니다."); await loadOOS(); return;
+  }
+});
+
+/* ── ⑨ 오류 신고함 ───────────────────────────────────────── */
+async function loadReports() {
+  const qs = new URLSearchParams();
+  if ($("#rpFilter")?.value) qs.set("status", $("#rpFilter").value);
+  if ($("#rpQuery")?.value) qs.set("q", $("#rpQuery").value);
+  const r = await api("/api/oos/reports?" + qs.toString()); REPORTS = r.reports;
+  $("#rpTbl").innerHTML = `<tr><th>신고</th><th>경로</th><th>상태</th><th>삭제 예정</th></tr>` +
+    (REPORTS.length ? REPORTS.map(x => `<tr data-rpid="${esc(x.report_id)}" style="cursor:pointer"><td><code>${esc(x.report_id)}</code><br><small>${esc(kst(x.created_at))}</small></td>
+      <td>${esc(x.report_path)}</td><td><span class="tag">${esc(x.status)}</span>${x.assigned_to ? `<br><small>${esc(x.assigned_to)}</small>` : ""}${x.duplicate_of ? `<br><small>↳ ${esc(x.duplicate_of)}</small>` : ""}</td>
+      <td><small>${esc(kst(x.expires_at))}</small></td></tr>`).join("") : `<tr><td colspan="4"><small>신고가 없습니다.</small></td></tr>`);
+}
+
+async function openReport(id) {
+  SELECTED_REPORT = await api(`/api/oos/reports/${encodeURIComponent(id)}`);
+  $("#rpDetail").style.display = "block"; $("#rpId").textContent = SELECTED_REPORT.report_id;
+  $("#rpMeta").textContent = `세션 ${SELECTED_REPORT.session_id} · ${SELECTED_REPORT.report_path} · 생성 ${kst(SELECTED_REPORT.created_at)} · 삭제 예정 ${kst(SELECTED_REPORT.expires_at)}`;
+  $("#rpStatus").value = SELECTED_REPORT.status; $("#rpAssignee").value = SELECTED_REPORT.assigned_to || "";
+  $("#rpDuplicate").value = SELECTED_REPORT.duplicate_of || ""; $("#rpNote").value = "";
+  $("#rpPayload").textContent = JSON.stringify(SELECTED_REPORT.payload, null, 2);
+  $("#rpNotes").innerHTML = SELECTED_REPORT.notes.length ? SELECTED_REPORT.notes.map(n => `<div class="note"><b>${esc(n.actor)}</b> · ${esc(kst(n.created_at))}<br>${esc(n.body)}</div>`).join("") : `<small>메모가 없습니다.</small>`;
+  $("#rpDetail").scrollIntoView({behavior:"smooth", block:"start"});
+}
+
+document.addEventListener("click", async e => {
+  const row = e.target.closest("[data-rpid]"); if (row) { await openReport(row.dataset.rpid); return; }
+  if (e.target.id === "rpSearch") { await loadReports(); return; }
+  if (e.target.id === "rpSave" && SELECTED_REPORT) {
+    const r = await api(`/api/oos/reports/${encodeURIComponent(SELECTED_REPORT.report_id)}`,
+      {status: $("#rpStatus").value, assigned_to: $("#rpAssignee").value,
+       duplicate_of: $("#rpDuplicate").value, note: $("#rpNote").value});
+    if (!r.ok) { toast((r.errors || ["저장 실패"]).join(" "), true); return; }
+    toast("신고 처리 내용을 저장했습니다."); await loadReports(); await openReport(SELECTED_REPORT.report_id);
+  }
+});
+
 /* ── 시작 ──────────────────────────────────────────────── */
 (async () => {
   SCHEMA = await api("/api/schema");
-  await reload();
+  await Promise.all([reload(), loadOOS()]);
 })().catch(e => toast("초기화 실패: " + e.message, true));

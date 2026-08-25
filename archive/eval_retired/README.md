@@ -56,7 +56,7 @@
 
 ```bash
 cd crawler
-mv archive_eval/eval_mmr.py .
+mv ../archive/eval_retired/eval_mmr.py .
 ```
 
 주의: 이 스크립트들은 대부분 `rag.py`의 당시 상수(`RRF_K=60`, `BF_MODE="hard"`,

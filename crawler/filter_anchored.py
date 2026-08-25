@@ -1,6 +1,6 @@
 """앵커 라벨이 없는 문항을 걸러 앵커 판정 전용 GT를 만든다.
 
-배경: 앵커텍스트 판정(eval_anchor_v3 --score anchor)은 `gt_anchors`/`gt_anchor_span`이
+배경: 앵커텍스트 판정(eval.py chunk --score anchor)은 `gt_anchors`/`gt_anchor_span`이
 있어야 채점된다. 결측 문항을 섞어 두면 평가기가 분모에서 빼주긴 하지만, 셋의 실제
 크기와 리포트의 분모가 달라 인용할 때 혼동이 생긴다. 앵커 채점 전용 셋을 따로 두면
 "이 파일의 행수 = 분모"가 성립한다.
@@ -27,7 +27,7 @@ import hashlib
 import json
 import pathlib
 
-import eval_anchor_v3 as ev3
+import eval as ev3
 
 DEFAULT_CHUNKS = "data/chunks.jsonl"
 

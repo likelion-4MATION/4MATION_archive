@@ -12,12 +12,12 @@
   불변이고 앵커는 텍스트 매칭이라 chunk_id와 무관하다. 여기 변화가 순수 검색 변화다.
   `and`의 상승은 gold가 한 청크로 합쳐지며 생기는 **판정 완화**가 섞이므로 병합
   건수를 따로 세어 갈라 보고한다. 미앵커 gold는 원문 고유 줄 프로브로 재투영한다
-  (GT 편집 아님) — eval_overlap.py와 같은 규약.
+  (GT 편집 아님) — exp_overlap.py와 같은 규약.
 
 컨텍스트 비용도 함께 잰다 — 표를 합치면 청크가 커져 LLM 입력이 늘 수 있다.
 
 사용:
-  cd crawler && python eval_tablefix.py
+  cd crawler && python exp_tablefix.py
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ import statistics
 import numpy as np
 
 import rag
-import eval_anchor_v3 as ev3
-from eval_overlap import rechunk, unique_probe, score_corpus
+import eval as ev3
+from exp_overlap import rechunk, unique_probe, score_corpus
 from tune_params import _topk_lists
 
 GT_PATH = "../final_testset/gt_natural430.jsonl"

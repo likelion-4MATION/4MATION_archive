@@ -30,6 +30,8 @@ ver3 T5 — 되묻기 선택지 버튼과 예시 질의 칩을 붙였다. 둘 �
 import json
 import pathlib
 import sys
+import uuid
+from datetime import datetime, timezone
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -37,8 +39,11 @@ import streamlit.components.v1 as components
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "chatbot"))
 sys.path.insert(0, str(ROOT / "crawler"))
+sys.path.insert(0, str(ROOT / "admin"))
 
 import chain
+import orchestrator
+import oos_store
 import qform_flow
 import qform_followup
 import qform_memory_panel as qmp
@@ -46,7 +51,8 @@ import qform_panel
 import qform_state
 import qform_trace
 
-ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "reject": "소관 밖"}
+ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "reject": "소관 밖",
+               "oos": "안내 범위 밖 처리"}
 SLOT_LABEL = {"party": "역할", "sub_task": "세부주제", "qualification": "자격",
               "subject": "주체", "method": "접수수단"}
 ASK_MODES = {"ⓐ 템플릿 (콜 0)": "template", "ⓑ LLM 생성 (턴당 1콜)": "llm"}
@@ -213,10 +219,80 @@ body { min-height: 100vh; }
 
 st.title("💬 KDIC 안내 챗봇 — PoC")
 st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
+title_col, report_col = st.columns([5, 1])
+with title_col:
+  
+with report_col:
+    st.write("")
+    if st.button("🚩 챗봇 오류 신고", key="top-report", width="stretch"):
+        st.session_state.report_confirm = True
 
 st.session_state.setdefault("history", [])
 st.session_state.setdefault("flow", qform_flow.new_state())
 st.session_state.setdefault("needs_regen", False)   # 슬롯 수정 후 재답변 대기 (T6)
+st.session_state.setdefault("session_id", f"sess_{uuid.uuid4().hex[:16]}")
+st.session_state.setdefault("report_confirm", False)
+st.session_state.setdefault("report_notice", None)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def append_history(turn: dict) -> dict:
+    item = {**turn, "message_id": turn.get("message_id") or f"msg_{uuid.uuid4().hex[:16]}",
+            "timestamp": turn.get("timestamp") or _utc_now()}
+    st.session_state.history.append(item)
+    return item
+
+
+def last_answer_id() -> str:
+    for turn in reversed(st.session_state.history):
+        if turn.get("role") == "answer":
+            return str(turn.get("message_id") or "")
+    return ""
+
+
+def report_context() -> dict:
+    flow = st.session_state.flow
+    return {
+        "session_id": st.session_state.session_id,
+        "target_message_id": last_answer_id(),
+        "payload": {
+            "conversation": st.session_state.history,
+            "model_version": chain.MODEL_NAME,
+            "qform": flow.get("qform"),
+            "slot_origin": flow.get("slot_origin"),
+            "queue": flow.get("unit_queue"),
+            "qform_queue": flow.get("queue"),
+            "routing_history": flow.get("routing_history"),
+            "call_count": chain._calls,
+        },
+    }
+
+
+if st.session_state.report_notice:
+    level, message = st.session_state.report_notice
+    (st.success if level == "ok" else st.error)(message)
+    st.session_state.report_notice = None
+
+if st.session_state.report_confirm:
+    st.warning("오류 분석을 위해 현재 대화 내용과 답변 처리 기록이 저장됩니다.")
+    confirm_col, cancel_col, _ = st.columns([1, 1, 4])
+    if confirm_col.button("신고하기", key="report-confirm", type="primary", width="stretch"):
+        try:
+            ctx = report_context()
+            saved = oos_store.create_report(ctx["payload"], session_id=ctx["session_id"],
+                                            report_path="top_button",
+                                            target_message_id=ctx["target_message_id"])
+            st.session_state.report_notice = ("ok", f"오류 신고가 접수되었습니다 ({saved['report_id']}).")
+        except Exception:
+            st.session_state.report_notice = ("error", "오류 신고를 저장하지 못했습니다. 접수된 것으로 처리하지 않았습니다.")
+        st.session_state.report_confirm = False
+        st.rerun()
+    if cancel_col.button("취소", key="report-cancel", width="stretch"):
+        st.session_state.report_confirm = False
+        st.rerun()
 
 # 좌측(정보) / 중앙(대화) / 우측(추천 질문·근거 조각) — 예시 UI(서울 열린데이터광장
 # 챗봇) 레이아웃을 참고해 사이드바 대신 고정 3컬럼으로 구성한다.
@@ -229,6 +305,8 @@ with left:
         st.session_state.history = []
         st.session_state.flow = qform_flow.new_state()
         st.session_state.needs_regen = False
+        st.session_state.session_id = f"sess_{uuid.uuid4().hex[:16]}"
+        st.session_state["_pending_step"] = None
         st.rerun()
     st.divider()
 
@@ -240,7 +318,8 @@ with left:
         st.error("모델 호출 예산 소진 — 새 답변을 만들 수 없습니다. "
                  "되묻기·선택지·슬롯 수정은 계속 동작합니다 (콜 0).")
     elif _left_calls <= LOW_CALL_WARN:
-        st.warning(f"남은 모델 호출 {_left_calls}회. 답변 1건당 2콜(분류+생성)을 씁니다.")
+        st.warning(f"남은 모델 호출 {_left_calls}회. "
+                   "경로에 따라 OOS 분류 또는 답변 생성에 호출을 씁니다.")
     st.caption("되묻기 턴은 ⓐ 모드에서 콜을 쓰지 않습니다. 예산 소진 시 앱 재시작으로 리셋됩니다.")
 
     # 예시 UI처럼 좌측은 세션 상태 · 근거 문서만 상시 노출한다. 큐폼 설정(및 트레이스 토글)은
@@ -399,6 +478,32 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
     # 근거 문서·검증 플래그는 우측 "근거 자료" 컬럼으로 옮겼다(render_evidence_card).
     # 첨부파일 다운로드는 대화 흐름과 붙어 있는 게 자연스러워 말풍선에 그대로 둔다.
     render_attachments(r.get("attachments") or [], key_prefix)
+    action = (r.get("_meta") or {}).get("action")
+    if action == "REFERRAL" and r.get("referral"):
+        ref = r["referral"]
+        st.caption(f"안내처 · {ref['org']}")
+        if ref.get("url"):
+            st.link_button("공식 안내 페이지", ref["url"])
+        if ref.get("phone"):
+            st.write(f"전화: {ref['phone']}")
+        if ref.get("hours"):
+            st.caption(f"운영시간: {ref['hours']}")
+    if action == "PHONE_GUIDE":
+        if st.button("유선 상담 안내", key=f"phone-{key_prefix}"):
+            st.session_state[f"phone-open-{key_prefix}"] = True
+        if st.session_state.get(f"phone-open-{key_prefix}"):
+            guide = r.get("phone_guide")
+            if guide:
+                st.write(guide["message"])
+                st.write(f"대표번호: {guide['phone']}")
+                st.caption(f"운영시간: {guide['hours']}")
+            else:
+                st.caption("현재 게시·활성화된 유선 상담 정보가 없습니다.")
+#    if not r["checks"]["ok"]:
+#        with st.expander("⚑ 검증 플래그 (차단 아님)"):
+#            for f in r["checks"]["flags"]:
+#                st.markdown(f"- {f}")
+#    우측 근거 
 
     # reject 복구 경로 (T6 B4) — 소관 밖이라고 끝내면 그 화면이 막다른 길이 된다.
     # **타기관 이름·URL 을 붙이지 않는다.** HOLES H7 이 열려 있어 근거가 없고,
@@ -813,19 +918,33 @@ def record(ev: dict, trace: dict | None = None) -> None:
     """전이 이벤트를 히스토리에 적재 — 렌더가 읽을 형태로만 옮긴다."""
     if ev["kind"] == "ask":
         a = ev["ask"]
-        st.session_state.history.append(
+        append_history(
             {"role": "ask", "prompt": ev["prompt"], "remaining": ev["remaining"],
              "mode": a["mode"], "calls": a["calls"], "fallback": a["fallback_reason"],
-             "trace": trace}
+             "trace": trace, "unit": ev.get("unit"), "routing": ev.get("routing")}
         )
     else:
         # 후속 추천은 여기서 **한 번** 계산해 히스토리에 굳힌다. 매 렌더마다 다시 뽑으면
         # 나중 턴의 슬롯이 과거 답변의 추천을 바꿔 버린다. 결정론이고 콜 0 이다.
-        st.session_state.history.append(
-            {"role": "answer", "r": ev["result"], "slots": ev["slots"],
-             "search_q": ev["boosted"], "query": ev["search_q"], "trace": trace,
-             "followups": qform_followup.suggest(ev["slots"])}
-        )
+        #append_history(
+        #    {"role": "answer", "r": ev["result"], "slots": ev["slots"],
+        #     "search_q": ev["boosted"], "trace": trace,
+        #     "followups": qform_followup.suggest(ev["slots"]),
+        #     "unit": ev.get("unit"), "routing": ev.get("routing")}
+        #)
+        append_history(
+            {
+                "role": "answer",
+                "r": ev["result"],
+                "slots": ev["slots"],
+                "search_q": ev["boosted"],
+                "query": ev["search_q"],
+                "trace": trace,
+                "followups": qform_followup.suggest(ev["slots"]),
+                "unit": ev.get("unit"),
+                "routing": ev.get("routing"),
+            }
+          )
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -985,7 +1104,7 @@ if _edit:
     field, value, source, note = _edit
     ev = qform_flow.edit(flow, field, value, source=source, ask_mode=ASK_MODE,
                          config=CONFIG)
-    st.session_state.history.append({"role": "user", "text": note})
+    append_history({"role": "user", "text": note})
     if ev["kind"] == "ask":
         st.session_state.needs_regen = False        # 되물으니 재생성 버튼은 필요 없다
         record(ev, build_trace(ev, 0))
@@ -1011,7 +1130,7 @@ if skip and pending:
 
 if chosen == _ESCAPE and pending:
     # K9 [이대로 답변받기] — ver2 탈출구(`skip`)를 버튼으로 한 번 더 연 것이다.
-    st.session_state.history.append({"role": "user", "text": "이대로 답변받기"})
+    append_history({"role": "user", "text": "이대로 답변받기"})
     with st.spinner("처리 중…"):
         c0 = chain._calls
         ev = qform_flow.skip(flow, boost=BOOST, config=CONFIG)
@@ -1023,13 +1142,13 @@ if chosen == _PASS and pending:
     # K5 ⏭ pass — 이 슬롯은 답하지 않겠다. `asked` 에 기록해 재질문을 막는다.
     # **`answer()` 를 부르지 않는다.** X(오염 차단)와 달리 여기서 대화가 멈춘다.
     _slot = flow.get("pending_slot")
-    st.session_state.history.append({"role": "user", "text": "이건 넘어갈게요"})
+    append_history({"role": "user", "text": "이건 넘어갈게요"})
     qmp.apply(flow, "pass", field=_slot)
     st.rerun()
 
 if chosen and pending:
     # 버튼 경로 — `value=` 로 값을 직접 주입한다. 자연어 추출을 경유하지 않는다.
-    st.session_state.history.append({"role": "user", "text": chosen})
+    append_history({"role": "user", "text": chosen})
     with st.spinner("처리 중…"):
         c0 = chain._calls
         ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE,
@@ -1048,12 +1167,38 @@ if _panel_action:
 # (후속 추천은 새 질의가 아니라 슬롯 좁히기라 위 `_edit` 경로로 빠진다.)
 q_new, q_reply = (chip_q, None) if chip_q else ((None, q) if pending else (q, None))
 
-if q_new or q_reply:
+next_queued = False
+if flow.get("unit_queue") and not pending:
+    with left:
+        st.info(f"대기 중인 용건이 {len(flow['unit_queue'])}개 있습니다.")
+        next_queued = st.button("다음 용건 처리", key="next-unit", type="primary")
+
+if next_queued:
+    with st.spinner("다음 용건 처리 중…"):
+        c0 = chain._calls
+        ev = orchestrator.next_unit(flow, ask_mode=ASK_MODE, boost=BOOST, config=CONFIG,
+                                    report_context=report_context())
+        if ev:
+            record(ev, build_trace(ev, chain._calls - c0))
+    st.rerun()
+
+#if q_new or q_reply:
     # 2단계 렌더: 여기서는 사용자 메시지만 히스토리에 넣고 바로 rerun한다 — 그래야
     # 답변을 기다리는 동안에도 "내가 방금 뭘 물어봤는지"가 대화창에 바로 보인다.
     # 실제 검색·생성은 `with center:` 안, 메시지 목록 바로 아래(입력창 바로 위)에서
     # `_pending_step`을 보고 처리한다 — 그래야 로딩 표시가 그 자리에 뜬다.
+#    text = q_new or q_reply
+#    st.session_state.history.append({"role": "user", "text": text})
+#    st.session_state["_pending_step"] = {"text": text, "is_reply": bool(q_reply)}
+#    st.rerun()
+    
+if q_new or q_reply:
     text = q_new or q_reply
-    st.session_state.history.append({"role": "user", "text": text})
-    st.session_state["_pending_step"] = {"text": text, "is_reply": bool(q_reply)}
-    st.rerun()
+    previous_target = last_answer_id()
+    append_history({"role": "user", "text": text})
+    st.session_state["_pending_step"] = {
+        "text": text,
+        "is_reply": bool(q_reply),
+        "previous_target": previous_target,
+    }
+    st.rerun()    

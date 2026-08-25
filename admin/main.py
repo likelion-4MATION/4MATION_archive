@@ -12,6 +12,8 @@
 from __future__ import annotations
 
 import pathlib
+import asyncio
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
@@ -22,11 +24,31 @@ import attachments as att
 import guards
 import jobs
 import metrics
+import oos_store
 import registry
 import settings
 
 BASE = pathlib.Path(__file__).resolve().parent
-app = FastAPI(title="KDIC 챗봇 관리자 콘솔", version="1.0")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """관리자 서버가 떠 있는 동안 만료 신고를 주기적으로 삭제한다."""
+    oos_store.purge_expired()
+
+    async def cleanup_loop():
+        while True:
+            await asyncio.sleep(3600)
+            await asyncio.to_thread(oos_store.purge_expired)
+
+    task = asyncio.create_task(cleanup_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+
+
+app = FastAPI(title="KDIC 챗봇 관리자 콘솔", version="1.0", lifespan=lifespan)
 
 
 # ── 스키마 ──────────────────────────────────────────────────────────────
@@ -82,6 +104,24 @@ class ExtraBody(BaseModel):
 
 class LinkBody(BaseModel):
     link: dict
+
+
+class ReferralBody(BaseModel):
+    referral: dict
+    actor: str = "admin"
+
+
+class PhoneGuideBody(BaseModel):
+    phone_guide: dict
+    actor: str = "admin"
+
+
+class ReportUpdateBody(BaseModel):
+    status: str | None = None
+    assigned_to: str | None = None
+    duplicate_of: str | None = None
+    note: str | None = None
+    actor: str = "admin"
 
 
 # ── 설정 ────────────────────────────────────────────────────────────────
@@ -330,10 +370,99 @@ def api_dashboard():
         "health": metrics.health(),
         "business": metrics.business_mix(),
         "guards": guards.stats(),
+        "oos": oos_store.oos_stats(),
         "evidence": {"preset": metrics.ACC_PRESET, "k": metrics.ACC_K,
                      "chunk": metrics.ACC_CHUNK, "baseline": metrics.BASELINE,
                      "current": metrics.current_point()},
     }
+
+
+# ── OOS 안내처 · 상담 안내 · 오류 신고 ───────────────────────────────────
+@app.get("/api/oos/schema")
+def api_oos_schema():
+    return {"referral_statuses": sorted(oos_store.REFERRAL_STATUSES),
+            "report_statuses": list(oos_store.REPORT_STATUSES),
+            "link_states": sorted(oos_store.LINK_STATES)}
+
+
+@app.get("/api/oos/referrals")
+def api_oos_referrals():
+    return {"referrals": oos_store.list_referrals()}
+
+
+@app.post("/api/oos/referrals/preview")
+def api_oos_referral_preview(body: ReferralBody):
+    row = body.referral
+    errors = oos_store.validate_referral(row, publishing=row.get("status") == "published")
+    conflicts = oos_store.referral_conflicts(row) if row.get("status") == "published" else []
+    if conflicts:
+        errors.append("기존 게시 행과 트리거가 충돌합니다: " + ", ".join(conflicts))
+    response = None if errors else {
+        "message": str(row.get("message") or ""), "org": str(row.get("org") or ""),
+        "url": str(row.get("url") or ""), "phone": str(row.get("phone") or ""),
+        "hours": str(row.get("hours") or ""),
+    }
+    return {"ok": not errors, "errors": errors, "response": response,
+            "positive": [{"text": q, "matched": oos_store.triggers_match(
+                q, oos_store._terms(row.get("required_triggers")),
+                oos_store._terms(row.get("excluded_triggers")))}
+                for q in oos_store._terms(row.get("positive_examples"))],
+            "negative": [{"text": q, "matched": oos_store.triggers_match(
+                q, oos_store._terms(row.get("required_triggers")),
+                oos_store._terms(row.get("excluded_triggers")))}
+                for q in oos_store._terms(row.get("negative_examples"))]}
+
+
+@app.post("/api/oos/referrals")
+def api_oos_referral_save(body: ReferralBody):
+    res = oos_store.upsert_referral(body.referral, body.actor)
+    if not res.get("ok"):
+        return JSONResponse(status_code=400, content=res)
+    return res
+
+
+@app.get("/api/oos/phone-guide")
+def api_oos_phone_guide():
+    return {"phone_guide": oos_store.get_phone_guide()}
+
+
+@app.post("/api/oos/phone-guide")
+def api_oos_phone_guide_save(body: PhoneGuideBody):
+    res = oos_store.save_phone_guide(body.phone_guide, body.actor)
+    if not res.get("ok"):
+        return JSONResponse(status_code=400, content=res)
+    return res
+
+
+@app.get("/api/oos/reports")
+def api_oos_reports(status: str | None = None, q: str = "", limit: int = 100, offset: int = 0):
+    if status and status not in oos_store.REPORT_STATUSES:
+        raise HTTPException(400, "허용되지 않은 처리 상태입니다.")
+    return oos_store.list_reports(status=status, query=q, limit=limit, offset=offset)
+
+
+@app.get("/api/oos/reports/{report_id}")
+def api_oos_report(report_id: str):
+    row = oos_store.get_report(report_id)
+    if not row:
+        raise HTTPException(404, "신고를 찾을 수 없습니다.")
+    return row
+
+
+@app.post("/api/oos/reports/{report_id}")
+def api_oos_report_update(report_id: str, body: ReportUpdateBody):
+    res = oos_store.update_report(report_id, status=body.status,
+                                  assigned_to=body.assigned_to, duplicate_of=body.duplicate_of,
+                                  note=body.note,
+                                  actor=body.actor)
+    if not res.get("ok"):
+        return JSONResponse(status_code=400, content=res)
+    return res
+
+
+@app.post("/api/oos/actions/purge-expired")
+def api_oos_reports_purge():
+    return {"ok": True, "deleted": oos_store.purge_expired()}
 
 
 # ── 정적 서빙 ───────────────────────────────────────────────────────────

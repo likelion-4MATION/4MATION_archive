@@ -13,7 +13,7 @@ ALL 조건을 세울 수 없다(69문항). 그래서 판정이 ALL이 아니라 
   **앵커를 만들어내지 않는다.** 앵커 없는 gold 청크의 근거 문장은 원문에 라벨이 없어
   결정론적으로 도출할 수 없다. 추론으로 채우면 창작이므로 비워 두고 건수로 드러낸다.
   그 칸을 메우는 것은 라벨 작업(파이프라인 문서 ① 앵커 선정)의 몫이며, 그 전까지
-  eval_anchor_v3는 앵커 없는 gold를 chunk_id로 판정한다(하이브리드).
+  eval.py chunk 판정은 앵커 없는 gold를 chunk_id로 판정한다(하이브리드).
 
 사용:
   python promote_gt_anchors.py --gt gt_testset_retrieval_450.jsonl
@@ -34,7 +34,7 @@ DEFAULT_CHUNKS = "data/chunks.jsonl"
 
 
 def norm_text(text: str) -> str:
-    """eval_anchor_v3._norm_text와 동일 규칙 — 공백만 흡수, 문자는 보존."""
+    """eval._norm_text와 동일 규칙 — 공백만 흡수, 문자는 보존."""
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", text or ""))
 
 

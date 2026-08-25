@@ -22,8 +22,8 @@
   short     자기 식별 정보가 없는 짧은 청크에만 leaf 적용 (SHORT_LEN 미만)
 
 사용:
-  cd crawler && python eval_docinput.py
-  cd crawler && python eval_docinput.py --sets 430 355 --variants cur leaf short
+  cd crawler && python exp_docinput.py
+  cd crawler && python exp_docinput.py --sets 430 355 --variants cur leaf short
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ import statistics
 import numpy as np
 
 import rag
-import eval_anchor_v3 as ev3
+import eval as ev3
 from tune_params import _topk_lists
 
 SHORT_LEN = 200        # 'short' 변형이 문맥을 붙일 청크 길이 임계

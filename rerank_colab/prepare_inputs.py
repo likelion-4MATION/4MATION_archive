@@ -29,7 +29,7 @@ OUT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(OUT_DIR.parent / "crawler"))
 
 import rag                          # noqa: E402
-import eval_anchor_v3 as ev3        # noqa: E402
+import eval as ev3        # noqa: E402
 
 DEPTH = 30          # 리랭크 깊이 상한. depth 10/30 스윕을 덮는다(50은 미포함)
 # 앵커 보강 GT를 쓴다 — 재청킹으로 깨진 id 폴백을 수기 앵커로 메운 판(DECISIONS 08-18 ③).

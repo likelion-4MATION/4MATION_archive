@@ -16,18 +16,20 @@ REPO = settings.REPO
 CRAWLER = REPO / "crawler"
 
 # ── 실측 정확도 (지표: 앵커 hit@5) ─────────────────────────────────────
+# 상수표와 재빌드 실측 모두 **앵커텍스트 판정**이다. chunk_id 판정값은 지표로 쓰지
+# 않는다 — 재청킹하면 id 좌표가 변해 수치가 판정 방식 때문에 움직인다.
 # 출처: crawler/data/tune_v2_summary.md · eval_overlap_report.md · eval_tablefix_report.md
 ACC_PRESET = {"accuracy": 0.9054, "balanced": 0.8946, "diverse": 0.8892}
-ACC_K = {3: 0.8108, 5: 0.9081}                     # eval_tablefix K3/K5 (181청크)
+ACC_K = {3: 0.8108, 5: 0.9081}                     # exp_tablefix K3/K5 (181청크)
 ACC_CHUNK = {                                       # "size|overlap|table_keep"
     "800|100|1": {"chunks": 181, "all": 0.8977, "single": 0.9081, "and": 0.8182,
-                  "src": "eval_tablefix on gap≤12 (현행)"},
+                  "src": "exp_tablefix on gap≤12 (현행)"},
     "800|100|0": {"chunks": 215, "all": 0.8209, "single": 0.8946, "and": 0.3091,
-                  "src": "eval_tablefix off (구 설정)"},
+                  "src": "exp_tablefix off (구 설정)"},
     "800|200|0": {"chunks": 218, "all": 0.8163, "single": 0.8892, "and": 0.3091,
-                  "src": "eval_overlap OVERLAP=200"},
+                  "src": "exp_overlap OVERLAP=200"},
     "800|300|0": {"chunks": 222, "all": 0.8116, "single": 0.8811, "and": 0.3273,
-                  "src": "eval_overlap OVERLAP=300"},
+                  "src": "exp_overlap OVERLAP=300"},
 }
 BASELINE = {"acc": 0.9081, "calls": 1.72, "latency": 4.0, "cost": 9.7}
 
@@ -42,12 +44,18 @@ def _measured_at_k(m: dict, k: int) -> dict | None:
 
     관리자가 고르는 `k` 는 답변에 넣을 문서 수라, 이 값이 그대로 그 의미가 된다.
     러너는 hit@1·3·5·10 만 내므로 k=2·4 는 실측이 없다(만들지 않는다).
+
+    러너의 `hit@k` 는 **앵커텍스트 판정값**이다(`runner.run_eval`). 그래서 계열 이름을
+    `anchor hit@k` 로 돌려준다 — 프런트의 `fam()` 이 이 접두어로 계열을 가르므로,
+    여기서 이름을 흘리면 A/B 표(앵커 계열)와 실측이 서로 못 뺀다고 잘못 경고한다.
     """
     v = (m or {}).get(f"hit@{int(k)}")
     if v is None:
         return None
-    return {"value": v, "grade": "measured", "metric": f"hit@{int(k)}",
+    n = m.get("n_evaluated")
+    return {"value": v, "grade": "measured", "metric": f"anchor hit@{int(k)}",
             "src": f"재빌드 실측 {str(m.get('at', ''))[:10]} · {m.get('chunks', '?')}청크 "
+                   f"{f'· 앵커 채점 {n}문항 ' if n else ''}"
                    f"— 정답 근거가 상위 {int(k)}개 안에 들 확률"}
 
 
@@ -85,8 +93,8 @@ def accuracy_for(cfg: dict, changed: list[str], measured: dict | None = None) ->
         if got:
             return got
         v = ACC_K.get(int(cfg["k"]))
-        return ({"value": v, "grade": "measured", "metric": f"hit@{int(cfg['k'])}",
-                 "src": f"eval_tablefix K{int(cfg['k'])} (181청크)"}
+        return ({"value": v, "grade": "measured", "metric": f"anchor hit@{int(cfg['k'])}",
+                 "src": f"exp_tablefix K{int(cfg['k'])} (181청크)"}
                 if v is not None else
                 {"value": None, "grade": "unmeasured", "metric": None,
                  "src": f"k={int(cfg['k'])}는 실측이 없습니다 (러너는 hit@1·3·5·10만 냅니다)"})
@@ -117,9 +125,9 @@ def current_point() -> dict:
     if m.get("anchor_hit@5") is not None or m.get("hit@5") is not None:
         return {"key": key, "chunks": m.get("chunks") or c.get("chunks"),
                 "all": m.get("anchor_hit@5"), "single": None, "and": None,
-                "chunk_hit5": m.get("hit@5"), "grade": "measured",
+                "chunk_hit5": m.get("chunk_hit@5"), "grade": "measured",
                 "src": (f"재빌드 실측 {str(m.get('at', ''))[:10]} · "
-                        f"{m.get('n_evaluated', '?')}문항 · {m.get('chunks', '?')}청크")}
+                        f"앵커 채점 {m.get('n_evaluated', '?')}문항 · {m.get('chunks', '?')}청크")}
     hit = ACC_CHUNK.get(key)
     if hit:
         return {"key": key, "chunks": hit["chunks"], "all": hit["all"],

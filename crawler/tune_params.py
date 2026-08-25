@@ -8,12 +8,12 @@
   그 뒤 RRF·부스트는 전부 (질의 × 청크) 행렬 연산이라, config마다 재검색·재임베딩이
   없다. 부스트 대상 마스크(업무 일치 / 패싯 일치)도 config와 무관해 미리 굳힌다.
 
-판정은 eval_anchor_v3와 같은 규약을 쓴다. 다만 매 config마다 dict를 돌리면 느리므로
+판정은 eval.py chunk 판정과 같은 규약을 쓴다. 다만 매 config마다 dict를 돌리면 느리므로
 문항별 '필요 조건 집합'으로 미리 접어 둔다:
   ANY(single/or/near_dup/duplicate/contained): 후보 집합 중 하나라도 top-k와 교차
   AND(and): 모든 필요 집합이 각각 top-k와 교차
   집합 = (그 앵커를 담은 청크들) 또는 (앵커 없는 gold 청크 1개)
-이 표현이 eval_anchor_v3._anchor_hit_at_k와 동치임은 --verify로 실측 대조한다.
+이 표현이 eval._anchor_hit_at_k와 동치임은 --verify로 실측 대조한다.
 
 사용:
   python tune_params.py --gt ../final_testset/gt_natural430.jsonl
@@ -32,7 +32,7 @@ import time
 import numpy as np
 
 import rag
-import eval_anchor_v3 as ev3
+import eval as ev3
 
 # 1차 스윕(alpha≤0.65, rrf_k≥1)에서 최적점이 alpha·rrf_k 양쪽 경계에 붙었다 —
 # 경계에 붙은 값은 최적점이 아니라 "그리드가 좁다"는 신호라 범위를 확장했다.
@@ -229,7 +229,7 @@ def main() -> int:
         return _score(B["need"], tops), _score(B["need_id"], tops)
 
     if args.verify:
-        # 현행 파라미터로 이 스크립트의 판정이 eval_anchor_v3와 같은지 대조
+        # 현행 파라미터로 이 스크립트의 판정이 eval.py chunk 판정과 같은지 대조
         a, i = run(rag.RRF_ALPHA, rag.RRF_K, rag.BF_BOOST, rag.FACET_BOOST, rag.BF_DOC_CAP)
         s = B["searcher"]
         ret = [{"id": it["id"],
@@ -240,7 +240,7 @@ def main() -> int:
                   pathlib.Path("data/chunks.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
         r = ev3.evaluate_retrieval(B["items"], ret, chunks, score="both")
         print("\n=== 동치 확인 (현행 파라미터) ===")
-        print(f"{'지표':<8}{'tune_params':>13}{'eval_anchor_v3':>16}{'차':>9}")
+        print(f"{'지표':<8}{'tune_params':>13}{'eval.py':>16}{'차':>9}")
         for k in ("hit@1", "hit@3", "hit@5", "hit@10", "mrr"):
             print(f"{k:<8}{a[k]:>13.4f}{r['anchor_level'][k]:>16.4f}{a[k]-r['anchor_level'][k]:>+9.4f}")
         return 0

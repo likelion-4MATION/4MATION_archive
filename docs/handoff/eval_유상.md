@@ -288,3 +288,52 @@ cd crawler && python eval_anchor_v3.py --gt ../final_testset/gt_natural430_ancho
    코퍼스가 계속 재생성되는 프로젝트이기 때문이다.
 7. 판정 결과는 **파일 단위로** 낸다(브랜치 단위 승자 선정 금지). GT는 A 브랜치,
    eval 스크립트는 B 브랜치가 정본일 수 있다.
+
+---
+
+## 부록 C. 2026-08-24 eval 통합 반영표 (제출서 본문 무수정 · 경로 변경 안내)
+
+> 본문(§1~§8·부록 A·B)은 제출 당시 상태로 **한 글자도 고치지 않았다.** 아래는 그 이후
+> 수합 작업에서 파일 경로가 바뀐 것만 옮겨 적은 것이다. 수치·판정 규약·GT 선정 결과는
+> 전부 그대로 유효하다. 근거: `DECISIONS.md` D13 (08-24).
+
+§3 이 열거한 평가 스크립트 6개를 **`crawler/eval.py` 한 파일로 합쳤다.** 이 제출서가
+"정본"으로 주장한 `eval_anchor_v3.py` 의 로직은 **이름 변경 0건으로** 통합 파일 §4 에
+이식했고, 등가성을 `crawler/tests/test_eval_equivalence.py` 가 회귀 테스트로 못박았다
+(구 평가기와 반환 dict·리포트 마크다운 바이트 동일 · faiss 없이 실행 가능).
+
+| 제출서 본문의 경로 | 현재 경로 | 실행 명령 |
+|---|---|---|
+| `crawler/eval_anchor_v3.py` (**정본**) | `crawler/eval.py` §4 | `python eval.py chunk --gt …` (인자 없이 `python eval.py` 도 동일) |
+| `crawler/eval.py` (구세대·폐기) | `archive/superseded/eval_doc_legacy.py` | 기본 평가셋 `data/testset_natural_400.jsonl` 부재 → 실행 불가 |
+| `crawler/eval_TF.py` | `archive/superseded/eval_TF.py` | 기본 평가셋 `data/router_trainset_v1.jsonl` 부재 → 실행 불가 |
+| `crawler/eval_pair.py` | `archive/superseded/eval_pair.py` | 기본 평가셋 `data/testset_natural.jsonl` 부재 → 실행 불가 |
+| `crawler/eval_tablefix.py` | `crawler/exp_tablefix.py` | `python exp_tablefix.py` |
+| `crawler/eval_router_facet.py` | `crawler/exp_router_facet.py` | `python exp_router_facet.py` |
+| `crawler/eval_overlap.py` | `crawler/exp_overlap.py` | `python exp_overlap.py` |
+| `crawler/eval_docinput.py` | `crawler/exp_docinput.py` | `python exp_docinput.py` |
+| (제출서 미기재) `eval_anchor_span_multi.py` | `crawler/eval.py` §5 | `python eval.py span --gt …` |
+| (제출서 미기재) `eval_anchor_gold.py` | `crawler/eval.py` §6 | `python eval.py gold --gt … --retrieved …` |
+
+산출 리포트 기본 파일명도 바뀌었다 — `eval_anchor_v3_report.md` → `eval_chunk_report.md`,
+`eval_anchor_span_multi_report.md` → `eval_span_report.md`. §4-B 가 인용한 **커밋된 리포트
+파일들은 덮이지 않는다**(옛 이름 그대로 남는다). 실험 스크립트의 산출물명
+(`eval_tablefix_report.md` 등)은 `admin/metrics.py` 가 수치 근거로 인용하고 있어 **바꾸지 않았다.**
+
+### 부록 A 명령 갱신분
+
+```bash
+# 정본 평가 재현 (제출서 부록 A 마지막 줄의 현행 등가 명령)
+cd crawler && python eval.py chunk --gt ../final_testset/gt_natural430_anchored.jsonl
+
+# 통합이 판정을 바꾸지 않았음을 확인 (검색 스택 불필요)
+python3 crawler/tests/test_eval_equivalence.py
+```
+
+### §8 미결 사항에 대한 영향
+
+§8 의 6개 미결 사항은 **하나도 해소되지 않았다.** 통합은 코드 배치만 바꿨고
+코퍼스 지문(178 vs 181) · 리포트 재생성 · 주지표 정의 · TEST/VAL 축 선정 · 앵커 결측 34문항 ·
+라우터 배포 방식은 전부 그대로 열려 있다. 특히 §8-2("커밋된 .md 에 정본 수치가 없다")는
+리포트 기본 파일명이 바뀌면서 **옛 리포트가 덮이지 않게 됐을 뿐**이며, 앵커 채점으로
+재생성할지 결론문서 §1 을 수치 원천으로 인정할지는 여전히 미결이다.

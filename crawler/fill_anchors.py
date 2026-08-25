@@ -18,7 +18,7 @@ verbatim 존재. 검색되기 쉬운 문장을 고르는 게 아니라 그 청�
 """
 from __future__ import annotations
 import argparse, json, pathlib, sys
-import eval_anchor_v3 as ev3
+import eval as ev3
 
 def main() -> int:
     ap = argparse.ArgumentParser()

@@ -45,10 +45,8 @@ PARAMS = [
        "엄격: 출처 목록에 없는 링크는 본문에 있었더라도 경고 표시(권장).", tab=1),
 
     # ── ② 응답 속도·비용 ───────────────────────────────────────────
-    _p("earlyBlock", "소관 밖 질문 즉시 안내", "bool", True, "normal", "runtime",
-       "chatbot/chain.py:_route", "소관 밖 질문은 검색·생성 없이 바로 안내합니다. 가장 큰 속도 개선.", tab=2),
-    _p("linkRoute", "타기관 연락처 안내", "bool", True, "normal", "runtime",
-       "chatbot/chain.py:_route (link)", "워크아웃·보이스피싱·휴면계좌 등은 담당기관 연락처까지 안내.", tab=2),
+    # OOS 조기차단과 안내처 사용은 확정 정책이라 토글하지 않는다. ⑧ OOS 안내처의
+    # 게시·활성 상태가 실제 노출을 결정한다(옛 earlyBlock/linkRoute 설정은 폐기).
     _p("askMode", "되묻기 문구 생성 방식", "enum", "template", "normal", "runtime",
        "chatbot/qform_ask.py:build_question(mode=)",
        "정해진 문구=추가 비용 0 / AI 생성=되물을 때마다 비용 발생.",
@@ -152,10 +150,10 @@ GOLDEN = {
     "value": 0.9081,
     "metric": "anchor hit@5",
     "chunks": 181,
-    "src": "eval_tablefix (181청크 · 표 유지 on) · 검색 5축은 tune_params_v2 8,064조합 그리드",
-    "caveat": "이 0.9081은 **앵커 hit@5**이고 **181청크** 코퍼스 기준입니다. 지금 대시보드의 "
-              "청크 hit@5와 직접 비교되지 않습니다. 되돌린 뒤 [한 번에 실행]으로 같은 잣대의 "
-              "수치를 다시 재세요.",
+    "src": "exp_tablefix (181청크 · 표 유지 on) · 검색 5축은 tune_params_v2 8,064조합 그리드",
+    "caveat": "이 0.9081은 **181청크** 코퍼스에서 잰 값입니다. 판정 잣대(앵커 hit@5)는 "
+              "지금 대시보드와 같지만 코퍼스가 다릅니다 — 되돌린 뒤 [한 번에 실행]으로 "
+              "현재 코퍼스에서 다시 재세요.",
     "values": {**DEFAULTS, "k": 5},
 }
 

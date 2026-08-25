@@ -71,7 +71,9 @@ def new_state() -> dict:
             "slot_origin": {},                         # {슬롯: 신규|이월|미채움} — 트레이스
             "carryover": None,                         # 이월 판정 사유 (트레이스)
             "ask_bypass": None,                        # 되묻기 우회 사유 (ver3 T3)
-            "queue": [],                               # 대기 중인 용건 (ver4 K13)
+            "queue": [],                               # 기존 Qform 세부용건 큐 (ver4 K13)
+            "unit_queue": [],                          # 절별 BF/OOS 순차 큐
+            "routing_history": [],                     # 절별 6-BF/OOS 처리 기록
             "passed": []}                              # pass 로 확정 포기한 슬롯 (ver4 K5)
 
 
@@ -82,7 +84,7 @@ def _default_classify(query: str):
 
 def _default_answer(query: str, qform: dict):
     import chain                             # 지연 임포트 — 되묻기 턴에는 여기까지 오지 않는다
-    return chain.answer(query, qform=qform)
+    return chain.answer_in_scope(query, qform=qform)
 
 
 def _clean(slots: dict) -> dict:
@@ -142,7 +144,8 @@ def _carryover_gate(cfg: dict, cls_bf, prev_bf, prev: dict) -> tuple[bool, str]:
 
 
 def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = False,
-          classify_fn=None, answer_fn=None, llm_call=None, config=None) -> dict:
+          classify_fn=None, answer_fn=None, llm_call=None, config=None,
+          business_function: str | None = None, detect_multi: bool = True) -> dict:
     """새 질의 진입. 업무 판정을 **1회** 계산해 추출기에 주입한다(E3).
 
     ver3 T2 — **슬롯 이월.** 되묻기로 좁힌 슬롯이 다음 턴에 증발하지 않게 직전 턴
@@ -159,7 +162,10 @@ def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = 
     prev_turn = dict(state.get("slot_turn") or {})
     turn_no = int(state.get("turn_no") or 0) + 1
 
-    cls_bf = (classify_fn or _default_classify)(query)
+    # 상단 절별 라우터가 고른 BF가 있으면 그대로 쓴다. 기존 직접 호출은 None이라 현행
+    # classify_fn/_default_classify 경로를 유지한다.
+    cls_bf = business_function if business_function is not None \
+        else (classify_fn or _default_classify)(query)
     allow, reason = _carryover_gate(cfg, cls_bf, prev_bf, prev)
     # 업무 불명이면 직전 업무를 물려 추출기에 넣는다 — "그럼 법인은요?" 가 스코프
     # 게이트에 걸려 슬롯 0개로 죽는 것을 막는다. 이월이 막힌 턴에서는 상속하지 않는다.
@@ -210,7 +216,7 @@ def start(state: dict, query: str, *, ask_mode: str = "template", boost: bool = 
     # `extract()` 가 고른 것 그대로이며(=기존 경로 무변경), 나머지만 적재한다.
     # `classify_fn` 을 넘기지 않는다 — 절마다 업무 판정을 돌리면 E3(업무 판정 1회)이
     # 깨진다. 업무 교차 감지는 화면이 명시로 부른다(`detect_intents(q, classify_fn=…)`).
-    if cfg.get("MAX_QUEUE", 0):
+    if detect_multi and cfg.get("MAX_QUEUE", 0):
         import qform_memory_panel              # 지연 임포트 — 순환 참조 방지
         intents = qform_memory_panel.detect_intents(
             query, score_fn=qform_memory_panel.bf_scores, scope=cfg.get("QFORM_SCOPE"))
