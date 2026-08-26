@@ -141,6 +141,16 @@ def test_static_response_has_browser_security_headers():
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
 
 
+def test_sidebar_uses_plain_list_and_collapsible_memory():
+    root = Path(__file__).resolve().parents[1]
+    html = (root / "web" / "static" / "index.html").read_text(encoding="utf-8")
+    script = (root / "web" / "static" / "app.js").read_text(encoding="utf-8")
+
+    assert '<ul id="question-history"' in html
+    assert '<details id="memory-section"' in html
+    assert "고치면 →" not in script
+
+
 def test_attachment_cannot_escape_crawler_file_directory():
     client, _service = client_and_service()
     sid = client.post("/api/sessions", json={}).json()["session_id"]

@@ -24,13 +24,13 @@
 
         <section class="side-section">
           <h2>현재 대화</h2>
-          <ol id="question-history" class="question-history"></ol>
+          <ul id="question-history" class="question-history"></ul>
         </section>
 
-        <section id="memory-section" class="side-section" hidden>
-          <h2>기억</h2>
+        <details id="memory-section" class="side-section memory-section" hidden>
+          <summary><span>기억</span><span id="memory-count" class="memory-count"></span></summary>
           <div id="memory"></div>
-        </section>
+        </details>
 
         <section class="side-section admin-settings">
           <details>
@@ -92,4 +92,3 @@
   <script src="/static/app.js" defer></script>
 </body>
 </html>
-

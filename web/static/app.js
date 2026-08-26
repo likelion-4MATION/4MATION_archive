@@ -228,6 +228,25 @@ function slotLabel(field) {
   return { party: "역할", sub_task: "세부주제", qualification: "자격", subject: "주체", method: "접수수단" }[field] || field;
 }
 
+function memoryValue(item) {
+  if (item.passed) return "다시 묻지 않도록 건너뜀";
+  if (Array.isArray(item.value)) return item.value.filter(Boolean).join(", ");
+  if (item.value && typeof item.value === "object") return Object.values(item.value).filter(Boolean).join(", ");
+  return item.value === null || item.value === undefined ? "" : String(item.value);
+}
+
+function runMemoryAction(item, op) {
+  const payload = { type: "memory", op };
+  if (item.field) payload.field = item.field;
+  if (item.index !== undefined) payload.index = item.index;
+  if (op === "edit") {
+    const value = window.prompt(`${item.label || item.field} 값을 입력해 주세요.`, memoryValue(item));
+    if (value === null || !value.trim()) return;
+    payload.value = value.trim();
+  }
+  performAction(payload);
+}
+
 function renderConversationActions() {
   const root = $("#conversation-actions");
   root.replaceChildren();
@@ -261,25 +280,36 @@ function renderSidebar() {
   const memory = ui.snapshot.state.memory;
   const memoryRoot = $("#memory");
   memoryRoot.replaceChildren();
-  const zones = memory?.zones || [];
-  $("#memory-section").hidden = !zones.length;
+  const zoneNotes = {
+    "적용 중": "현재 답변에 반영되는 조건",
+    "기억만 함": "다음 질문에 이어지는 정보",
+    "대기 중인 용건": "이어서 처리할 질문",
+  };
+  const zones = (memory?.zones || []).map((zone) => ({
+    ...zone,
+    items: (zone.items || []).filter((item) => Boolean(memoryValue(item))),
+  })).filter((zone) => zone.items.length);
+  const memoryCount = zones.reduce((count, zone) => count + zone.items.length, 0);
+  $("#memory-section").hidden = memoryCount === 0;
+  $("#memory-count").textContent = `${memoryCount}개`;
   for (const zone of zones) {
     const zoneNode = element("section", { className: "memory-zone" });
-    zoneNode.append(element("h3", { text: zone.label || zone.name || "기억" }));
-    for (const item of zone.items || []) {
+    const zoneName = zone.label || zone.name || "기억";
+    zoneNode.append(
+      element("h3", { text: zoneName }),
+      element("p", { className: "memory-zone-note", text: zoneNotes[zoneName] || "저장된 대화 정보" }),
+    );
+    for (const item of zone.items) {
       const itemNode = element("div", { className: "memory-item" });
-      itemNode.append(
-        element("strong", { text: item.headline || item.label || item.field || "항목" }),
-        element("span", { text: item.effect ? `고치면 → ${item.effect}` : (item.status || "") }),
-      );
+      const head = element("div", { className: "memory-item-head" });
+      head.append(element("strong", { text: item.headline || item.label || item.field || "항목" }));
+      if (item.status && item.status !== "적용") head.append(element("span", { className: "memory-status", text: item.status }));
+      itemNode.append(head, element("span", { className: "memory-value", text: memoryValue(item) }));
       if (item.actionable && item.ops?.length) {
         const actions = element("div", { className: "memory-actions" });
         for (const op of item.ops) {
           const labels = { edit: "수정", clear: "해제", pass: "건너뛰기", move: "위로", drop: "삭제" };
-          const payload = { type: "memory", op };
-          if (item.field) payload.field = item.field;
-          if (item.index !== undefined) payload.index = item.index;
-          actions.append(button(labels[op] || op, () => performAction(payload), ""));
+          actions.append(button(labels[op] || op, () => runMemoryAction(item, op), ""));
         }
         itemNode.append(actions);
       }
