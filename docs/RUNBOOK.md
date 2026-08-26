@@ -1,81 +1,57 @@
-# RUNBOOK — 현재 통합 버전 실행 명령어 모음
+# RUNBOOK — 5개 축 실행 명령어 모음
 
-`feature/merge_v1` 기준(2026-08-25). 여섯 축(라우팅 · RAG · 크롤링+청킹 ·
-관리자 UI · 챗봇 · OOS)과 평가·검증을 실행하는 명령어만 모았다. 설계 근거는 각 모듈 docstring과
+`feature/merge` 기준. 다섯 축(라우팅 · RAG · 크롤링+청킹 · 관리자 UI · 챗봇)과
+평가·검증을 실행하는 명령어만 모았다. 설계 근거는 각 모듈 docstring과
 `docs/handoff/eval_유상.md` · `docs/router_checkpoint.md` 를 본다.
 
 > **경로 규칙** — `crawler/` 스크립트는 전부 **cwd 상대경로**(`data/...`)를 쓴다.
 > 반드시 `cd crawler` 후 실행한다. `chatbot/` · `admin/` 은 리포 루트 기준이거나
 > 스스로 `sys.path` 를 잡으므로 아래 표기대로 쓴다.
 
-> **셸 표기** — 아래 명령은 macOS·Linux(bash) 기준이다. Windows PowerShell 은 다음만 바꿔 읽는다.
+> **인터프리터 표기 (2026-08-25 갱신)** — 명령은 전부 `python` 으로 통일했다.
+> 예전 표기 `python3` 는 지웠다. venv 밖에서 `python` 과 `python3` 가 **다른 인터프리터**를
+> 가리키기 때문이다 (측정: Windows 11, `python`=3.12.10 `Python312\python.exe` /
+> `python3`=3.13.2 `Python313\python.exe`). 섞어 쓰면 문서 한 장 안에서 환경이 갈린다.
+> **venv 를 켠 뒤 실행하면** `python` `python3` 둘 다 venv 인터프리터로 간다.
 >
-> | bash | Windows PowerShell |
-> |---|---|
-> | `source .venv/bin/activate` | `.venv\Scripts\Activate.ps1` |
-> | `export FOO=bar` | `$env:FOO = "bar"` |
-> | `A && B` | `A; B` — Windows PowerShell 5.1 은 `&&` 를 모른다 |
-> | 줄 끝 `\` (줄 잇기) | 백틱 `` ` `` — 또는 한 줄로 붙여 쓴다 |
-> | `~/.cache/huggingface` | `%USERPROFILE%\.cache\huggingface` |
+> ```bash
+> source .venv/bin/activate          # macOS · Linux
+> .\.venv\Scripts\Activate.ps1      # Windows PowerShell
+> ```
 >
-> 명령 안에서는 `python3` 대신 **`python`** 을 쓴다 — Windows 에는 `python3` 가 없고
-> (스토어 앱이 열린다), 가상환경을 켠 뒤에는 어느 OS 든 `python` 이 3.x 다.
-> OS 를 가리는 것은 가상환경을 **만들 때 한 줄**뿐이다.
+> 이 리포엔 venv 가 `.venv` · `.venv-1` 둘 있다. 어느 쪽을 쓰는지 먼저 확인한다.
+
+> **셸 표기** — 아래 `export VAR=값` 은 bash/zsh 다. PowerShell 은 `$env:VAR="값"`,
+> `$PWD` 는 그대로 쓰고 `cp` 는 `Copy-Item` 이다. 한 줄짜리 앞붙임(`VAR=값 python ...`)은
+> PowerShell 에 없으므로 `$env:VAR="값"` 을 먼저 실행한다.
+>
+> 한글이나 `—`(em dash)를 출력하는 스크립트는 Windows 기본 코드페이지(cp949)에서
+> `UnicodeEncodeError` 로 죽는다. 내용 오류가 아니라 출력 단계 문제다. 세션 시작 시 한 번:
+>
+> ```powershell
+> $env:PYTHONIOENCODING="utf-8"
+> ```
 
 ---
 
 ## 0. 공통 준비
 
 ```bash
-# 리포지토리 루트에서 단일 가상환경 생성·활성화
-python3 -m venv .venv          # PowerShell: python -m venv .venv
-source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+# 검색 스택 (faiss · numpy · rank_bm25 · sentence-transformers · kiwi)
+pip install -r crawler/requirements.txt
 
-# 검색·라우터 + 관리자 + 챗봇·테스트
-python -m pip install -r crawler/requirements.txt
-python -m pip install -r admin/requirements.txt
-python -m pip install streamlit python-dotenv pytest
+# 관리자 콘솔 (FastAPI · uvicorn)
+pip install -r admin/requirements.txt
 
 # HCX 키 — .env (루트). chatbot/* 가 load_dotenv 로 읽는다
-# 기존 .env가 있으면 덮어쓰지 않는다
-test -f .env || cp .env.example .env
-# PowerShell: if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-# CLOVA_API_KEY · CLOVA_API_URL · CLOVA_MODEL을 편집한다
-$EDITOR .env                   # PowerShell: notepad .env
+#   CLOVA_API_KEY · CLOVA_API_URL · CLOVA_MODEL
+cp .env.example .env && $EDITOR .env
+# PowerShell: Copy-Item .env.example .env; notepad .env
 ```
 
 `admin` 과 `chatbot` 은 **같은 파이썬 환경**에 깔아야 한다. 콘솔의 `settings.apply_runtime()`
 이 `rag` · `chain` · `qform_config` 모듈 상수에 값을 주입하는 방식이라, 환경이 갈리면
 파라미터 조절이 챗봇에 닿지 않는다(`admin/runner.py:_need_stack`).
-
-현재 저장소에는 `Makefile`이 없다. 이 문서의 `python -m ...` 명령이 정본이며,
-예전 문서나 개인 셸 기록의 `make chat`, `make setup`은 그대로 실행되지 않는다.
-
-### 0-1. 현재 버전 바로 실행
-
-이미 `crawler/data/index`와 `.env`가 준비된 개발 환경에서는 터미널 두 개만 연다.
-
-터미널 1 — 관리자 콘솔:
-
-```bash
-source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
-cd admin
-python -m uvicorn main:app --host 127.0.0.1 --port 8600
-# http://127.0.0.1:8600
-```
-
-터미널 2 — 챗봇:
-
-```bash
-source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
-python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 8501
-# http://127.0.0.1:8501
-```
-
-관리자 서버는 `admin/data/oos.sqlite3`를 최초 실행 때 자동 생성한다. 이 파일은 Git에
-올리지 않는다. 실제 기관명·URL·전화번호는 시드하지 않으므로, 관리자 ⑧ 탭에서 공식 근거로
-검증한 뒤 `published + 활성 + 링크 정상` 상태로 게시해야 챗봇에 노출된다.
 
 ---
 
@@ -87,21 +63,12 @@ python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 
 타지 않는다 — `router_source.resolve()` 가 로컬을 먼저 보고, 매니페스트의 9개 파일이 전부
 있고 크기가 맞으면 로컬 경로를 돌려준다.
 
-> **Windows 주의 — 줄바꿈 변환** `router_manifest.json` 은 파일 **바이트 크기**로
-> 검증한다. `core.autocrlf=true` 로 체크아웃하면 텍스트 7종(`config.json` ·
-> `tokenizer.json` · `merges.txt` …)이 LF→CRLF 로 커져 크기 검증이 전부 깨지고,
-> `resolve()` 가 로컬을 버리고 HF 프라이빗 repo 로 폴백한다. 토큰이 없으면 그대로
-> 실패해 챗봇이 "처리 중 오류"만 낸다. 리포의 `.gitattributes` 가
-> `router_moai_embedding_model/** -text` 로 이를 막는다 — 이미 CRLF 로 받아 버렸다면
-> 그 디렉토리를 지우고 `python scripts/download_router_hf.py` 로 다시 받는다.
-
 ```bash
 # ① 1회만 — HF repo → 레포 안 router_moai_embedding_model/
 pip install "huggingface-hub>=0.23"
 export HF_TOKEN=hf_...                        # read 권한이면 충분 (프라이빗 repo)
-# PowerShell: $env:HF_TOKEN = "hf_..."
-# 또는: huggingface-cli login
-# 2026-08-25 실측 — 토큰 없이 받아진 사례가 있다. 먼저 토큰 없이 돌려 보고 401이면 넣는다.
+# PowerShell: $env:HF_TOKEN="hf_..."
+# 또는: hf auth login        # 토큰을 ~/.cache/huggingface/token 에 영구 저장 (venv 무관)
 
 python scripts/download_router_hf.py             # 멱등 — 크기 맞는 파일은 건너뜀
 python scripts/download_router_hf.py --dry-run    # 받을 목록만
@@ -119,9 +86,6 @@ print(rag.classify_query_bf('착오송금 반환 신청 구비서류'))   # (업
 "
 ```
 
-HF 접속 자체가 안 되면(`CERTIFICATE_VERIFY_FAILED`) 백신의 TLS 스캐닝일 수 있다 —
-CA 번들 합치는 절차는 [SETUP.md 자주 걸리는 문제](../SETUP.md#자주-걸리는-문제) 에 있다.
-
 받아 놓은 뒤 오프라인으로 강제하려면 `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` 을 붙인다
 (`chatbot/*` 은 이미 스스로 그렇게 설정한다). 로컬이 완전하면 이 상태에서도 라우터가 뜬다.
 
@@ -131,25 +95,17 @@ CA 번들 합치는 절차는 [SETUP.md 자주 걸리는 문제](../SETUP.md#자
 
 ```bash
 export ROUTER_PATH=/path/to/other_ckpt    # 실험 체크포인트로 갈아끼울 때만
-# PowerShell: $env:ROUTER_PATH = "C:\path\to\other_ckpt"
+# PowerShell: $env:ROUTER_PATH="C:\path	o\other_ckpt"
 
 # 팀에 올리기 (write 토큰 필요, 체크포인트를 가진 사람이 1회)
 HF_TOKEN=hf_... python scripts/upload_router_hf.py
+# PowerShell: $env:HF_TOKEN="hf_..."; python scripts/upload_router_hf.py
 python scripts/upload_router_hf.py --dry-run
 ```
 
 라우터를 못 받아도 검색은 죽지 않는다 — `rag.get_router()` 가 실패를 삼키고
 `classify_query_bf_keyword()` 로 폴백한다(콘솔에 `[router] 로드 실패` 1줄).
 대신 업무 분류 기권률이 올라가 정확도가 떨어지므로 데모 전에는 ②로 확인한다.
-
-> **메모리 — fp32 두 모델 합계 약 4.8GB** BGE-m3(임베딩)와 라우터를 한 프로세스에
-> 같이 올린다. 여유가 모자라면 라우터 가중치 로드(`_materialize_copy`)에서
-> `exit 139`(segfault) 또는 `OSError 1455 — 페이징 파일이 너무 작습니다` 로 죽는다.
-> `dense`·`sparse`·`hybrid` 는 되고 `hybrid_bf` 만 죽으면 이 경우다. 데모 전에 다른
-> 프로세스를 닫아 메모리를 확보한다. 라우터를 `bfloat16` 으로 올리면 여유는
-> 회복되지만 분류가 갈리는 사례가 확인돼(fp32 "예금보험금 안내" ↔ bf16
-> "예금자보호제도") 리포에는 반영하지 않았다 — `crawler/faq_bf_map.py` 의
-> `from_pretrained` dtype 지정은 회귀 확인 후 결정한다.
 
 **라우터를 쓰는 곳**
 
@@ -171,8 +127,7 @@ python faq_bf_map.py --router ../router_moai_embedding_model --msp 0.7
 ## 2. RAG — BGE-m3-ko 인덱스
 
 임베딩은 `dragonkue/BGE-m3-ko`(1024d)를 sentence-transformers가 런타임에
-HF에서 받아 `~/.cache/huggingface`(Windows `%USERPROFILE%\.cache\huggingface`) 에
-캐시한다. 별도 다운로드 명령이 없다.
+HF에서 받아 `~/.cache/huggingface` 에 캐시한다. 별도 다운로드 명령이 없다.
 
 ```bash
 # 인덱스 재생성 (chunks.jsonl → emb.npy · faiss.index · bm25.pkl · chunk_meta.jsonl)
@@ -230,7 +185,8 @@ cd crawler && python pipeline.py --manifest crawl_manifest.csv --use-cache  # �
 cd crawler && python pipeline.py --manifest crawl_manifest.csv --rebuild    # 인덱스 초기화 후 전량
 
 # 첫 빌드 권장 순서
-cd crawler && python build_dataset.py --crawl && python pipeline.py --manifest crawl_manifest.csv --use-cache --rebuild
+cd crawler && python build_dataset.py --crawl \
+  && python pipeline.py --manifest crawl_manifest.csv --use-cache --rebuild
 ```
 
 청킹 파라미터(`CHUNK_SIZE` · `OVERLAP` · `MIN_CHUNK` · `TABLE_GAP_MAX`)는
@@ -242,11 +198,10 @@ cd crawler && python build_dataset.py --crawl && python pipeline.py --manifest c
 ## 4. 관리자 UI — eval.py + rag.py 파라미터 조절 + 청킹 연결
 
 ```bash
-# 리포 루트에서 가상환경을 활성화한 상태
-export KDIC_REPO=$PWD          # PowerShell: $env:KDIC_REPO = "$PWD"
-cd admin
-python -m uvicorn main:app --reload --host 127.0.0.1 --port 8600
-# → http://127.0.0.1:8600
+export KDIC_REPO=$PWD            # 리포 루트 (기본값: admin/ 상위)
+# PowerShell: $env:KDIC_REPO=$PWD
+cd admin && uvicorn main:app --reload --port 8600
+# → http://localhost:8600
 ```
 
 콘솔 버튼이 실제로 돌리는 것은 `admin/runner.py` 다. 서브프로세스로 직접 실행할 수도 있다:
@@ -286,8 +241,8 @@ python runner.py --mode files   --config '{}'
 ## 5. 챗봇 — HCX LLM 호출
 
 ```bash
-# 데모 UI — 절별 6-BF/OOS 오케스트레이션 + 큐폼 E2E
-python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 8501
+# 데모 UI (Streamlit) — 큐폼 E2E 배선
+streamlit run chatbot/app.py
 
 # answer() 계약 관통 3문항 (정상·트랩·롤렛)
 python chatbot/chain.py
@@ -308,32 +263,6 @@ python chatbot/rag_hcx.py batch    # 대표 6문항 × {rag, bare} → chatbot/d
 
 `CALL_BUDGET` 은 프로세스 단위 안전장치다(`chain.py` 70콜, `rag_hcx.py` 20콜).
 소진되면 즉시 중단되고, Streamlit 은 앱 재시작으로 리셋한다.
-
-### 5-1. 현재 OOS 운영 경로
-
-```text
-사용자 입력
-  → 보수적 절 분리
-  → 모든 절을 기존 6-BF 라우터로 먼저 판정
-  → BF: Qform → BF 고정 RAG
-  → 비-BF: BOT_FEEDBACK / REFERRAL / CASUAL / FAR_OOS / PHONE_GUIDE
-  → 뒤 절은 unit_queue에서 순서대로 처리
-```
-
-- OOS 경로는 RAG 검색·답변 생성을 호출하지 않는다.
-- 기관명·URL·전화·운영시간은 ⑧ OOS 안내처에 게시된 값만 사용한다.
-- 상단 신고 버튼과 자연어 오류 신고는 ⑨ 오류 신고함에 저장되며, 저장 전에 개인정보를
-  마스킹하고 생성 30일 뒤 자동 삭제한다.
-- BF/OOS 임계값은 이번 통합에서 바꾸지 않았다. 현재 라우터가 OOS를 BF로 과다 통과시키는
-  문제는 별도 라우터 트랙의 범위이며, OOS 동작 확인 때 이 제약을 함께 기록한다.
-
-API 생존 확인:
-
-```bash
-curl -fsS http://127.0.0.1:8600/api/oos/schema
-curl -fsS http://127.0.0.1:8600/api/oos/referrals
-curl -fsS http://127.0.0.1:8600/api/oos/reports
-```
 
 ---
 
@@ -398,12 +327,6 @@ score_mode     : anchor
 ## 7. 검증 · 테스트
 
 ```bash
-# 현재 OOS + 기존 가드 + 평가 등가성 묶음
-python -m pytest \
-  tests/test_oos.py \
-  crawler/tests/test_guards.py \
-  crawler/tests/test_eval_equivalence.py -q
-
 # eval.py 등가성 회귀 — archive/superseded/ 구 평가기와 판정이 같은지. 검색 스택 불필요
 python crawler/tests/test_eval_equivalence.py
 pytest crawler/tests/test_eval_equivalence.py
@@ -426,14 +349,6 @@ python chatbot/verify_qform_panel.py
 python chatbot/verify_docs.py
 python chatbot/answer_checks.py
 ```
-
-현재 기준 기대값:
-
-- 위 pytest 묶음: **14 passed**
-- `verify_qform_e2e.py`: 104조합 통과
-- `verify_qform_panel.py`: 11/11 통과
-- `verify_qform_multiturn.py`: 기존 첨부 후단 필터 C2(`26→26`) 때문에 23/24. OOS
-  라우팅 변경과는 별개인 추적 이슈다.
 
 ---
 

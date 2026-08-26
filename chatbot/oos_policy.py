@@ -23,7 +23,7 @@ import oos_store
 ACTIONS = ("BOT_FEEDBACK", "REFERRAL", "CASUAL", "FAR_OOS", "PHONE_GUIDE")
 OOS_PARAMS = {"temperature": 0.0, "topP": 0.8, "maxTokens": 80}
 
-BOT_TARGET = ("챗봇", "방금 답변", "네 답변", "너의 답변", "출처", "설명한 내용", "답변 내용")
+BOT_TARGET = ("챗봇", "예봄", "방금 답변", "네 답변", "너의 답변", "출처", "설명한 내용", "답변 내용")
 BOT_ERROR = ("틀렸", "오류", "사실과 다르", "이상하", "신고", "잘못 답", "정확하지 않")
 SYSTEM_ERROR = ("로그인", "인증번호", "인증 코드", "신청 시스템", "사이트", "접속", "장애")
 CASUAL_HELLO = ("안녕", "안녕하세요", "반가워", "hello", "hi", "하이")
@@ -36,8 +36,8 @@ FINANCE_ADJACENT = (
 )
 
 FAR_TEXT = "죄송합니다. 저는 예금보험공사의 예금자보호·예금보험금·미수령금·착오송금 반환지원·은닉재산 신고·채무조정 관련 안내를 도와드릴 수 있습니다."
-PHONE_TEXT = "이 질문은 챗봇이 확실하게 자동 안내하기 어렵습니다. 필요한 경우 유선 상담 안내를 확인해 주세요."
-REPORT_OK_TEXT = "챗봇 오류 신고가 접수되었습니다. 현재 대화와 답변 처리 기록은 오류 분석을 위해 30일간 보관됩니다."
+PHONE_TEXT = "이 질문은 예봄이 확실하게 자동 안내하기 어렵습니다. 필요한 경우 유선 상담 안내를 확인해 주세요."
+REPORT_OK_TEXT = "예봄 오류 신고가 접수되었습니다. 현재 대화와 답변 처리 기록은 오류 분석을 위해 30일간 보관됩니다."
 REPORT_FAIL_TEXT = "오류 신고를 저장하지 못했습니다. 접수된 것으로 처리하지 않았습니다. 잠시 후 다시 시도해 주세요."
 
 
@@ -173,7 +173,7 @@ def build_result(decision: dict, *, report_saved: bool | None = None) -> dict:
     elif action == "CASUAL":
         text = {"thanks": "감사합니다. 다른 도움이 필요하면 말씀해 주세요.",
                 "bye": "이용해 주셔서 감사합니다. 좋은 하루 보내세요."}.get(
-                    casual, "안녕하세요. 예금보험공사 관련 내용을 안내해 드릴게요.")
+                    casual, "안녕하세요, 예봄입니다. 예금보험공사 관련 내용을 안내해 드릴게요.")
     elif action == "FAR_OOS":
         text = FAR_TEXT
     else:

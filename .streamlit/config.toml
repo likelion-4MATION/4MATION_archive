@@ -12,6 +12,20 @@
 #   레드는 ui_theme.py 에서 검색 버튼 등 지정 요소에만 CSS 로 입힌다.
 # 녹색·보라·네온 금지. streamlit 기본 green/violet 토큰도 무채색으로 눌러 둔다.
 
+# 파일 워처 끔 — 런이 끝날 때마다 transformers 를 전수 import 한다.
+#   streamlit 의 local_sources_watcher 는 sys.modules 를 훑어 감시할 파일 경로를
+#   모으는데, 그 과정에서 `transformers.__init__` 의 lazy __getattr__ 를 건드린다.
+#   그러면 transformers.models.* 가 **실제로 전부 import** 된다.
+#   실측(2026-08-26, Windows): 로그에 남은 실패분만 94건 · 4.4초
+#   (14:50:03.742 → 14:50:08.130). 성공한 import 는 로그에 안 남으므로 실제는 더 크다.
+#   이 앱은 torch/transformers/sentence-transformers 를 올리므로 감시 대상이
+#   수천 개가 되고, 그 비용을 매 런 낸다.
+# 대가: 소스를 고쳐도 자동 리로드되지 않는다 — 앱을 다시 띄워야 한다
+#   (scripts/run_app.ps1 이 좀비 정리까지 겸한다).
+# 되돌리려면 이 줄을 지우면 된다(기본값 "auto").
+[server]
+fileWatcherType = "none"
+
 [theme]
 base = "light"
 

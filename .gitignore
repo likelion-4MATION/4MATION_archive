@@ -108,3 +108,6 @@ admin/data/*
 !admin/data/.gitkeep
 # 마운트 환경에서 git이 남긴 잠금 파일 치우는 자리(삭제 권한이 없어 옮겨만 둔다)
 _to_delete/
+
+# MCP 브라우저 검증 산출물(스냅샷·콘솔 로그·스크린샷). 실행할 때마다 새로 생긴다.
+.playwright-mcp/

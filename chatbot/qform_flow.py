@@ -462,6 +462,18 @@ def pass_slot(state: dict, field: str) -> dict:
             "survivors": qform_state.survivors(state["qform"])}
 
 
+def cancel(state: dict, *, config=None) -> None:
+    """되묻기 중단 — **답변을 만들지 않고** 일반 대화 상태로 돌아간다 (맥락 칩 취소).
+
+    `skip()` 과 같은 상태 전이(pending 해제 + 재발동 차단)를 하되 `_finalize()` 를
+    부르지 않는다 — HCX 콜 0. 슬롯은 유지한다: 사용자가 이미 고른 조건까지 지우면
+    취소가 아니라 초기화다(그건 '새로운 대화 시작하기' 쪽 일이다).
+    """
+    cfg = config if isinstance(config, dict) and "MAX_ASK_TURNS" in config         else qform_config.resolve(config)
+    state["pending_slot"] = None
+    state["ask_turn"] = cfg["MAX_ASK_TURNS"]
+
+
 def answer_now(state: dict, *, boost: bool = False, answer_fn=None) -> dict:
     """현재 슬롯 그대로 답변 턴을 돈다 — 슬롯 칩 수정 뒤 '다시 답변받기'(T6).
 

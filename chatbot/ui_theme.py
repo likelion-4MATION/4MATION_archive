@@ -83,13 +83,22 @@ _CSS = """
   background: transparent !important;   /* 내부 래퍼의 secondaryBackground 가 회색으로 비친다 */
 }
 [data-testid="stChatInput"] textarea { font-size: .95rem !important; }
+/* 전송 버튼 = KDIC RED 원형. 입력이 비면 streamlit 이 :disabled 를 걸어 주므로
+   "입력 전 subtle / 입력 후 활성" 은 상태 하나로 갈린다 — JS 없이 :disabled 만 쓴다.
+   hover·active 는 색 한 단계·2% 축소까지만. Enter 는 streamlit 기본 동작 그대로다. */
 [data-testid="stChatInputSubmitButton"] {
-  color: #E30022 !important; background: transparent !important; border: 0 !important;
+  width: 2.15rem !important; height: 2.15rem !important; min-height: 2.15rem !important;
+  flex: none !important; padding: 0 !important;
+  border: 0 !important; border-radius: 50% !important;
+  background: #E30022 !important; color: #FFFFFF !important;
+  transition: background .12s ease, transform .12s ease;
 }
-[data-testid="stChatInputSubmitButton"]:hover {
-  color: #FFFFFF !important; background: #E30022 !important;
+[data-testid="stChatInputSubmitButton"] svg { width: 1.05rem; height: 1.05rem; }
+[data-testid="stChatInputSubmitButton"]:hover:not(:disabled) { background: #C4001C !important; }
+[data-testid="stChatInputSubmitButton"]:active:not(:disabled) { transform: scale(.96); }
+[data-testid="stChatInputSubmitButton"]:disabled {
+  background: #F1F3F5 !important; color: #ADB5BD !important;
 }
-[data-testid="stChatInputSubmitButton"]:disabled { color: #ADB5BD !important; }
 /* 하단 입력 바 — 본문 블록과 같은 폭·같은 좌측 정렬(padding-left 는 streamlit 기본값
    --kdic-gutter — 본문 블록과 같은 값). 오른쪽만 우측 레일 몫(컬럼 2.5/10)만큼 더
    비워, 입력창이 레일 아래로 넘어가지 않게 한다. */
@@ -193,6 +202,41 @@ _CSS = """
   background: #EBF0F5 !important; border-radius: 4px;
   padding: 1.25rem 1.4rem 1.6rem !important; min-height: 22rem;
 }
+
+/* ── 답변 블록 ──────────────────────────────────────────────────────────── */
+/* 머리글 한 줄(예봄 답변 + 부가정보) → 본문 → 얇은 선 → 부속(조건·서식).
+   박스는 쓰지 않는다. 구분은 여백과 1px 선까지만. */
+.kdic-ans-head {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: .55rem;
+  margin: .1rem 0 .55rem;
+}
+.kdic-ans-label {
+  font-size: .72rem; font-weight: 700; letter-spacing: .06em; color: #003679;
+  border-left: 2px solid #E30022; padding-left: .45rem;   /* RED 는 이 2px 만 */
+}
+.kdic-ans-meta { font-size: .72rem; color: #868E96; letter-spacing: .01em; }
+.kdic-ans-sep { border: 0; border-top: 1px solid #E9ECEF; margin: 1.15rem 0 .85rem; }
+/* 부속 블록 라벨 — 섹션 제목보다 한 단계 작게 */
+.kdic-mini {
+  font-size: .71rem; font-weight: 700; letter-spacing: .06em; color: #868E96;
+  margin: 0 0 .4rem !important; line-height: 1.4;
+}
+
+/* 상태 안내 — 색 면적 대신 왼쪽 2px 선으로 본문과 가른다 */
+.kdic-notice {
+  border-left: 2px solid #003679; background: #F7F9FC;
+  padding: .55rem .8rem; border-radius: 0 5px 5px 0;
+  font-size: .85rem; color: #343A40; line-height: 1.55;
+  margin: .35rem 0 .6rem !important;
+}
+
+/* 읽기 전용 조건 칩(과거 턴) — 버튼이 아니라 글자 태그다 */
+.kdic-chips { display: flex; flex-wrap: wrap; gap: .3rem; margin: .1rem 0 .7rem; }
+.kdic-chip {
+  font-size: .74rem; color: #6C757D; line-height: 1.4;
+  border: 1px solid #E9ECEF; border-radius: 999px; padding: .16em .65em;
+}
+.kdic-chip b { color: #343A40; font-weight: 600; }
 
 /* ── 로딩 상태 (답변이 그려질 자리) ─────────────────────────────────────── */
 /* 전체화면 오버레이 없음. 답변 본문과 같은 컨테이너 안에서 같은 여백을 쓴다. */
@@ -339,12 +383,91 @@ _CSS = """
    그만큼 레일이 짧아져 더 많이 잘린다. 마지막 콘텐츠가 입력창에 가리지 않는 효과는 같다. */
 [data-testid="stColumn"]:has(.st-key-kdic-main) { padding-bottom: 8rem !important; }
 
-/* ── 확정된 조건 패널 ───────────────────────────────────────────────────── */
-/* 기능·버튼 배치는 그대로. 테두리·라운드·여백으로만 독립 블록처럼 떼어 낸다 */
-[class*="st-key-kdic-slots-"] {
+/* ── 확정된 조건 ────────────────────────────────────────────────────────── */
+/* 패널이 아니라 칩 줄이다 — 껍데기를 없애고 칩만 남긴다. 해제(✕)는 칩 자체가 겸한다.
+   버튼 배치·반환값은 그대로고 모양만 바뀐다. */
+[class*="st-key-kdic-slots-"] { gap: .3rem !important; margin: .1rem 0 .75rem !important; }
+[class*="st-key-kdic-slots-"] [data-testid="stElementContainer"] { margin-bottom: 0; }
+[class*="st-key-kdic-slots-"] .stButton button {
+  width: auto !important; min-height: 0 !important;
+  padding: .22em .7em !important; border-radius: 999px !important;
   background: #FFFFFF !important; border: 1px solid #DEE2E6 !important;
-  border-radius: 6px !important;
-  padding: .8rem .95rem .45rem !important; margin: .35rem 0 1rem !important;
+  font-size: .75rem !important; font-weight: 500 !important; color: #495057 !important;
+}
+[class*="st-key-kdic-slots-"] .stButton button:hover {
+  background: #FFFFFF !important; border-color: #E30022 !important; color: #E30022 !important;
+}
+
+/* ── 후속 추천 태그 (`접수수단 · 온라인` 류) ─────────────────────────────── */
+/* 카드가 아니라 선택형 태그다 — 글자 길이만큼만 차지하고 넘치면 다음 줄로 접힌다 */
+[class*="st-key-kdic-fu-"] { gap: .35rem !important; margin: .1rem 0 .65rem !important; }
+[class*="st-key-kdic-fu-"] [data-testid="stElementContainer"] { margin-bottom: 0; }
+[class*="st-key-kdic-fu-"] .stButton button {
+  width: auto !important; min-height: 0 !important;
+  padding: .3em .8em !important; border-radius: 999px !important;
+  background: #FFFFFF !important; border: 1px solid #DEE2E6 !important;
+  font-size: .78rem !important; font-weight: 500 !important; color: #343A40 !important;
+}
+[class*="st-key-kdic-fu-"] .stButton button:hover {
+  border-color: #003679 !important; background: #F4F6F8 !important; color: #003679 !important;
+}
+
+/* ── 업무별 추천 검색어: 뒤로가기 ───────────────────────────────────────── */
+/* `← 착오송금 반환 신청` 은 **버튼 라벨 하나**다(app.py). 화살표와 업무명이 같은
+   텍스트 노드라 글꼴·line-height·baseline 이 구조적으로 일치한다 — 두 요소를 나란히
+   놓고 margin 으로 맞추는 구조가 아니다. 여기서는 버튼 껍데기만 벗겨 제목처럼 만든다.
+   클릭 영역은 줄 전체(24px 이상)라 보이는 글자 위치를 밀지 않는다. */
+.st-key-kdic-back [data-testid="stElementContainer"] { margin-bottom: 0; }
+.st-key-kdic-back .stButton button {
+  width: auto !important; min-height: 24px !important;
+  padding: 0 .2rem !important; margin: 0 0 .5rem -.2rem !important;
+  background: transparent !important; border: 0 !important; border-radius: 3px !important;
+  justify-content: flex-start !important;
+}
+/* streamlit 이 라벨을 <p> 로 감싼다 — 제목 typography 는 이 <p> 에 건다 */
+.st-key-kdic-back .stButton button p {
+  margin: 0 !important; text-align: left;
+  font-size: .86rem !important; font-weight: 700 !important; line-height: 24px !important;
+  color: #212529 !important;
+}
+.st-key-kdic-back .stButton button:hover { background: #E9EDF2 !important; }
+.st-key-kdic-back .stButton button:hover p { color: #003679 !important; }
+
+/* ── 되묻기 맥락 칩 ─────────────────────────────────────────────────────── */
+/* 진행 바도 단계 번호도 아니다 — 지금 어느 업무 흐름에 있는지만 글자 크기에 비례한
+   최소 여백으로 남긴다. 칩 자체가 취소 조작 영역이다(두 번 누르면 취소). */
+.st-key-kdic-branch { margin: .1rem 0 .55rem !important; }
+.st-key-kdic-branch [data-testid="stElementContainer"] { margin-bottom: 0; }
+.st-key-kdic-branch .stButton button {
+  width: auto !important; min-height: 0 !important;
+  padding: .18em .7em !important; border-radius: 999px !important;
+  background: transparent !important; border: 1px solid #DEE2E6 !important;
+  font-size: .74rem !important; font-weight: 600 !important; color: #6C757D !important;
+  letter-spacing: .01em;
+}
+.st-key-kdic-branch .stButton button:hover {
+  background: transparent !important; border-color: #ADB5BD !important; color: #495057 !important;
+}
+
+/* ── 되묻기 선택지 ──────────────────────────────────────────────────────── */
+/* 추천 질문 카드와 같은 시각 언어(연회색 1px · radius 3px · 네이비 hover).
+   누르면 바로 다음 질문으로 간다 — 확인 버튼이 없으므로 강조도 필요 없다. */
+[class*="st-key-kdic-opts-"] .stButton button {
+  border: 1px solid #DEE2E6 !important; border-radius: 999px !important;
+  background: #FFFFFF !important; color: #212529 !important;
+  padding: .38rem .9rem !important; min-height: 2.1rem !important;
+}
+[class*="st-key-kdic-opts-"] .stButton button:hover {
+  border-color: #003679 !important; background: #F4F6F8 !important; color: #003679 !important;
+}
+/* 탈출구 2종은 선택지가 아니다 — 테두리를 빼 한 단계 뒤로 물린다 */
+[class*="st-key-kdic-esc-"] .stButton button {
+  border: 0 !important; background: transparent !important;
+  color: #6C757D !important; font-size: .8rem !important; min-height: 1.9rem !important;
+  padding: .2rem .4rem !important;
+}
+[class*="st-key-kdic-esc-"] .stButton button:hover {
+  background: transparent !important; color: #003679 !important;
 }
 
 /* ── 오류 신고 인라인 아코디언 (지원 카드 안) ───────────────────────────── */
@@ -353,8 +476,84 @@ _CSS = """
   border-radius: 6px !important;
   padding: .65rem .75rem .35rem !important; margin-top: .45rem !important;
 }
+/* ── 예봄 브랜드: 헤더 아바타 ──────────────────────────────────────────── */
+/* 서비스명 옆 캐릭터 하나. 로딩 화면에서 본 얼굴을 본 화면에서 다시 만나게 한다. */
+.kdic-brand { display: flex; align-items: center; gap: .7rem; }
+.kdic-avatar { flex: none; width: 42px; height: 42px; object-fit: contain; }
+
+/* 첫 화면 인사 — 빈 대화창이 "무엇을 물어도 되는 곳"임을 화자 이름으로 알린다 */
+.kdic-welcome {
+  font-size: 1.05rem; font-weight: 600; color: #212529;
+  margin: .1rem 0 1.1rem !important; line-height: 1.55;
+}
+.kdic-welcome b { color: #003679; font-weight: 700; }
+
+/* ── 예봄 진입 로딩 화면 ────────────────────────────────────────────────── */
+/* 세션 첫 런에만 DOM 에 들어가고, **같은 런 안에서 app.py 가 지운다**(placeholder
+   `.empty()`). 사라지는 시점을 이 애니메이션에 맡기면, 런이 끝날 때 streamlit 이
+   요소 컨테이너를 remount 하면서 시계가 0으로 돌아가 화면이 한 번 더 뜬다.
+   그래서 페이드아웃은 SPLASH_HOLD_SEC(3.0s) **안에서 끝나도록** 잡아 두고,
+   실제 제거는 python 이 한다. 숨기는 JS 는 없다.
+   z-index 는 streamlit 사이드바(999991)보다 위여야 화면 전체를 덮는다. */
+/* 스플래시 본체는 fixed 라 흐름에서 빠지지만, streamlit 이 감싸는 요소 컨테이너의
+   높이·margin(약 14px)은 그대로 남아 **첫 런에서만** 본 화면이 14px 길어진다
+   (세로 스크롤이 생기고 그만큼 컬럼 폭이 줄어든다). 껍데기를 접어 흔적을 없앤다 —
+   display:none 은 fixed 자식까지 같이 지우므로 흐름에서만 빼낸다. */
+[data-testid="stElementContainer"]:has(.yebom-splash) {
+  position: absolute !important;
+  height: 0 !important; min-height: 0 !important; margin: 0 !important;
+}
+.yebom-splash {
+  position: fixed; inset: 0; z-index: 2147483000;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #FFFFFF;
+  animation: yebom-out .5s ease 2.4s forwards;   /* 2.9s 소멸 < 3.0s 제거 */
+}
+/* 캐릭터 + 서비스명 + 보조문구 + 점 = 한 덩어리. 부모의 flex 중앙정렬 하나로
+   수평·수직 정중앙에 놓인다 — 덩어리 밖에 여백을 만드는 요소를 두지 않는다. */
+.yebom-caption {
+  display: flex; flex-direction: column; align-items: center;
+}
+@keyframes yebom-out { to { opacity: 0; visibility: hidden; } }
+.yebom-splash img { width: 168px; height: auto; animation: yebom-in .6s ease both; }
+.yebom-splash .yebom-name {
+  font-size: 1.85rem; font-weight: 700; letter-spacing: -.02em; color: #003679;
+  margin: .5rem 0 0 !important; animation: yebom-in .6s ease .08s both;
+}
+.yebom-splash .yebom-sub {
+  font-size: .85rem; color: #6C757D; margin: .4rem 0 0 !important;
+  animation: yebom-in .6s ease .16s both;
+}
+/* 로딩 점 3개 — Navy→Red 그라데이션을 여기 한 곳에만 쓴다(면적으로 쓰지 않는다) */
+.yebom-dots { display: flex; gap: .42rem; margin-top: 1.6rem; }
+.yebom-dots i {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: linear-gradient(135deg, #003679, #E30022);
+  opacity: .25; animation: yebom-dot 1.25s ease-in-out infinite;
+}
+.yebom-dots i:nth-child(2) { animation-delay: .16s; }
+.yebom-dots i:nth-child(3) { animation-delay: .32s; }
+@keyframes yebom-in { from { opacity: 0; transform: scale(.97); } }
+@keyframes yebom-dot { 50% { opacity: .85; } }
+/* 페이드아웃은 화면을 걷어내는 동작이라 남긴다 — 등장 연출과 점만 멈춘다 */
+@media (prefers-reduced-motion: reduce) {
+  .yebom-splash img, .yebom-name, .yebom-sub { animation: none; }
+  .yebom-dots i { animation: none; opacity: .45; }
+}
 </style>
+
 """
+
+
+# 예봄 캐릭터 원본 — `assets/yebom.png` (288px RGBA). 스플래시(168px)와 헤더
+# 아바타(42px)가 같은 파일을 쓴다. 헤더 아바타는 매 rerun 마다 data URI 로 다시
+# 실리므로 원본 자체를 표시 크기의 2배 선에서 유지한다 — 더 키우면 rerun 마다
+# 그만큼 더 나간다. 캐릭터가 바뀌면 이 PNG 만 같은 규격으로 갈아끼우면 된다.
+YEBOM_PATH = pathlib.Path(__file__).with_name("assets") / "yebom.png"
+try:
+    _YEBOM_SRC = "data:image/png;base64," + base64.b64encode(YEBOM_PATH.read_bytes()).decode()
+except OSError:                     # 자산이 없어도 앱은 죽지 않는다 — 캐릭터만 빠진다
+    _YEBOM_SRC = ""
 
 
 def inject() -> None:
@@ -363,15 +562,46 @@ def inject() -> None:
 
 
 def header(title: str, subtitle: str, tag: str = "") -> None:
-    """서비스 헤더 — 서비스명 + 설명 1줄. `st.title`(이모지 h1) 대체."""
+    """서비스 헤더 — 예봄 캐릭터 + 서비스명 + 설명 1줄. `st.title`(이모지 h1) 대체."""
     tag_html = f'<span class="kdic-tag">{tag}</span>' if tag else ""
+    avatar = (f'<img class="kdic-avatar" src="{_YEBOM_SRC}" alt="예봄">'
+              if _YEBOM_SRC else "")
     st.markdown(
-        f'<div class="kdic-header">'
+        f'<div class="kdic-header"><div class="kdic-brand">{avatar}<div>'
         f'<p class="kdic-title">{title}{tag_html}</p>'
         f'<p class="kdic-sub">{subtitle}</p>'
-        f'</div>',
+        f'</div></div></div>',
         unsafe_allow_html=True,
     )
+
+
+def welcome(text: str) -> None:
+    """첫 화면 인사 한 줄 — 화자(예봄)를 대화가 시작되기 전에 밝힌다."""
+    st.markdown(f'<p class="kdic-welcome">{text}</p>', unsafe_allow_html=True)
+
+
+def splash(slot=None, name: str = "예봄", subtitle: str = "예금보험공사 AI 안내"):
+    """세션 첫 런에만 그리는 진입 로딩 화면. **자리(placeholder)를 돌려준다.**
+
+    앱 초기화를 막지 않는다 — 요소를 하나 뱉을 뿐이다. 페이드아웃은 CSS 가 하지만
+    **제거는 호출자가 같은 런 안에서** `.empty()` 로 한다: 요소가 남은 채 런이 끝나면
+    streamlit 프론트의 remount 로 애니메이션이 되감겨 화면이 두 번 뜬다(app.py 주석).
+    자산이 없으면 이름만 뜬다 — 앱은 죽지 않는다.
+    """
+    img = f'<img src="{_YEBOM_SRC}" alt="">' if _YEBOM_SRC else ""
+    # 호출자가 잡아 둔 자리를 쓴다 — 여기서 새로 만들면 첫 런에만 요소가 생겨
+    # 뒤따르는 요소 인덱스가 런마다 달라진다(app.py 스플래시 주석).
+    slot = st.empty() if slot is None else slot
+    slot.markdown(
+        f'<div class="yebom-splash">{img}'
+        f'<div class="yebom-caption">'
+        f'<p class="yebom-name">{html.escape(name)}</p>'
+        f'<p class="yebom-sub">{html.escape(subtitle)}</p>'
+        f'<div class="yebom-dots"><i></i><i></i><i></i></div>'
+        f'</div></div>',
+        unsafe_allow_html=True,
+    )
+    return slot
 
 
 def section(label: str) -> None:
@@ -379,12 +609,52 @@ def section(label: str) -> None:
     st.markdown(f'<p class="kdic-section">{label}</p>', unsafe_allow_html=True)
 
 
-# 스피너 이미지 — KDIC 링 로고 실물(`assets/kdic-logo.png`, 96px RGBA, 흰 배경 제거).
+def answer_head(meta: str = "", label: str = "예봄 답변") -> None:
+    """답변 블록 머리 — 작은 라벨 + (있으면) 출처·신뢰도 한 줄.
+
+    본문 위 한 줄이 전부다. 박스를 두르지 않는다 — 답변 본문이 중심 콘텐츠다.
+    `meta` 는 호출자가 이미 만들어 둔 문자열 그대로 쓴다(문구를 만들지 않는다).
+    """
+    meta_html = f'<span class="kdic-ans-meta">{html.escape(meta)}</span>' if meta else ""
+    st.markdown(
+        f'<div class="kdic-ans-head">'
+        f'<span class="kdic-ans-label">{html.escape(label)}</span>{meta_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def answer_sep() -> None:
+    """답변 본문과 부속(조건·서식) 사이 얇은 구분선."""
+    st.markdown('<hr class="kdic-ans-sep">', unsafe_allow_html=True)
+
+
+def mini(label: str) -> None:
+    """부속 블록 라벨 (예: '확정된 조건')."""
+    st.markdown(f'<p class="kdic-mini">{html.escape(label)}</p>', unsafe_allow_html=True)
+
+
+def notice(text: str) -> None:
+    """상태 안내 — st.info 의 파란 판 대신 왼쪽 2px 선. 본문과는 확실히 갈린다."""
+    st.markdown(f'<p class="kdic-notice">{html.escape(text)}</p>', unsafe_allow_html=True)
+
+
+def chips(pairs) -> None:
+    """읽기 전용 조건 태그 줄 (과거 턴). 조작할 수 없으므로 버튼이 아니다."""
+    if not pairs:
+        return
+    body = "".join(
+        f'<span class="kdic-chip">{html.escape(lab)} <b>{html.escape(str(val))}</b></span>'
+        for lab, val in pairs
+    )
+    st.markdown(f'<div class="kdic-chips">{body}</div>', unsafe_allow_html=True)
+
+
+# 스피너 이미지 — KDIC 링 로고 실물(`assets/kdic-spinner.png`, 96px RGBA, 흰 배경 제거).
 # 손으로 그린 SVG 로는 양 끝 테이퍼와 두 곡선 사이 흰 간격이 재현되지 않았다(원 2개로는
 # 안 되는 형태다). 원본 픽셀을 그대로 쓴다. 96px 원본이라 32px 표시에서 3배 DPI 까지
 # 선명하다. data URI 로 넣는 이유는 streamlit 이 임의 정적 파일을 서빙하지 않기 때문.
 # 로고가 바뀌면 이 PNG 만 갈아끼우면 된다.
-_LOGO_PATH = pathlib.Path(__file__).with_name("assets") / "kdic-logo.png"
+_LOGO_PATH = pathlib.Path(__file__).with_name("assets") / "kdic-spinner.png"
 try:
     _SPIN_SRC = "data:image/png;base64," + base64.b64encode(_LOGO_PATH.read_bytes()).decode()
 except OSError:                     # 자산이 없어도 앱은 죽지 않는다 — 스피너만 빠진다
