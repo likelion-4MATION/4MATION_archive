@@ -1,0 +1,63 @@
+# KDIC 안내 서비스 — UI 1차 디자인 데모 테마 (2026-08-25)
+#
+# 색상 근거
+#   현재 적용값 — 08-25 리디자인 지시서에서 지정받은 KDIC Navy/Red (출처: 사용자 지시)
+#     KDIC Navy #003679 (primary) · KDIC Red #E30022 (CTA 전용)
+#   참고(실측) — 지시서 값과 다르므로 남겨 둔다. 되돌릴 일이 있으면 이쪽이 근거다.
+#     KDIC CI  PANTONE 294C #1E3370 · PANTONE 186C #D51224 (kdic.or.kr CI소개)
+#     KDIC 웹  .btnNavy #1a3370 · .btnRed #d41024 (assets/css/layout.css)
+#
+# 사용 규칙 — 네이비가 전역 브랜드색, 레드는 CTA 전용.
+#   primaryColor 를 레드로 두면 체크박스·라디오·슬라이더까지 전부 빨개져 경고로 오인된다.
+#   레드는 ui_theme.py 에서 검색 버튼 등 지정 요소에만 CSS 로 입힌다.
+# 녹색·보라·네온 금지. streamlit 기본 green/violet 토큰도 무채색으로 눌러 둔다.
+
+[theme]
+base = "light"
+
+primaryColor = "#003679"              # KDIC Navy
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F6F8"
+textColor = "#212529"
+linkColor = "#003679"                 # KDIC Navy — 링크도 네이비 계열(레드는 CTA 전용)
+linkUnderline = true
+borderColor = "#DEE2E6"
+dataframeBorderColor = "#DEE2E6"
+dataframeHeaderBackgroundColor = "#F4F6F8"
+
+font = "'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif"
+headingFont = "'Malgun Gothic', 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif"
+codeFont = "'Cascadia Mono', Consolas, 'D2Coding', monospace"
+baseFontSize = 15
+codeFontSize = "0.82rem"
+codeTextColor = "#495057"             # 인라인 코드 기본 녹색 제거 (트레이스 패널 배지)
+codeBackgroundColor = "#F4F6F8"
+
+baseRadius = "3px"                    # 공공기관 보수적 각진 형태
+buttonRadius = "3px"
+showWidgetBorder = true
+showSidebarBorder = true
+
+metricValueFontSize = "1.35rem"
+
+# 상태색 — 채도를 낮춰 화면을 장악하지 않게. 녹색 계열은 무채색으로 대체.
+blueBackgroundColor = "#EDF1F8"
+blueTextColor = "#003679"
+grayBackgroundColor = "#F4F6F8"
+grayTextColor = "#495057"
+greenBackgroundColor = "#F4F6F8"      # 녹색 금지 — 회색으로 대체
+greenTextColor = "#495057"
+greenColor = "#495057"
+violetBackgroundColor = "#F4F6F8"     # 보라 금지
+violetTextColor = "#495057"
+violetColor = "#495057"
+yellowBackgroundColor = "#FCF6E8"
+yellowTextColor = "#7A5A12"
+redBackgroundColor = "#FBEDEF"
+redTextColor = "#B3001B"              # KDIC RED 어둡게 (본문 대비 확보)
+redColor = "#E30022"                  # KDIC Red
+
+[theme.sidebar]
+backgroundColor = "#FAFBFC"
+secondaryBackgroundColor = "#F4F6F8"
+borderColor = "#DEE2E6"

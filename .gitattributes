@@ -1,0 +1,6 @@
+# 라우터 체크포인트 — 줄바꿈 변환 금지.
+# `crawler/data/router_manifest.json` 이 파일 **바이트 크기**로 무결성을 검증한다.
+# core.autocrlf=true 인 Windows 에서 체크아웃되면 LF→CRLF 로 커져 크기 검증이 전부
+# 깨지고, `router_source.resolve()` 가 로컬을 버리고 HF 프라이빗 repo 로 폴백한다
+# (HF_TOKEN 이 없으면 그대로 실패 → 챗봇은 "처리 중 오류"만 낸다).
+router_moai_embedding_model/** -text

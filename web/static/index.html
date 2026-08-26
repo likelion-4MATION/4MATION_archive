@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="예금보험공사 안내 문서를 기반으로 답변하는 AI 안내 서비스">
+  <title>예금보험공사 안내 서비스</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#conversation">대화 영역으로 건너뛰기</a>
+  <div class="app-shell">
+    <header class="service-header">
+      <div>
+        <h1>예금보험공사 안내 <span>PoC 데모</span></h1>
+        <p>예금보험공사 안내 문서를 기반으로 답변합니다.</p>
+      </div>
+      <div id="call-budget" class="budget" aria-live="polite"></div>
+    </header>
+
+    <div class="layout">
+      <aside class="sidebar" aria-label="대화 및 설정">
+        <button id="new-chat" class="button primary full">＋ 새로운 대화 시작하기</button>
+
+        <section class="side-section">
+          <h2>현재 대화</h2>
+          <ul id="question-history" class="question-history"></ul>
+        </section>
+
+        <details id="memory-section" class="side-section memory-section" hidden>
+          <summary><span>기억</span><span id="memory-count" class="memory-count"></span></summary>
+          <div id="memory"></div>
+        </details>
+
+        <section class="side-section admin-settings">
+          <details>
+            <summary>관리자 · 고급 설정</summary>
+            <label class="field-label" for="ask-mode">되묻기 문구</label>
+            <select id="ask-mode">
+              <option value="template">템플릿 · 모델 호출 0</option>
+              <option value="llm">LLM 생성 · 턴당 1회</option>
+            </select>
+
+            <label class="toggle-row"><input id="boost" type="checkbox"> 쿼리 부스트 · 실험</label>
+
+            <label class="field-label" for="qform-scope">슬롯 추출 스코프</label>
+            <select id="qform-scope">
+              <option value="msdr">착오송금 단일 · 기본</option>
+              <option value="msdr+dpin">착오송금 + 예금보험금</option>
+            </select>
+
+            <label class="toggle-row"><input id="show-trace" type="checkbox"> 트레이스 표시</label>
+          </details>
+        </section>
+      </aside>
+
+      <main id="conversation" class="main-column" tabindex="-1">
+        <div id="landing"></div>
+        <div id="history" aria-live="polite"></div>
+        <div id="loading" class="loading" hidden aria-live="assertive">
+          <img src="/assets/kdic-logo.png" alt="">
+          <div><strong>답변을 생성하고 있습니다…</strong><span>관련 정보를 검색하고 있습니다.</span></div>
+        </div>
+        <div id="conversation-actions"></div>
+      </main>
+
+      <aside class="right-rail" aria-label="지원 및 근거 자료">
+        <section class="support-card">
+          <h2>상담원 연결</h2>
+          <p>상담원 연결이 필요하시면 클릭해 주세요.</p>
+          <button id="agent-connect" class="button secondary full" type="button" aria-expanded="false" aria-controls="support-options">상담원 연결하기</button>
+          <div id="support-options" class="support-options" hidden>
+            <p>상담 전화 <a href="tel:1588-0037" aria-label="예금보험공사 상담 전화 1588-0037">1588-0037</a></p>
+            <a class="support-guide" href="https://www.kdic.or.kr/di/pbcritrd/PbcrPath/selectScrn.do" target="_blank" rel="noopener">공식 상담 안내 페이지 →</a>
+          </div>
+          <button id="report-error" class="button secondary full">챗봇 오류 신고</button>
+        </section>
+
+        <div class="tabs" role="tablist" aria-label="추천 및 근거">
+          <button class="tab active" data-tab="recommendations" role="tab" aria-selected="true">추천 질문</button>
+          <button class="tab" data-tab="evidence" role="tab" aria-selected="false">근거 자료</button>
+        </div>
+        <section id="recommendations" class="rail-panel"></section>
+        <section id="evidence" class="rail-panel" hidden></section>
+      </aside>
+    </div>
+  </div>
+
+  <form id="composer" class="composer">
+    <label class="sr-only" for="question">궁금한 내용</label>
+    <textarea id="question" maxlength="2000" rows="1" placeholder="궁금한 내용을 입력해주세요."></textarea>
+    <button type="submit" aria-label="질문 보내기">➜</button>
+  </form>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>
