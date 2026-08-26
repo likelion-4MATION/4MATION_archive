@@ -421,7 +421,6 @@ function bindStaticEvents() {
       $("#composer").requestSubmit();
     }
   });
-  $("#agent-connect").addEventListener("click", () => toast("PoC 데모에서는 상담원 연결이 동작하지 않습니다."));
   $("#report-error").addEventListener("click", () => run(async () => {
     const result = await request(`/api/sessions/${ui.sessionId}/reports`, { method: "POST", body: "{}" });
     toast(`오류 신고가 접수되었습니다 (${result.report_id}).`);

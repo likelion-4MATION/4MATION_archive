@@ -87,8 +87,10 @@ a { color: var(--navy); text-underline-offset: 3px; }
 .question-history .empty::before { display: none; }
 
 .button {
+  display: inline-flex; align-items: center; justify-content: center;
   min-height: 2.25rem; border: 1px solid var(--line); border-radius: 3px;
   padding: .42rem .75rem; background: white; color: #343a40; font-size: .85rem;
+  text-decoration: none;
 }
 .button:hover { border-color: var(--navy); color: var(--navy); background: var(--panel); }
 .button.primary {
@@ -168,6 +170,11 @@ a { color: var(--navy); text-underline-offset: 3px; }
 }
 .support-card h2 { color: var(--navy); font-size: .85rem; margin: 0 0 .3rem; }
 .support-card p { color: var(--muted); font-size: .78rem; margin: 0 0 .7rem; }
+.support-phone {
+  display: inline-block; color: var(--navy); font-size: 1.2rem; font-weight: 800;
+  letter-spacing: .03em; margin: .05rem 0 .35rem; text-decoration-color: var(--red);
+}
+.support-phone:hover { color: var(--red); }
 .tabs { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line); }
 .tab { border: 0; border-bottom: 2px solid transparent; background: white; padding: .65rem .3rem; color: var(--muted); }
 .tab.active { border-color: var(--red); color: var(--navy); font-weight: 700; }
