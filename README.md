@@ -88,14 +88,23 @@ flowchart LR
 ├── web/            # FastAPI 사용자 API · 정적 HTML/CSS/JS 챗봇 UI
 ├── chatbot/        # Qform · 절별 BF/OOS 오케스트레이션 · 레거시 Streamlit UI
 ├── admin/          # FastAPI 관리자 콘솔 · OOS 안내처 · 오류 신고 저장소
-├── docs/           # RUNBOOK · 운영 가이드 · 설계 문서
+├── docs/           # 문서 — 성격별 4계층 + 인덱스 2종
+│   ├── README.md            #   문서 지도
+│   ├── 프로젝트_전체흐름.md   #   전체 그림 · 용어·지표 해설 (여기서 시작)
+│   ├── INDEX_시간축.md       #   언제 무슨 일이 있었나
+│   ├── INDEX_사건축.md       #   무슨 문제를 어떻게 풀었나
+│   ├── current/    #   정본 — 지금 이대로 돌아간다
+│   ├── records/    #   기록 — 측정·회의록·인계·7월 진행도
+│   ├── plans/      #   계획 — 실행 여부를 배지에 명시
+│   └── superseded/ #   폐기·경위
+├── logs/           # 데일리 스탠드업
 └── CONTRIBUTING.md # 협업 규칙
 ```
 
 ## 🚀 실행 방법
 
 현재 통합 버전의 설치·데이터 빌드·관리자·챗봇·테스트 명령은
-[`docs/RUNBOOK.md`](./docs/RUNBOOK.md)를 정본으로 사용합니다. 이미 인덱스와 `.env`가 준비된
+[`docs/current/RUNBOOK.md`](./docs/current/RUNBOOK.md)를 정본으로 사용합니다. 이미 인덱스와 `.env`가 준비된
 개발 환경에서는 다음 두 프로세스를 실행합니다.
 
 ```bash
@@ -109,7 +118,25 @@ python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
 ```
 
 새 로컬의 전체 설치는 [`SETUP.md`](./SETUP.md), OOS 운영 절차는
-[`docs/OOS_구현_운영가이드.md`](./docs/OOS_구현_운영가이드.md)를 참고합니다.
+[`docs/current/OOS_구현_운영가이드.md`](./docs/current/OOS_구현_운영가이드.md)를 참고합니다.
+
+## 📖 문서 읽는 순서
+
+처음 보는 사람은 [`docs/프로젝트_전체흐름.md`](./docs/프로젝트_전체흐름.md) 하나로
+전체를 잡을 수 있습니다 — 무엇을 만들었고, 무슨 문제를 어떻게 풀었고, 나오는 숫자가
+무슨 뜻인지까지 담았습니다(**용어·지표 해설 포함, 사전 지식 불필요**).
+
+| 알고 싶은 것 | 볼 곳 |
+|---|---|
+| 전체 그림 · 용어 해설 | [`docs/프로젝트_전체흐름.md`](./docs/프로젝트_전체흐름.md) |
+| 어디에 무슨 문서가 있나 | [`docs/README.md`](./docs/README.md) |
+| 날짜순 진행 경과 | [`docs/INDEX_시간축.md`](./docs/INDEX_시간축.md) |
+| 사건별 문제 → 해결 | [`docs/INDEX_사건축.md`](./docs/INDEX_사건축.md) |
+| 실행 명령 | [`docs/current/RUNBOOK.md`](./docs/current/RUNBOOK.md) |
+| 코드가 왜 이 모양인가 | [`DECISIONS.md`](./DECISIONS.md) |
+
+**문서 맨 위 배지를 먼저 보세요.** `정본`(current) · `기록`(records) ·
+`계획`(plans — 현행과 다를 수 있음) · `폐기·경위`(superseded) 넷을 구분합니다.
 
 ## 🤝 협업 규칙
 
