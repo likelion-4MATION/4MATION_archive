@@ -27,14 +27,15 @@ ver3 T5 — 되묻기 선택지 버튼과 예시 질의 칩을 붙였다. 둘 �
 실행: streamlit run chatbot/app.py
 주의: chain.CALL_BUDGET(70콜, 재시도 포함)을 공유 — 소진 시 앱 재시작으로 리셋.
 """
+import html
 import json
 import pathlib
 import sys
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "chatbot"))
@@ -50,6 +51,7 @@ import qform_memory_panel as qmp
 import qform_panel
 import qform_state
 import qform_trace
+import ui_theme
 
 ROUTE_LABEL = {"rag": "문서 기반 답변", "link": "타기관 안내", "reject": "소관 밖",
                "oos": "안내 범위 밖 처리"}
@@ -107,124 +109,17 @@ EXAMPLE_CHIPS = [
     ("은닉재산 신고", "은닉재산 신고하면 포상금 얼마나 받나요?"),
 ]
 
-# 업무 도메인 아이콘 — EXAMPLE_CHIPS 라벨과 1:1. 장식용(이모지)일 뿐 판정에 안 쓴다.
-DOMAIN_ICONS = {
-    "착오송금 반환 신청": "💸",
-    "예금자보호제도": "🛡️",
-    "예금보험금 안내": "💰",
-    "고객 미수령금 신청": "🔍",
-    "채무조정 안내": "🤝",
-    "은닉재산 신고": "🕵️",
-}
-
 # 슬롯 추출 스코프 라벨 → `qform_config.SPEC["QFORM_SCOPE"]` 허용값. 첫 항목이 기본값이다.
 SCOPE_LABELS = {"착오송금 단일 (기본)": "msdr", "착오송금 + 예금보험금": "msdr+dpin"}
 _SCOPE_DEFAULT_LABEL = next(iter(SCOPE_LABELS))
 
-st.set_page_config(page_title="KDIC 안내 챗봇 PoC", page_icon="💬", layout="wide")
-
-# ── 레이아웃 CSS (ver6) ──────────────────────────────────────────────────────
-# 좌·우 컬럼 안 맨 앞에 보이지 않는 마커(span)를 심어두고, `[data-testid="stColumn"]
-# :has(.col-anchor-*)` 로 "그 마커를 담고 있는 컬럼"을 직접 골라낸다 — 형제 선택자로
-# 옆 요소를 짚어가던 이전 방식보다 훨씬 안전하다(중첩 깊이가 바뀌어도 안 깨진다).
-# 안쪽에 또 st.columns()가 있어도(도메인 그리드 등) 그 내부 컬럼엔 마커가 없어서
-# 이 규칙이 걸리지 않는다.
-st.markdown("""
-<style>
-/* Streamlit은 기본적으로 앱 전체를 뷰포트 높이에 고정하고(overflow:hidden) 그 안
-   (stAppScrollToBottomContainer, chat_input이 있으면 생김)만 내부 스크롤시킨다 —
-   좌·우를 sticky로 고정하려면 페이지 자체가 평범하게 스크롤돼야 하므로 풀어준다.
-   중간 래퍼(stMainBlockContainer·stHorizontalBlock)에 overflow:hidden이 섞여 있으면
-   sticky가 조용히 무효화되므로 같이 열어준다. */
-[data-testid="stApp"][data-testid="stApp"],
-[data-testid="stAppViewContainer"][data-testid="stAppViewContainer"],
-[data-testid="stAppScrollToBottomContainer"][data-testid="stAppScrollToBottomContainer"],
-[data-testid="stMainBlockContainer"][data-testid="stMainBlockContainer"],
-[data-testid="stHorizontalBlock"][data-testid="stHorizontalBlock"] {
-    position: static !important; height: auto !important; min-height: 0 !important;
-    overflow: visible !important; overflow-y: visible !important;
-}
-body { min-height: 100vh; }
-
-/* 색 하나로 통일 — 좌·우 배경, 사용자 말풍선 모두 이 회색 하나만 쓴다 */
-:root {
-    --panel-gray: #F1F3F4;
-    --panel-title-size: 1.02rem;  /* "세션 상태" 같은 소제목 크기 */
-    --metric-value-size: 2rem;    /* HCX 콜 "8 / 70" 숫자 크기 — 제목보다 눈에 띄게 크게 */
-    --ui-red: #FF4B4B;            /* Streamlit 기본 테마 primaryColor — 대화 초기화 버튼과 같은 빨강 */
-}
-
-[data-testid="stColumn"]:has(.col-anchor-left),
-[data-testid="stColumn"]:has(.col-anchor-right) {
-    position: sticky; top: 4.5rem; align-self: flex-start;
-    max-height: calc(100vh - 6rem); overflow-y: auto;
-    background: var(--panel-gray); border-radius: 14px; padding: 0.9rem 1.05rem;
-    scrollbar-width: none;
-}
-[data-testid="stColumn"]:has(.col-anchor-left)::-webkit-scrollbar,
-[data-testid="stColumn"]:has(.col-anchor-right)::-webkit-scrollbar { display: none; }
-
-/* 왼쪽·오른쪽 안 글자·버튼·간격을 촘촘하게 — 스크롤을 줄인다 */
-[data-testid="stColumn"]:has(.col-anchor-left) h2, [data-testid="stColumn"]:has(.col-anchor-left) h3,
-[data-testid="stColumn"]:has(.col-anchor-left) h4,
-[data-testid="stColumn"]:has(.col-anchor-right) h2, [data-testid="stColumn"]:has(.col-anchor-right) h3,
-[data-testid="stColumn"]:has(.col-anchor-right) h4 {
-    font-size: var(--panel-title-size) !important; margin-top: .2rem !important; margin-bottom: .2rem !important;
-}
-[data-testid="stColumn"]:has(.col-anchor-left) p, [data-testid="stColumn"]:has(.col-anchor-left) .stMarkdown,
-[data-testid="stColumn"]:has(.col-anchor-left) [data-testid="stCaptionContainer"],
-[data-testid="stColumn"]:has(.col-anchor-right) p, [data-testid="stColumn"]:has(.col-anchor-right) .stMarkdown,
-[data-testid="stColumn"]:has(.col-anchor-right) [data-testid="stCaptionContainer"] {
-    font-size: .83rem !important; line-height: 1.35 !important;
-}
-[data-testid="stColumn"]:has(.col-anchor-left) button,
-[data-testid="stColumn"]:has(.col-anchor-right) button {
-    font-size: .82rem !important; padding: .3rem .55rem !important; min-height: 2rem !important;
-}
-[data-testid="stColumn"]:has(.col-anchor-left) [data-testid="stVerticalBlock"],
-[data-testid="stColumn"]:has(.col-anchor-right) [data-testid="stVerticalBlock"] {
-    gap: .35rem !important;
-}
-[data-testid="stColumn"]:has(.col-anchor-left) [data-testid="stMetricValue"] {
-    font-size: var(--metric-value-size) !important;
-}
-[data-testid="stColumn"]:has(.col-anchor-left) hr, [data-testid="stColumn"]:has(.col-anchor-right) hr {
-    margin: .5rem 0 !important;
-}
-/* 회색 배경 위 항목 카드는 흰색으로 — 배경과 구분 (근거조각·추천질문·도메인 카드 등).
-   `st.container(key=...)`에 "card-"로 시작하는 key를 주면 Streamlit이 그 컨테이너에
-   st-key-card-... 클래스를 그대로 붙여준다 — 이 훅으로 카드만 콕 집어 흰 배경을 준다. */
-[class*="st-key-card-"] {
-    background: #FFFFFF !important; border-radius: 10px !important;
-    padding: .5rem .65rem !important; margin-bottom: .4rem !important;
-}
-
-/* 업무별 추천 검색어(6×1)는 버튼별 특별 크기 규칙 없이 위 일반 버튼 규칙(font-size
-   .82rem · min-height 2rem)을 그대로 쓴다 — "지금 뜨는 검색어" 카드와 같은 크기가
-   된다. 한 줄 폭이 넓어져서(6×1) 라벨이 2줄로 넘어갈 일도 거의 없다. */
-
-/* 추천 질문 카드의 "Q." 만 현재 테마 빨강으로 — 버튼 라벨은 일반 텍스트라
-   문자 단위 스타일링이 안 되니 ::first-letter 로 첫 글자("Q")만 짚는다.
-   qcard- 접두사(위 _render_question_cards)로 이 카드들에만 걸리게 한다. */
-/* 실제 글자는 button > ... > p 안에 있다 — button 자체엔 ::first-letter가 안 먹는다
-   (라이브 DOM으로 확인: button::first-letter는 무효, button p::first-letter는 유효). */
-[class*="st-key-qcard-"] button p::first-letter { color: var(--ui-red) !important; }
-
-/* 하단 입력창 가운데 정렬 — 폭 자체는 아래 JS(components.html)가 중앙 컬럼 실측값으로
-   맞춘다. margin:auto만 CSS로 미리 걸어 두면 JS가 늦게 붙어도 어색하게 왼쪽에
-   붙어있지 않는다. */
-[data-testid="stBottomBlockContainer"] { margin-left: auto !important; margin-right: auto !important; }
-</style>
-""", unsafe_allow_html=True)
-
-title_col, report_col = st.columns([5, 1])
-with title_col:
-    st.title("💬 KDIC 안내 챗봇 — PoC")
-    st.caption("예금보험공사 안내 문서에 근거해 답변합니다. (실전2 end 데모 · 큐폼 배선)")
-with report_col:
-    st.write("")
-    if st.button("🚩 챗봇 오류 신고", key="top-report", width="stretch"):
-        st.session_state.report_confirm = True
+st.set_page_config(page_title="예금보험공사 안내 서비스", page_icon="🏛", layout="wide")
+ui_theme.inject()
+ui_theme.header(
+    "예금보험공사 안내",
+    "예금보험공사 안내 문서를 기반으로 답변합니다.",
+    tag="PoC 데모",
+)
 
 st.session_state.setdefault("history", [])
 st.session_state.setdefault("flow", qform_flow.new_state())
@@ -270,37 +165,21 @@ def report_context() -> dict:
     }
 
 
-if st.session_state.report_notice:
-    level, message = st.session_state.report_notice
-    (st.success if level == "ok" else st.error)(message)
-    st.session_state.report_notice = None
+# 오류 신고 확인 UI 는 우측 레일 `render_support_card()` 안 인라인 아코디언으로 옮겼다.
+# 저장 로직(`oos_store.create_report`)·플래그 이름은 그대로다.
 
-if st.session_state.report_confirm:
-    st.warning("오류 분석을 위해 현재 대화 내용과 답변 처리 기록이 저장됩니다.")
-    confirm_col, cancel_col, _ = st.columns([1, 1, 4])
-    if confirm_col.button("신고하기", key="report-confirm", type="primary", width="stretch"):
-        try:
-            ctx = report_context()
-            saved = oos_store.create_report(ctx["payload"], session_id=ctx["session_id"],
-                                            report_path="top_button",
-                                            target_message_id=ctx["target_message_id"])
-            st.session_state.report_notice = ("ok", f"오류 신고가 접수되었습니다 ({saved['report_id']}).")
-        except Exception:
-            st.session_state.report_notice = ("error", "오류 신고를 저장하지 못했습니다. 접수된 것으로 처리하지 않았습니다.")
-        st.session_state.report_confirm = False
-        st.rerun()
-    if cancel_col.button("취소", key="report-cancel", width="stretch"):
-        st.session_state.report_confirm = False
-        st.rerun()
+# 사이드바 3구역 — **사용자 → 기억 → 관리자** 순서로 자리를 먼저 잡는다.
+# 관리자 위젯 값(ASK_MODE/BOOST/CONFIG/SHOW_TRACE)은 본문보다 **먼저** 읽혀야 하는데,
+# 메모리 패널은 본문 렌더 **뒤에** 그려진다(flow 가 확정된 뒤라야 맞다).
+# 컨테이너로 슬롯을 예약해 두면 호출 순서와 화면 순서를 따로 둘 수 있다.
+with st.sidebar:
+    _sb_user = st.container()
+    _sb_mem = st.container()
+    _sb_admin = st.container()
 
-# 좌측(정보) / 중앙(대화) / 우측(추천 질문·근거 조각) — 예시 UI(서울 열린데이터광장
-# 챗봇) 레이아웃을 참고해 사이드바 대신 고정 3컬럼으로 구성한다.
-# 좌·우 폭은 서로 같게, 중앙은 그보다 조금 더 크게.
-left, center, right = st.columns([1.1, 2.3, 1.1])
-
-with left:
-    st.markdown('<span class="col-anchor-left"></span>', unsafe_allow_html=True)
-    if st.button("🔄 대화 초기화", key="btn-reset-top", type="primary", width="stretch"):
+with _sb_user:
+    if st.button("＋ 새로운 대화 시작하기", key="btn-newchat", type="primary",
+                 width="stretch"):
         st.session_state.history = []
         st.session_state.flow = qform_flow.new_state()
         st.session_state.needs_regen = False
@@ -308,29 +187,36 @@ with left:
         st.session_state["_pending_step"] = None
         st.rerun()
     st.divider()
+    st.subheader("현재 대화")
+    _asked = [t["text"] for t in st.session_state.history if t["role"] == "user"]
+    if _asked:
+        for _i, _t in enumerate(_asked, 1):
+            st.caption(f"{_i}. {_t}")
+    else:
+        st.caption("아직 질문이 없습니다.")
 
-    st.subheader("세션 상태")
+with _sb_admin:
+    st.divider()
+    # 예산 경고는 접힌 영역 밖에 둔다 (T7 B6-1) — 소진되고 나서 알면 시연 도중에 막힌다.
     _left_calls = chain.CALL_BUDGET - chain._calls
-    st.metric("HCX 콜 (재시도 포함)", f"{chain._calls} / {chain.CALL_BUDGET}")
-    # 예산 경고 (T7 B6-1) — 소진되고 나서 알면 시연 도중에 막힌다. 미리 보여 준다.
     if _left_calls <= 0:
         st.error("모델 호출 예산 소진 — 새 답변을 만들 수 없습니다. "
                  "되묻기·선택지·슬롯 수정은 계속 동작합니다 (콜 0).")
     elif _left_calls <= LOW_CALL_WARN:
         st.warning(f"남은 모델 호출 {_left_calls}회. "
                    "경로에 따라 OOS 분류 또는 답변 생성에 호출을 씁니다.")
-    st.caption("되묻기 턴은 ⓐ 모드에서 콜을 쓰지 않습니다. 예산 소진 시 앱 재시작으로 리셋됩니다.")
 
-    # 예시 UI처럼 좌측은 세션 상태 · 근거 문서만 상시 노출한다. 큐폼 설정(및 트레이스 토글)은
-    # 접어 둔다 — 기능은 그대로고, 접혀 있어도 위젯 상태는 유지된다(Streamlit 특성).
-    with st.expander("⚙️ 큐폼 설정"):
+    with st.expander("관리자 · 고급 설정"):
+        st.metric("HCX 콜 (재시도 포함)", f"{chain._calls} / {chain.CALL_BUDGET}")
+        st.caption("되묻기 턴은 ⓐ 모드에서 콜을 쓰지 않습니다. 예산 소진 시 앱 재시작으로 리셋됩니다.")
+        st.divider()
         st.radio(
             "되묻기 문구", list(ASK_MODES), index=0, key="ask_mode_label",
             help="ⓐ는 조합 테이블 값을 CSV 문구에 끼워 넣습니다(LLM 콜 0). "
                  "ⓑ는 같은 판정 결과를 LLM이 한 문장으로 다듬습니다. 값 고정 가드를 어기면 "
                  "ⓐ로 폴백하고 사유를 남깁니다 — 어느 쪽이 나은지는 비교해 보고 정합니다.",
         )
-        st.checkbox(
+        st.toggle(
             "쿼리 부스트 (실험)", value=False, key="boost",
             help="슬롯 값을 검색 쿼리에 덧붙입니다. 검색 동작이 바뀌므로 450셋 회귀 수치가 "
                  "나오기 전까지는 기본 OFF입니다. 첨부 후단 필터는 토글과 무관하게 항상 동작합니다.",
@@ -344,8 +230,8 @@ with left:
                  "확장은 실측만 끝났고 기본값 전환은 보류 상태입니다(HOLES H39).",
         )
         st.checkbox("트레이스 패널", value=False, key="show_trace",
-                    help="질의 1건이 어느 층에서 어떻게 갈렸는지 보여줍니다. "
-                         "좌측을 세션 상태·근거 문서 위주로 단순하게 유지하려고 기본은 꺼둡니다.")
+                    help="질의 1건이 어느 층에서 어떻게 갈렸는지 우측 레일 하단에 보여줍니다. "
+                         "관리자 콘솔로 이관 예정이라 기본은 꺼둡니다.")
         st.caption("첨부 후단 필터는 항상 켜져 있습니다 (슬롯이 비면 자동으로 기존 동작).")
         st.divider()
         st.caption(
@@ -355,7 +241,7 @@ with left:
 
 ASK_MODE = ASK_MODES[st.session_state.get("ask_mode_label", "ⓐ 템플릿 (콜 0)")]
 BOOST = bool(st.session_state.get("boost"))
-# 좌측 큐폼 설정 → 정책 오버라이드. `qform_config.resolve()` 가 허용범위 밖 값을 기본값으로 되돌린다.
+# 관리자 고급 설정 → 정책 오버라이드. `qform_config.resolve()` 가 허용범위 밖 값을 기본값으로 되돌린다.
 CONFIG = {"QFORM_SCOPE": SCOPE_LABELS[st.session_state.get("qform_scope_label",
                                                           _SCOPE_DEFAULT_LABEL)]}
 
@@ -381,15 +267,17 @@ def render_slots(slots: dict, *, key_prefix: str = "", editable: bool = False) -
     if not filled:
         return None
     if not editable:
-        st.caption("🎯 " + " · ".join(f"{lab} **{v}**" for _, lab, v in filled))
+        st.caption("확정된 조건 · " + " · ".join(f"{lab} **{v}**" for _, lab, v in filled))
         return None
 
     unset = None
-    st.caption("🎯 확정된 조건 — 잘못 잡혔으면 ✕ 로 풀고 다시 고르세요")
-    for col, (f, lab, v) in zip(st.columns(len(filled)), filled):
-        if col.button(f"{lab} {v}  ✕", key=f"unset-{key_prefix}-{f}", width="stretch",
-                      help=f"'{lab}' 조건을 해제하고 되묻기를 다시 받습니다 (HCX 콜 0)"):
-            unset = f
+    # 하나의 독립 패널로 묶는다 — 기능·버튼 배치는 그대로, 테두리/여백만 CSS 로 준다
+    with st.container(key=f"kdic-slots-{key_prefix}"):
+        st.caption("확정된 조건 — 잘못 잡혔으면 ✕ 로 풀고 다시 고르세요")
+        for col, (f, lab, v) in zip(st.columns(len(filled)), filled):
+            if col.button(f"{lab} {v}  ✕", key=f"unset-{key_prefix}-{f}", width="stretch",
+                          help=f"'{lab}' 조건을 해제하고 되묻기를 다시 받습니다 (HCX 콜 0)"):
+                unset = f
     return unset
 
 
@@ -408,14 +296,14 @@ def render_attachments(atts: list, key_prefix: str) -> None:
             groups[title] = []
             order.append(title)
         groups[title].append(a)
-    with st.expander(f"📎 관련 서식·첨부파일 ({len(atts)}건)", expanded=True):
+    with st.expander(f"관련 서식·첨부파일 ({len(atts)}건)"):
         for ti, title in enumerate(order):
             st.markdown(f"**{title}**")
             for ai, a in enumerate(groups[title]):
                 kind = f"[{a['doc_kind']}] " if a.get("doc_kind") else ""
                 fname = a.get("orig_filename") or "attachment"
                 size = _fmt_size(a.get("file_size"))
-                label = f"⬇ {kind}{a.get('label') or fname}  ·  {fname}{size}"
+                label = f"{kind}{a.get('label') or fname}  ·  {fname}{size}"
                 key = f"att-{key_prefix}-{ti}-{ai}"
                 if a.get("available") and a.get("abs_path"):
                     try:
@@ -441,11 +329,11 @@ def render_evidence_card(r: dict) -> None:
         st.caption("이 답변은 오류로 근거 자료가 없습니다.")
         return
     if r["sources"]:
-        with st.expander("근거 문서"):
+        with st.expander(f"참고 문헌·출처 ({len(r['sources'])}건)"):
             for i, s in enumerate(r["sources"], 1):
                 st.markdown(f"{i}. [{s['title']}]({s['url']})")
     if not r["checks"]["ok"]:
-        with st.expander("⚑ 검증 플래그 (차단 아님)"):
+        with st.expander("검증 플래그 (차단 아님)"):
             for f in r["checks"]["flags"]:
                 st.markdown(f"- {f}")
 
@@ -473,7 +361,7 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
         f" · {meta.get('latency_ms') or '?'}ms"
     )
     if search_q:
-        st.caption(f"🔎 부스트 적용 검색어: `{search_q}`")
+        st.caption(f"부스트 적용 검색어: `{search_q}`")
     # 근거 문서·검증 플래그는 우측 "근거 자료" 컬럼으로 옮겼다(render_evidence_card).
     # 첨부파일 다운로드는 대화 흐름과 붙어 있는 게 자연스러워 말풍선에 그대로 둔다.
     render_attachments(r.get("attachments") or [], key_prefix)
@@ -578,7 +466,7 @@ def render_options(opts: list[str], key_prefix: str) -> str | None:
     c1, c2 = st.columns(2)
     if c1.button("이대로 답변받기", key=f"opt-{key_prefix}-escape", width="stretch"):
         picked = _ESCAPE
-    if c2.button("⏭ 이건 넘어갈게요", key=f"opt-{key_prefix}-pass", width="stretch"):
+    if c2.button("이건 넘어갈게요", key=f"opt-{key_prefix}-pass", width="stretch"):
         picked = _PASS
     return picked
 
@@ -615,7 +503,7 @@ def render_memory_panel(flow: dict, key_prefix: str = "mem") -> tuple | None:
     """
     model = qmp.panel_model(flow)
     action = None
-    st.subheader("기억")
+    st.markdown("### 대화 기억")
     st.caption(f"이월 유효 {model['ttl']}턴 · 만료 항목은 회색으로 남습니다")
     for zone in model["zones"]:
         st.markdown(f"**{zone['name']}**")
@@ -638,8 +526,8 @@ def render_memory_panel(flow: dict, key_prefix: str = "mem") -> tuple | None:
                 continue
             cols = st.columns(len(it["ops"]) or 1)
             for col, op in zip(cols, it["ops"]):
-                label = {"edit": "✏️", "clear": "❌", "pass": "⏭",
-                         "move": "✏️ 순서", "drop": "❌"}[op]
+                label = {"edit": "수정", "clear": "해제", "pass": "건너뛰기",
+                         "move": "위로", "drop": "삭제"}[op]
                 if col.button(label, key=f"{key_prefix}-{zone['name']}-{i}-{op}"):
                     if op in ("move", "drop"):
                         action = (op, {"index": it["index"], "delta": -1})
@@ -664,14 +552,27 @@ def render_chips(key_prefix: str, items: list[tuple[str, str]] | None = None,
             with col:
                 # 버튼 자체가 이미 테두리 있는 박스라 st.container(border=True)로 한 번 더
                 # 감싸면 네모가 2겹이 된다 — 감싸지 않고 버튼 하나만 둔다.
-                # DOMAIN_ICONS에 있는 라벨(업무 6종)이면 이모지를 붙인다(우측 "업무별
-                # 추천 검색어"와 같은 스타일). 없는 라벨(에러 복구용 등)은 그냥 텍스트.
-                icon = DOMAIN_ICONS.get(label)
-                shown = f"{icon}  {label}" if icon else label
-                if st.button(shown, key=f"chip-{key_prefix}-{idx}", width="stretch",
+                if st.button(label, key=f"chip-{key_prefix}-{idx}", width="stretch",
                              help=query):
                     picked = query
     return picked
+
+
+# 추천 질문 어조 게이트 — 화면에 세우는 질문은 **표준 존댓말 의문문**만 통과시킨다.
+# 코퍼스에는 구어체 파라프레이즈("…있어?", "…궁금함")와 명사구 표제("예금자보호제도")가
+# 섞여 있다. 문구를 고쳐 쓰면 창작이 되므로(CLAUDE.md §2-4) **고르기만 한다** —
+# `요?` · `니까?` 로 끝나는 것만 남긴다(그냥 `까?` 는 "…있을까?" 같은 해체가 섞인다).
+# 업무별로 33~75건이 통과해 노출 상한(5~6)을 넉넉히 채운다. 반말이 들어오는 경로가
+# 남지 않으므로 출력단 `^Q\.` 정규식 후처리는 두지 않는다 — 접두사는 아예 안 붙인다.
+_POLITE_Q_RE = re.compile(r"(요|니까)\?$")
+# 화면 문구가 코퍼스에 섞여 들어온 것("송금하시겠습니까?")은 사용자 질문이 아니라
+# 시스템이 사용자에게 묻는 확인문이다. 종결형으로 갈라낸다.
+_CONFIRM_Q_RE = re.compile(r"시겠(습니까|어요|나요)\?$")
+
+
+def _polite(q: str) -> bool:
+    q = q.strip()
+    return bool(_POLITE_Q_RE.search(q)) and not _CONFIRM_Q_RE.search(q)
 
 
 # ── 지금 뜨는 검색어 — 코퍼스 FAQ 페이지 원문에서만 뽑는다(EXAMPLE_CHIPS와 같은 원칙:
@@ -694,7 +595,7 @@ def _load_trending_questions(limit: int = 6) -> list[str]:
                     m = _FAQ_Q_RE.search(d.get("text") or "")
                     if m:
                         q = m.group(1).strip()
-                        if q and q not in qs:
+                        if q and _polite(q) and q not in qs:
                             qs.append(q)
         except (FileNotFoundError, OSError, json.JSONDecodeError):
             qs = []
@@ -709,9 +610,10 @@ _DOMAIN_Q_CACHE: dict[str, list[str]] | None = None
 
 
 def _load_domain_questions(limit: int = 5) -> dict[str, list[str]]:
-    """업무별 자연어 질문(구어체 포함) — "현재 질문과 비슷한 질문"(문맥 추천) 전용.
+    """업무별 자연어 질문 — "현재 질문과 비슷한 질문"(문맥 추천) 전용.
 
-    직전 질의와 같은 결로 자연스럽게 이어지게 구어체 파라프레이즈를 그대로 쓴다.
+    직전 질의와 같은 결로 이어지도록 파라프레이즈를 그대로 쓰되, `_polite()` 를
+    통과한 존댓말 의문문만 남긴다.
     """
     global _DOMAIN_Q_CACHE
     if _DOMAIN_Q_CACHE is None:
@@ -721,7 +623,7 @@ def _load_domain_questions(limit: int = 5) -> dict[str, list[str]]:
                 for line in fh:
                     d = json.loads(line)
                     bf, q = d.get("business_function"), d.get("question")
-                    if not bf or not q:
+                    if not bf or not q or not _polite(q):
                         continue
                     lst = by_bf.setdefault(bf, [])
                     if q not in lst and len(lst) < limit:
@@ -749,7 +651,7 @@ def _load_representative_domain_questions(limit: int = 6) -> dict[str, list[str]
                 for line in fh:
                     d = json.loads(line)
                     bf, oq = d.get("business_function"), d.get("origin_question")
-                    if not bf or not oq:
+                    if not bf or not oq or not _polite(oq):
                         continue
                     lst = by_bf.setdefault(bf, [])
                     if oq not in lst and len(lst) < limit:
@@ -761,14 +663,14 @@ def _load_representative_domain_questions(limit: int = 6) -> dict[str, list[str]
 
 
 def _render_question_cards(questions: list[str], key_prefix: str) -> str | None:
-    """"Q. 문장" 카드 목록. 클릭된 질문 원문을 돌려준다.
+    """추천 질문 카드 목록. 클릭된 질문 원문을 돌려준다.
 
-    key 에 공통으로 "qcard-" 를 붙인다 — CSS가 이 접두사 하나로 "Q." 글자만
-    빨갛게 물들인다(도메인 그리드 버튼처럼 이모지로 시작하는 버튼은 안 걸리게).
+    라벨은 코퍼스 원문 그대로다 — "Q." 같은 접두사를 붙이지 않는다.
+    key 의 "qcard-" 접두사는 `ui_theme` 가 카드 스타일을 걸 때만 쓴다.
     """
     picked = None
     for i, q in enumerate(questions):
-        if st.button(f"Q. {q}", key=f"qcard-{key_prefix}-{i}", width="stretch"):
+        if st.button(q, key=f"qcard-{key_prefix}-{i}", width="stretch"):
             picked = q
     return picked
 
@@ -807,14 +709,14 @@ def render_domain_questions(key_prefix: str) -> str | None:
         if st.button("← 목록으로", key=f"{key_prefix}-back"):
             st.session_state[sel_key] = None
             st.rerun()
-        st.markdown(f"**{DOMAIN_ICONS.get(selected, '📁')} {selected}**")
+        st.markdown(f"**{selected}**")
         return _render_question_cards(domain_qs[selected], f"{key_prefix}-q")
 
     picked_domain = None
-    for lab, _ in EXAMPLE_CHIPS:
-        if st.button(f"{DOMAIN_ICONS.get(lab, '📁')}  {lab}",
-                     key=f"{key_prefix}-dom-{lab}", width="stretch"):
-            picked_domain = lab
+    with st.container(key="kdic-tags"):        # 디자인: 태그 칩 스타일 (동작 동일)
+        for lab, _ in EXAMPLE_CHIPS:
+            if st.button(lab, key=f"{key_prefix}-dom-{lab}", width="stretch"):
+                picked_domain = lab
     if picked_domain:
         st.session_state[sel_key] = picked_domain
         st.rerun()
@@ -833,15 +735,14 @@ def render_recommended_questions(key_prefix: str) -> str | None:
     domain_qs = _load_domain_questions()
     ctx_questions = domain_qs.get(ctx_bf) if ctx_bf else None
     if ctx_questions:
-        st.markdown("#### 🎯 현재 질문과 비슷한 질문")
+        ui_theme.section("현재 질문과 비슷한 질문")
         picked = _render_question_cards(ctx_questions, f"{key_prefix}-ctx") or picked
     else:
         trending = _load_trending_questions()
         if trending:
-            st.markdown("#### 🔥 지금 뜨는 검색어")
+            ui_theme.section("지금 뜨는 검색어")
             picked = _render_question_cards(trending, f"{key_prefix}-trend") or picked
-    st.divider()
-    st.markdown("#### 📂 업무별 추천 검색어")
+    ui_theme.section("업무별 추천 검색어")
     picked = render_domain_questions(f"{key_prefix}-cat") or picked
     return picked
 
@@ -879,6 +780,68 @@ def render_evidence_chunks(r: dict) -> None:
                     st.markdown(f"[원문 페이지 열기]({h['url']})")
 
 
+# 랜딩 추천 카드 3종 — 08-25 리디자인 지시서 §8 지정(예금보험금 · 미수령금 · 착오송금).
+# 문구는 EXAMPLE_CHIPS 에서 그대로 끌어온다. 여기서 새 문구를 만들지 않는다.
+CARD_KEYS = ["예금보험금 안내", "고객 미수령금 신청", "착오송금 반환 신청"]
+MAIN_CARDS = [c for k in CARD_KEYS for c in EXAMPLE_CHIPS if c[0] == k]
+
+
+def render_cards() -> str | None:
+    """랜딩 추천 질문 카드. 클릭된 질의 문구를 돌려준다 — `render_chips` 와 같은 계약."""
+    picked = None
+    for i, (col, (label, query)) in enumerate(
+            zip(st.columns(len(MAIN_CARDS), gap="small"), MAIN_CARDS)):
+        with col.container(key=f"kdic-card-{i}"):
+            ui_theme.card(label, query)
+            if st.button("바로 물어보기  →", key=f"card-{i}", width="stretch"):
+                picked = query
+    return picked
+
+
+def render_support_card() -> None:
+    """상담원 연결 · 오류 신고 — 우측 레일 최상단 지원 블록.
+
+    상담원 연결은 PoC 미지원 기능이다 — 화면을 전환하지 않고 toast 로만 알린다.
+    오류 신고는 ver6 로직 그대로(`oos_store.create_report`)이고, 확인 UI 만
+    상단 블록에서 **버튼 바로 아래 인라인 아코디언**으로 옮겼다(다시 누르면 접힌다).
+    """
+    with st.container(key="kdic-agent"):
+        st.markdown('<p class="kdic-agent-t">상담원 연결</p>'
+                    '<p class="kdic-agent-d">상담원 연결이 필요하시면 클릭해 주세요</p>',
+                    unsafe_allow_html=True)
+        if st.button("상담원 연결하기", key="agent-connect", width="stretch"):
+            st.toast("PoC 데모에서는 상담원 연결이 동작하지 않습니다.", icon="ℹ️")
+        if st.session_state.report_notice:
+            level, message = st.session_state.report_notice
+            (st.success if level == "ok" else st.error)(message)
+            st.session_state.report_notice = None
+        if st.button("챗봇 오류 신고", key="top-report", width="stretch"):
+            st.session_state.report_confirm = not st.session_state.report_confirm
+            st.rerun()
+        if st.session_state.report_confirm:
+            with st.container(key="kdic-report"):
+                st.caption("오류 분석을 위해 현재 대화 내용과 답변 처리 기록이 저장됩니다.")
+                ok_col, cancel_col = st.columns(2)
+                if ok_col.button("신고하기", key="report-confirm", type="primary",
+                                 width="stretch"):
+                    try:
+                        ctx = report_context()
+                        saved = oos_store.create_report(
+                            ctx["payload"], session_id=ctx["session_id"],
+                            report_path="top_button",
+                            target_message_id=ctx["target_message_id"])
+                        st.session_state.report_notice = (
+                            "ok", f"오류 신고가 접수되었습니다 ({saved['report_id']}).")
+                    except Exception:
+                        st.session_state.report_notice = (
+                            "error", "오류 신고를 저장하지 못했습니다. 접수된 것으로 처리하지 않았습니다.")
+                    st.session_state.report_confirm = False
+                    st.rerun()
+                if cancel_col.button("취소", key="report-cancel", width="stretch"):
+                    st.session_state.report_confirm = False
+                    st.rerun()
+
+
 def build_trace(ev: dict, hcx_calls: int) -> dict | None:
     """트레이스 조립 — **app 층에서만** 한다(E2). 파이프라인에는 계측이 없다.
 
@@ -896,6 +859,24 @@ def build_trace(ev: dict, hcx_calls: int) -> dict | None:
         )
     except Exception as e:  # noqa: BLE001  트레이스가 대화를 죽이면 안 된다
         return {"error": f"{type(e).__name__}: {e}", "layers": {}}
+
+
+@contextmanager
+def loading_spinner(message: str, note: str = ""):
+    """답변 생성 경로 공용 로딩 표시 — 기본 스피너 대신 KDIC 로고 스피너를 쓴다.
+
+    자리는 `_pending_step` 경로와 같은 `_loading_box`(중앙 컬럼, 회색 패널 바로 아래).
+    가짜 진행 단계를 만들지 않고 `ui_theme.loading()` 을 그대로 재사용한다.
+    예외가 나도 finally 에서 지운다 — 스피너가 남으면 화면이 멈춘 것처럼 보인다.
+    """
+    with _loading_box:
+        ph = st.empty()
+    with ph.container():
+        ui_theme.loading(message, note)
+    try:
+        yield
+    finally:
+        ph.empty()
 
 
 def record(ev: dict, trace: dict | None = None) -> None:
@@ -926,9 +907,8 @@ def record(ev: dict, trace: dict | None = None) -> None:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# 본문 레이아웃 — 좌측(정보: 세션상태·큐폼·근거문서·기억·트레이스) /
-# 중앙(대화) / 우측(추천 질문 · 근거 조각)
-# (st.chat_input은 컬럼 안에 못 들어가므로 최상위)
+# 본문 — 사이드바 | 중앙(안내·대화·결과) | 우측 레일(지원 · 추천 · 근거 · 트레이스)
+# (st.chat_input 은 컬럼 안에 못 들어가므로 최상위에서 부른다)
 # ══════════════════════════════════════════════════════════════════════════
 flow = st.session_state.flow
 pending = flow["pending_slot"]
@@ -937,56 +917,85 @@ SHOW_TRACE = bool(st.session_state.get("show_trace"))
 last_answer = max((i for i, t in enumerate(st.session_state.history)
                    if t["role"] == "answer"), default=None)
 
-chip_q = None
+# 3단 고정. 트레이스 토글로 폭이 바뀌면 시연 중 화면이 널뛴다 — 레일은 항상 있고,
+# 토글은 그 안의 트레이스 블록만 켜고 끈다.
+col_main, col_right = st.columns([7.5, 2.5], gap="large")
 
-with center:
-    st.markdown('<span class="center-col-anchor"></span>', unsafe_allow_html=True)
-    st.subheader("💬 대화")
-    unset_field = None
-    followup_q = None
+unset_field = None
+chip_q = None
+followup_q = None
+skip = False
+chosen = None
+
+with col_main:
+    _main_box = st.container(key="kdic-main")     # 배경색 앵커. 렌더 순서는 그대로다
+    _loading_box = st.container()                 # 로딩 상태 — 회색 패널 **아래**
+with _main_box:
+    if not st.session_state.history:
+        # 첫 화면 — 빈 입력창만 두면 무엇을 물어볼 수 있는지 알 수 없다(T5 B2)
+        ui_theme.section("자주 찾는 업무")
+        chip_q = render_cards() or chip_q
+
     for ti, turn in enumerate(st.session_state.history):
+        # 말풍선·아바타 없음. 질문은 문서 제목, 답변은 본문으로 흐른다.
         if turn["role"] == "user":
-            with st.chat_message("user"):
-                st.markdown(turn["text"])
+            if ti:
+                st.markdown('<hr class="kdic-rule">', unsafe_allow_html=True)
+            st.markdown(f'<p class="kdic-q">{html.escape(turn["text"])}</p>',
+                        unsafe_allow_html=True)
         elif turn["role"] == "ask":
-            with st.chat_message("assistant"):
-                render_ask(turn)
+            render_ask(turn)
         else:
-            with st.chat_message("assistant"):
-                # 슬롯 해제는 **마지막 답변에만** 붙인다 — 과거 턴의 슬롯을 고치는 시늉을
-                # 하면 화면과 실제 상태(flow)가 갈린다.
-                act = render_answer(turn["r"], key_prefix=f"h{ti}",
-                                    slots=turn.get("slots"), search_q=turn.get("search_q"),
-                                    editable=(ti == last_answer and not pending),
-                                    followups=(turn.get("followups")
-                                               if ti == last_answer and not pending else None))
-                unset_field = act["unset"] or unset_field
-                chip_q = act["chip"] or chip_q
-                followup_q = act["followup"] or followup_q
+            # 슬롯 해제는 **마지막 답변에만** 붙인다 — 과거 턴의 슬롯을 고치는 시늉을
+            # 하면 화면과 실제 상태(flow)가 갈린다.
+            act = render_answer(turn["r"], key_prefix=f"h{ti}",
+                                slots=turn.get("slots"), search_q=turn.get("search_q"),
+                                editable=(ti == last_answer and not pending),
+                                followups=(turn.get("followups")
+                                           if ti == last_answer and not pending else None))
+            unset_field = act["unset"] or unset_field
+            chip_q = act["chip"] or chip_q
+            followup_q = act["followup"] or followup_q
 
     # 대기 중인 질의 처리 — 사용자 메시지는 위 루프에서 이미 그려졌다. 여기서 로딩
     # 표시를 하고 실제 검색·생성을 돈다 — 메시지 목록 바로 아래(입력창 바로 위)라
-    # 자리가 자연스럽다("어시스턴트가 입력 중" 느낌).
+    # 자리가 자연스럽다.
     pending_step = st.session_state.get("_pending_step")
     if pending_step:
-        with st.chat_message("assistant"):
-            with st.spinner("처리 중… (최초 1회는 임베딩 모델 로딩으로 오래 걸립니다)"):
-                c0 = chain._calls
-                st.session_state.needs_regen = False
+        # 로딩 상태는 중앙 컬럼 안, 회색 패널 바로 아래에 뜬다 — 전체화면 오버레이도,
+        # 별도 로딩 화면도 만들지 않는다. 문구는 코드에서 실제로 갈리는 두 경로만
+        # 반영한다(되묻기 응답 vs 새 용건). 파이프라인 내부 단계 훅이 없으므로 가짜
+        # 진행 단계를 지어내지 않는다.
+        with _loading_box:
+            _loading = st.empty()
+            with _loading.container():
                 if pending_step["is_reply"]:
-                    ev = qform_flow.reply(
-                        flow, pending_step["text"], ask_mode=ASK_MODE,
-                        boost=BOOST, config=CONFIG,
-                    )
+                    ui_theme.loading("선택하신 조건을 반영하고 있습니다…")
                 else:
-                    ctx = report_context()
-                    ctx["target_message_id"] = pending_step.get("previous_target", "")
-                    ev = orchestrator.start_turn(
-                        flow, pending_step["text"], ask_mode=ASK_MODE,
-                        boost=BOOST, config=CONFIG, report_context=ctx,
+                    ui_theme.loading(
+                        "답변을 생성하고 있습니다…",
+                        "관련 정보를 검색하고 있습니다. "
+                        "최초 1회는 임베딩 모델 로딩으로 오래 걸립니다.",
                     )
-                # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
-                record(ev, build_trace(ev, chain._calls - c0))
+        try:
+            c0 = chain._calls
+            st.session_state.needs_regen = False
+            if pending_step["is_reply"]:
+                ev = qform_flow.reply(
+                    flow, pending_step["text"], ask_mode=ASK_MODE,
+                    boost=BOOST, config=CONFIG,
+                )
+            else:
+                ctx = report_context()
+                ctx["target_message_id"] = pending_step.get("previous_target", "")
+                ev = orchestrator.start_turn(
+                    flow, pending_step["text"], ask_mode=ASK_MODE,
+                    boost=BOOST, config=CONFIG, report_context=ctx,
+                )
+            # 콜 회계는 app 층에서 잰다 — chain 에 카운터를 심지 않는다(E2)
+            record(ev, build_trace(ev, chain._calls - c0))
+        finally:
+            _loading.empty()          # 실패해도 스피너가 남지 않게
         st.session_state["_pending_step"] = None
         st.rerun()
 
@@ -999,84 +1008,43 @@ with center:
     regen = (st.button("이 조건으로 다시 답변받기", key="btn-regen", type="primary")
              if st.session_state.get("needs_regen") and not pending else False)
 
-    skip = False
-    chosen = None
     if pending:
         # 선택지 버튼 — 값이 조합 테이블에서 직접 온다(T5 B1). 자유 입력·탈출구는 그대로.
         chosen = render_options(qform_flow.options(flow), key_prefix=str(flow["ask_turn"]))
         # 탈출구 상시 노출 — 기획서 §4. 미선택(null)은 결함이 아니라 정상 입력이다.
         skip = st.button("잘 모르겠어요 — 이대로 답변받기", key=f"skip-{flow['ask_turn']}")
-    elif not st.session_state.history:
-        # 첫 화면 — 업무 6종 대표 질문 카드(예시 UI의 초기 예시 카드 자리).
-        st.markdown("이런 걸 물어볼 수 있어요")
-        chip_q = render_chips("home", per_row=3) or chip_q
 
-with right:
-    st.markdown('<span class="col-anchor-right"></span>', unsafe_allow_html=True)
-    tab_reco, tab_evidence = st.tabs(["💡 추천 질문", "🧩 근거 조각"])
-    with tab_reco:
-        chip_q = render_recommended_questions("reco") or chip_q
-    with tab_evidence:
-        if last_answer is not None:
-            _last = st.session_state.history[last_answer]
-            render_evidence_chunks(_last["r"])
-        else:
-            st.caption("답변을 받으면 이 자리에 근거 조각이 표시됩니다.")
+    _queue_box = st.container()                   # 다음 용건 안내 자리 (아래에서 채운다)
 
-with left:
-    st.divider()
-    st.subheader("📎 근거 문서")
-    if last_answer is not None:
-        render_evidence_card(st.session_state.history[last_answer]["r"])
-    else:
-        st.caption("답변을 받으면 이 자리에 근거 문서·검증 플래그가 표시됩니다.")
+with col_right:
+    with st.container(key="kdic-rail"):
+        render_support_card()
+        tab_reco, tab_evidence = st.tabs(["추천 질문", "근거 자료"])
+        with tab_reco:
+            chip_q = render_recommended_questions("reco") or chip_q
+        with tab_evidence:
+            if last_answer is not None:
+                _last = st.session_state.history[last_answer]
+                render_evidence_card(_last["r"])
+                render_evidence_chunks(_last["r"])
+            else:
+                st.caption("답변을 받으면 이 자리에 근거 문서·근거 조각이 표시됩니다.")
+        if SHOW_TRACE:
+            # 관리자 정보는 추천 콘텐츠 **아래**. 라벨·스크롤박스는 qform_panel 이 갖고 있다.
+            st.markdown("")
+            qform_panel.render([t["trace"] for t in st.session_state.history
+                                if t.get("trace")])
 
-    # ver4 M3 — 메모리 패널. 좌측 상시 노출은 세션 상태·근거 문서뿐이라 접어 둔다.
-    _panel_action = None
-    if st.session_state.history:
+# ver4 M3 — 메모리 패널. 사이드바 중간 구역(_sb_mem)에 그린다.
+_panel_action = None
+if st.session_state.history:
+    with _sb_mem:
         st.divider()
-        with st.expander("🧠 기억"):
-            _panel_action = render_memory_panel(flow)
+        _panel_action = render_memory_panel(flow)
 
-    if SHOW_TRACE:
-        st.divider()
-        qform_panel.render([t["trace"] for t in st.session_state.history if t.get("trace")])
-
-q = st.chat_input("예: 착오송금 반환 신청 서류가 뭐예요?")
-
-# 하단 입력창 폭을 중앙 대화 컬럼 기준으로 맞추되, 살짝 더 여유 있게 좌·우로 조금씩
-# 더 넓힌다(WIDEN_PX) — 좌·우 패널 카드 패딩 안쪽 여유 공간만큼만 넓혀서 옆 칸을
-# 침범하지 않는 선에서 손해 안 보게. st.chat_input은 컬럼 밖(하단 고정 영역)에 그려져서
-# CSS만으론 "중앙 컬럼과 같은 폭"을 알 수 없어 실제 렌더된 폭을 재서 적용한다.
-# 가운데 정렬은 CSS margin:auto에 맡긴다(하단 바 자체가 뷰포트 전체 폭이라 auto만으로
-# 정확히 가운데 온다 — 이전에 JS로 getBoundingClientRect().left 를 그대로 margin-left에
-# 넣었더니 뷰포트 기준 좌표와 박스 기준 마진이 안 맞아 어긋났었다).
-components.html("""
-<script>
-const WIDEN_PX = 140;  // 중앙 컬럼 실측 폭보다 이만큼(좌우 합산) 더 넓힌다
-function syncInputWidth() {
-  try {
-    const doc = window.parent.document;
-    const anchor = doc.querySelector('.center-col-anchor');
-    const col = anchor && anchor.closest('[data-testid="stColumn"]');
-    const bottom = doc.querySelector('[data-testid="stBottomBlockContainer"]');
-    if (!col || !bottom) return;
-    const rect = col.getBoundingClientRect();
-    bottom.style.maxWidth = 'none';
-    bottom.style.width = (rect.width + WIDEN_PX) + 'px';
-    bottom.style.marginLeft = 'auto';
-    bottom.style.marginRight = 'auto';
-  } catch (e) {}
-}
-syncInputWidth();
-try {
-  const doc = window.parent.document;
-  new ResizeObserver(syncInputWidth).observe(doc.body);
-  window.parent.addEventListener('resize', syncInputWidth);
-} catch (e) {}
-setInterval(syncInputWidth, 400);
-</script>
-""", height=0)
+# 입력 바 — 화면 최하단 고정. 반환 계약은 이전과 같다(질의 문자열 또는 None).
+# 컬럼 안에서 부르면 고정이 풀린다.
+q = st.chat_input("궁금한 내용을 입력해주세요.")
 
 # 슬롯 해제(T6)와 후속 추천(T7 C안)은 **같은 경로**다 — 둘 다 슬롯을 고치고
 # 되묻기만 재판정한다. `answer()` 는 부르지 않으므로 HCX 콜 0 이다(AC6-5·AC7-1).
@@ -1101,7 +1069,7 @@ if _edit:
     st.rerun()
 
 if regen:
-    with st.spinner("문서 검색·답변 생성 중…"):
+    with loading_spinner("답변을 생성하고 있습니다…", "관련 정보를 검색하고 있습니다."):
         c0 = chain._calls
         ev = qform_flow.answer_now(flow, boost=BOOST)
         st.session_state.needs_regen = False
@@ -1109,7 +1077,7 @@ if regen:
     st.rerun()
 
 if skip and pending:
-    with st.spinner("문서 검색·답변 생성 중…"):
+    with loading_spinner("답변을 생성하고 있습니다…", "관련 정보를 검색하고 있습니다."):
         c0 = chain._calls
         ev = qform_flow.skip(flow, boost=BOOST, config=CONFIG)
         st.session_state.needs_regen = False
@@ -1119,7 +1087,7 @@ if skip and pending:
 if chosen == _ESCAPE and pending:
     # K9 [이대로 답변받기] — ver2 탈출구(`skip`)를 버튼으로 한 번 더 연 것이다.
     append_history({"role": "user", "text": "이대로 답변받기"})
-    with st.spinner("처리 중…"):
+    with loading_spinner("답변을 생성하고 있습니다…", "관련 정보를 검색하고 있습니다."):
         c0 = chain._calls
         ev = qform_flow.skip(flow, boost=BOOST, config=CONFIG)
         st.session_state.needs_regen = False
@@ -1137,7 +1105,7 @@ if chosen == _PASS and pending:
 if chosen and pending:
     # 버튼 경로 — `value=` 로 값을 직접 주입한다. 자연어 추출을 경유하지 않는다.
     append_history({"role": "user", "text": chosen})
-    with st.spinner("처리 중…"):
+    with loading_spinner("답변을 생성하고 있습니다…", "관련 정보를 검색하고 있습니다."):
         c0 = chain._calls
         ev = qform_flow.reply(flow, chosen, value=chosen, ask_mode=ASK_MODE,
                               boost=BOOST, config=CONFIG)
@@ -1157,12 +1125,12 @@ q_new, q_reply = (chip_q, None) if chip_q else ((None, q) if pending else (q, No
 
 next_queued = False
 if flow.get("unit_queue") and not pending:
-    with left:
+    with _queue_box:
         st.info(f"대기 중인 용건이 {len(flow['unit_queue'])}개 있습니다.")
         next_queued = st.button("다음 용건 처리", key="next-unit", type="primary")
 
 if next_queued:
-    with st.spinner("다음 용건 처리 중…"):
+    with loading_spinner("다음 용건을 처리하고 있습니다…"):
         c0 = chain._calls
         ev = orchestrator.next_unit(flow, ask_mode=ASK_MODE, boost=BOOST, config=CONFIG,
                                     report_context=report_context())

@@ -199,7 +199,13 @@ def render(traces: list[dict]) -> None:
     """
     import streamlit as st
 
-    st.subheader("🔬 트레이스")
+    # 개발자용 패널이라는 성격은 유지하되, 중앙 안내 영역보다 시각적으로 앞서지 않게
+    # h3(subheader) 대신 라벨 한 줄로 낮춘다. 담는 정보는 그대로다.
+    st.markdown(
+        '<p class="kdic-trace">관리자 · 트레이스'
+        '<span class="kdic-trace-note"> · 콘솔 이관 예정</span></p>',
+        unsafe_allow_html=True,
+    )
     if not traces:
         st.caption("질의를 입력하면 층별 분기 근거가 여기에 표시됩니다.")
         return

@@ -8,14 +8,28 @@
 > 반드시 `cd crawler` 후 실행한다. `chatbot/` · `admin/` 은 리포 루트 기준이거나
 > 스스로 `sys.path` 를 잡으므로 아래 표기대로 쓴다.
 
+> **셸 표기** — 아래 명령은 macOS·Linux(bash) 기준이다. Windows PowerShell 은 다음만 바꿔 읽는다.
+>
+> | bash | Windows PowerShell |
+> |---|---|
+> | `source .venv/bin/activate` | `.venv\Scripts\Activate.ps1` |
+> | `export FOO=bar` | `$env:FOO = "bar"` |
+> | `A && B` | `A; B` — Windows PowerShell 5.1 은 `&&` 를 모른다 |
+> | 줄 끝 `\` (줄 잇기) | 백틱 `` ` `` — 또는 한 줄로 붙여 쓴다 |
+> | `~/.cache/huggingface` | `%USERPROFILE%\.cache\huggingface` |
+>
+> 명령 안에서는 `python3` 대신 **`python`** 을 쓴다 — Windows 에는 `python3` 가 없고
+> (스토어 앱이 열린다), 가상환경을 켠 뒤에는 어느 OS 든 `python` 이 3.x 다.
+> OS 를 가리는 것은 가상환경을 **만들 때 한 줄**뿐이다.
+
 ---
 
 ## 0. 공통 준비
 
 ```bash
 # 리포지토리 루트에서 단일 가상환경 생성·활성화
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv          # PowerShell: python -m venv .venv
+source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 
 # 검색·라우터 + 관리자 + 챗봇·테스트
@@ -26,8 +40,9 @@ python -m pip install streamlit python-dotenv pytest
 # HCX 키 — .env (루트). chatbot/* 가 load_dotenv 로 읽는다
 # 기존 .env가 있으면 덮어쓰지 않는다
 test -f .env || cp .env.example .env
+# PowerShell: if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # CLOVA_API_KEY · CLOVA_API_URL · CLOVA_MODEL을 편집한다
-$EDITOR .env
+$EDITOR .env                   # PowerShell: notepad .env
 ```
 
 `admin` 과 `chatbot` 은 **같은 파이썬 환경**에 깔아야 한다. 콘솔의 `settings.apply_runtime()`
@@ -44,7 +59,7 @@ $EDITOR .env
 터미널 1 — 관리자 콘솔:
 
 ```bash
-source .venv/bin/activate
+source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
 cd admin
 python -m uvicorn main:app --host 127.0.0.1 --port 8600
 # http://127.0.0.1:8600
@@ -53,9 +68,8 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8600
 터미널 2 — 챗봇:
 
 ```bash
-source .venv/bin/activate
-python -m streamlit run chatbot/app.py \
-  --server.address 127.0.0.1 --server.port 8501
+source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
+python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 8501
 # http://127.0.0.1:8501
 ```
 
@@ -73,19 +87,29 @@ python -m streamlit run chatbot/app.py \
 타지 않는다 — `router_source.resolve()` 가 로컬을 먼저 보고, 매니페스트의 9개 파일이 전부
 있고 크기가 맞으면 로컬 경로를 돌려준다.
 
+> **Windows 주의 — 줄바꿈 변환** `router_manifest.json` 은 파일 **바이트 크기**로
+> 검증한다. `core.autocrlf=true` 로 체크아웃하면 텍스트 7종(`config.json` ·
+> `tokenizer.json` · `merges.txt` …)이 LF→CRLF 로 커져 크기 검증이 전부 깨지고,
+> `resolve()` 가 로컬을 버리고 HF 프라이빗 repo 로 폴백한다. 토큰이 없으면 그대로
+> 실패해 챗봇이 "처리 중 오류"만 낸다. 리포의 `.gitattributes` 가
+> `router_moai_embedding_model/** -text` 로 이를 막는다 — 이미 CRLF 로 받아 버렸다면
+> 그 디렉토리를 지우고 `python scripts/download_router_hf.py` 로 다시 받는다.
+
 ```bash
 # ① 1회만 — HF repo → 레포 안 router_moai_embedding_model/
 pip install "huggingface-hub>=0.23"
 export HF_TOKEN=hf_...                        # read 권한이면 충분 (프라이빗 repo)
+# PowerShell: $env:HF_TOKEN = "hf_..."
 # 또는: huggingface-cli login
+# 2026-08-25 실측 — 토큰 없이 받아진 사례가 있다. 먼저 토큰 없이 돌려 보고 401이면 넣는다.
 
-python3 scripts/download_router_hf.py             # 멱등 — 크기 맞는 파일은 건너뜀
-python3 scripts/download_router_hf.py --dry-run    # 받을 목록만
-python3 scripts/download_router_hf.py --verify-sha  # 받은 뒤 sha256 전수 검증
+python scripts/download_router_hf.py             # 멱등 — 크기 맞는 파일은 건너뜀
+python scripts/download_router_hf.py --dry-run    # 받을 목록만
+python scripts/download_router_hf.py --verify-sha  # 받은 뒤 sha256 전수 검증
 
 # ② 확인 — "로컬 상태: 사용 가능" + resolve() 가 로컬 경로를 가리키면 끝
-python3 crawler/router_source.py
-python3 crawler/router_source.py --verify          # sha256 전수(2.38GB 읽음, 느림)
+python crawler/router_source.py
+python crawler/router_source.py --verify          # sha256 전수(2.38GB 읽음, 느림)
 
 # ③ 이후 실행 — 인자·환경변수 없이 그냥 돈다. HF 접속 0
 cd crawler && python -c "
@@ -94,6 +118,9 @@ print(rag.ROUTER_PATH)                 # 로컬 절대경로
 print(rag.classify_query_bf('착오송금 반환 신청 구비서류'))   # (업무, MSP)
 "
 ```
+
+HF 접속 자체가 안 되면(`CERTIFICATE_VERIFY_FAILED`) 백신의 TLS 스캐닝일 수 있다 —
+CA 번들 합치는 절차는 [SETUP.md 자주 걸리는 문제](../SETUP.md#자주-걸리는-문제) 에 있다.
 
 받아 놓은 뒤 오프라인으로 강제하려면 `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` 을 붙인다
 (`chatbot/*` 은 이미 스스로 그렇게 설정한다). 로컬이 완전하면 이 상태에서도 라우터가 뜬다.
@@ -104,15 +131,25 @@ print(rag.classify_query_bf('착오송금 반환 신청 구비서류'))   # (업
 
 ```bash
 export ROUTER_PATH=/path/to/other_ckpt    # 실험 체크포인트로 갈아끼울 때만
+# PowerShell: $env:ROUTER_PATH = "C:\path\to\other_ckpt"
 
 # 팀에 올리기 (write 토큰 필요, 체크포인트를 가진 사람이 1회)
-HF_TOKEN=hf_... python3 scripts/upload_router_hf.py
-python3 scripts/upload_router_hf.py --dry-run
+HF_TOKEN=hf_... python scripts/upload_router_hf.py
+python scripts/upload_router_hf.py --dry-run
 ```
 
 라우터를 못 받아도 검색은 죽지 않는다 — `rag.get_router()` 가 실패를 삼키고
 `classify_query_bf_keyword()` 로 폴백한다(콘솔에 `[router] 로드 실패` 1줄).
 대신 업무 분류 기권률이 올라가 정확도가 떨어지므로 데모 전에는 ②로 확인한다.
+
+> **메모리 — fp32 두 모델 합계 약 4.8GB** BGE-m3(임베딩)와 라우터를 한 프로세스에
+> 같이 올린다. 여유가 모자라면 라우터 가중치 로드(`_materialize_copy`)에서
+> `exit 139`(segfault) 또는 `OSError 1455 — 페이징 파일이 너무 작습니다` 로 죽는다.
+> `dense`·`sparse`·`hybrid` 는 되고 `hybrid_bf` 만 죽으면 이 경우다. 데모 전에 다른
+> 프로세스를 닫아 메모리를 확보한다. 라우터를 `bfloat16` 으로 올리면 여유는
+> 회복되지만 분류가 갈리는 사례가 확인돼(fp32 "예금보험금 안내" ↔ bf16
+> "예금자보호제도") 리포에는 반영하지 않았다 — `crawler/faq_bf_map.py` 의
+> `from_pretrained` dtype 지정은 회귀 확인 후 결정한다.
 
 **라우터를 쓰는 곳**
 
@@ -134,7 +171,8 @@ python faq_bf_map.py --router ../router_moai_embedding_model --msp 0.7
 ## 2. RAG — BGE-m3-ko 인덱스
 
 임베딩은 `dragonkue/BGE-m3-ko`(1024d)를 sentence-transformers가 런타임에
-HF에서 받아 `~/.cache/huggingface` 에 캐시한다. 별도 다운로드 명령이 없다.
+HF에서 받아 `~/.cache/huggingface`(Windows `%USERPROFILE%\.cache\huggingface`) 에
+캐시한다. 별도 다운로드 명령이 없다.
 
 ```bash
 # 인덱스 재생성 (chunks.jsonl → emb.npy · faiss.index · bm25.pkl · chunk_meta.jsonl)
@@ -192,8 +230,7 @@ cd crawler && python pipeline.py --manifest crawl_manifest.csv --use-cache  # �
 cd crawler && python pipeline.py --manifest crawl_manifest.csv --rebuild    # 인덱스 초기화 후 전량
 
 # 첫 빌드 권장 순서
-cd crawler && python build_dataset.py --crawl \
-  && python pipeline.py --manifest crawl_manifest.csv --use-cache --rebuild
+cd crawler && python build_dataset.py --crawl && python pipeline.py --manifest crawl_manifest.csv --use-cache --rebuild
 ```
 
 청킹 파라미터(`CHUNK_SIZE` · `OVERLAP` · `MIN_CHUNK` · `TABLE_GAP_MAX`)는
@@ -206,7 +243,7 @@ cd crawler && python build_dataset.py --crawl \
 
 ```bash
 # 리포 루트에서 가상환경을 활성화한 상태
-export KDIC_REPO=$PWD
+export KDIC_REPO=$PWD          # PowerShell: $env:KDIC_REPO = "$PWD"
 cd admin
 python -m uvicorn main:app --reload --host 127.0.0.1 --port 8600
 # → http://127.0.0.1:8600
@@ -250,24 +287,23 @@ python runner.py --mode files   --config '{}'
 
 ```bash
 # 데모 UI — 절별 6-BF/OOS 오케스트레이션 + 큐폼 E2E
-python -m streamlit run chatbot/app.py \
-  --server.address 127.0.0.1 --server.port 8501
+python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 8501
 
 # answer() 계약 관통 3문항 (정상·트랩·롤렛)
-python3 chatbot/chain.py
+python chatbot/chain.py
 
 # 분류만 1건 (1~2콜)
-python3 chatbot/chain.py cls "예금보험금 지급 한도가 얼마인가요?"
-python3 chatbot/chain.py smoke      # 분류 스모크 3문항
-python3 chatbot/chain.py clsdemo    # 정상 6문항 분류만
-python3 chatbot/chain.py e2e        # 트랩셋 20문항 E2E → exp/route_e2e_results.jsonl
+python chatbot/chain.py cls "예금보험금 지급 한도가 얼마인가요?"
+python chatbot/chain.py smoke      # 분류 스모크 3문항
+python chatbot/chain.py clsdemo    # 정상 6문항 분류만
+python chatbot/chain.py e2e        # 트랩셋 20문항 E2E → exp/route_e2e_results.jsonl
 
 # HCX 최소 호출 확인
-python3 chatbot/smoke_hcx.py
+python chatbot/smoke_hcx.py
 
 # 맨몸 HCX vs RAG(top-3) 대조 데모 (프로덕션 아님, 관측용)
-python3 chatbot/rag_hcx.py single "착오송금 반환 신청은 어떻게 하나요?"
-python3 chatbot/rag_hcx.py batch    # 대표 6문항 × {rag, bare} → chatbot/demo_results.jsonl
+python chatbot/rag_hcx.py single "착오송금 반환 신청은 어떻게 하나요?"
+python chatbot/rag_hcx.py batch    # 대표 6문항 × {rag, bare} → chatbot/demo_results.jsonl
 ```
 
 `CALL_BUDGET` 은 프로세스 단위 안전장치다(`chain.py` 70콜, `rag_hcx.py` 20콜).
@@ -369,11 +405,11 @@ python -m pytest \
   crawler/tests/test_eval_equivalence.py -q
 
 # eval.py 등가성 회귀 — archive/superseded/ 구 평가기와 판정이 같은지. 검색 스택 불필요
-python3 crawler/tests/test_eval_equivalence.py
+python crawler/tests/test_eval_equivalence.py
 pytest crawler/tests/test_eval_equivalence.py
 
 # 관리자 가드
-python3 crawler/tests/test_guards.py
+python crawler/tests/test_guards.py
 
 cd crawler
 python verify_integrity.py     # 인덱스·코퍼스 개수 정합
@@ -383,12 +419,12 @@ python verify_natural.py       # 자연어 평가셋
 python audit_anchors.py --gt ../final_testset/gt_natural430.jsonl   # 앵커 커버리지
 
 cd ..
-python3 chatbot/verify_qform_e2e.py           # 큐폼 상태전이 (UI 없이)
-python3 chatbot/verify_qform_integration.py
-python3 chatbot/verify_qform_multiturn.py
-python3 chatbot/verify_qform_panel.py
-python3 chatbot/verify_docs.py
-python3 chatbot/answer_checks.py
+python chatbot/verify_qform_e2e.py           # 큐폼 상태전이 (UI 없이)
+python chatbot/verify_qform_integration.py
+python chatbot/verify_qform_multiturn.py
+python chatbot/verify_qform_panel.py
+python chatbot/verify_docs.py
+python chatbot/answer_checks.py
 ```
 
 현재 기준 기대값:
@@ -432,8 +468,8 @@ python diag_rerank.py            # 리랭커 진단 (torch 필요)
 python make_val_split.py                    # 505 + 355 둘 다 생성
 python make_val_split.py --answerable-only  # 355만
 
-cd .. && python3 exp/harness.py run     # 검색 실험 하네스 (HCX 0콜)
-python3 exp/harness.py probe            # 트랩셋 프로브
+cd .. && python exp/harness.py run     # 검색 실험 하네스 (HCX 0콜)
+python exp/harness.py probe            # 트랩셋 프로브
 ```
 
 ## 부록 B. 평가셋 · 라벨링 도구
@@ -453,7 +489,7 @@ python filter_anchored.py --gt ... --mode full-anchor
 
 python audit_anchors.py --gt ../final_testset/gt_natural430.jsonl   # chunk_id 폴백 비율
 
-cd .. && python3 crawler/span_tools.py     # 자기검사(왕복·유일성). 파일 수정 0
+cd .. && python crawler/span_tools.py     # 자기검사(왕복·유일성). 파일 수정 0
 ```
 
 ## 부록 C. 정본 1개 원칙 (2026-08-24 확인)
