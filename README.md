@@ -99,11 +99,11 @@ flowchart LR
 
 ```bash
 # 터미널 1
-source .venv/bin/activate
+source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
 cd admin && python -m uvicorn main:app --host 127.0.0.1 --port 8600
 
 # 터미널 2 — 리포지토리 루트
-source .venv/bin/activate
+source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
 python -m streamlit run chatbot/app.py --server.port 8501
 ```
 
