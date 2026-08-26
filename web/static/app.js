@@ -421,6 +421,13 @@ function bindStaticEvents() {
       $("#composer").requestSubmit();
     }
   });
+  $("#agent-connect").addEventListener("click", (event) => {
+    const options = $("#support-options");
+    const expanded = event.currentTarget.getAttribute("aria-expanded") === "true";
+    event.currentTarget.setAttribute("aria-expanded", String(!expanded));
+    event.currentTarget.textContent = expanded ? "상담원 연결하기" : "상담 안내 닫기";
+    options.hidden = expanded;
+  });
   $("#report-error").addEventListener("click", () => run(async () => {
     const result = await request(`/api/sessions/${ui.sessionId}/reports`, { method: "POST", body: "{}" });
     toast(`오류 신고가 접수되었습니다 (${result.report_id}).`);

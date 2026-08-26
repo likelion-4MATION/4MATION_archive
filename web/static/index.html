@@ -67,9 +67,12 @@
       <aside class="right-rail" aria-label="지원 및 근거 자료">
         <section class="support-card">
           <h2>상담원 연결</h2>
-          <a class="support-phone" href="tel:1588-0037" aria-label="예금보험공사 상담 전화 1588-0037">1588-0037</a>
-          <p>전화 상담 또는 공식 상담 안내를 이용해 주세요.</p>
-          <a id="agent-connect" class="button secondary full" href="https://www.kdic.or.kr/di/pbcritrd/PbcrPath/selectScrn.do" target="_blank" rel="noopener">공식 상담 안내 보기</a>
+          <p>상담원 연결이 필요하시면 클릭해 주세요.</p>
+          <button id="agent-connect" class="button secondary full" type="button" aria-expanded="false" aria-controls="support-options">상담원 연결하기</button>
+          <div id="support-options" class="support-options" hidden>
+            <p>상담 전화 <a href="tel:1588-0037" aria-label="예금보험공사 상담 전화 1588-0037">1588-0037</a></p>
+            <a class="support-guide" href="https://www.kdic.or.kr/di/pbcritrd/PbcrPath/selectScrn.do" target="_blank" rel="noopener">공식 상담 안내 페이지 →</a>
+          </div>
           <button id="report-error" class="button secondary full">챗봇 오류 신고</button>
         </section>
 

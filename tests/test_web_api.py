@@ -155,6 +155,9 @@ def test_support_card_exposes_phone_and_official_consultation_link():
     root = Path(__file__).resolve().parents[1]
     html = (root / "web" / "static" / "index.html").read_text(encoding="utf-8")
 
+    assert 'id="agent-connect"' in html
+    assert 'aria-expanded="false"' in html
+    assert 'id="support-options"' in html
     assert 'href="tel:1588-0037"' in html
     assert "1588-0037" in html
     assert 'href="https://www.kdic.or.kr/di/pbcritrd/PbcrPath/selectScrn.do"' in html
