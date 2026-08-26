@@ -8,19 +8,23 @@
 </head>
 <body>
 
-<header>
-  <h1>KDIC 챗봇 관리자 콘솔</h1>
-  <span class="badge" id="bCorpus">코퍼스 확인 중…</span>
-  <span class="badge" id="bPreset">—</span>
-  <span class="badge" id="bGuard">—</span>
-  <span class="badge warn" id="bInsured" style="display:none">부보금융회사 명단 갱신 필요</span>
-  <span style="flex:1"></span>
-  <span class="badge" id="bRepo">—</span>
-</header>
+<div class="shell">
 
-<div class="wrap">
-<div>
-  <div class="tabs">
+<!-- 좌측 사이드 — 이동 수단(탭)과 조작(저장·실행)을 한 자리에 모은다.
+     결과는 오른쪽 위 고정 창에서만 읽는다. 보는 곳과 누르는 곳을 섞지 않는다. -->
+<aside class="side">
+  <div class="brand">
+    <h1>KDIC 챗봇<br>관리자 콘솔</h1>
+    <div class="badges">
+      <span class="badge" id="bCorpus">코퍼스 확인 중…</span>
+      <span class="badge" id="bPreset">—</span>
+      <span class="badge" id="bGuard">—</span>
+      <span class="badge warn" id="bInsured" style="display:none">부보금융회사 명단 갱신 필요</span>
+      <span class="badge" id="bRepo">—</span>
+    </div>
+  </div>
+
+  <nav class="tabs">
     <div class="tab on" data-p="p1">① 답변 품질</div>
     <div class="tab" data-p="p2">② 응답 속도·비용</div>
     <div class="tab" data-p="p3">③ 되묻기</div>
@@ -30,8 +34,59 @@
     <div class="tab lock" data-p="p7">⑦ 문서 처리 🔒</div>
     <div class="tab" data-p="p8">⑧ OOS 안내처</div>
     <div class="tab" data-p="p9">⑨ 오류 신고함</div>
-  </div>
+  </nav>
 
+  <div class="card side-card" id="chgCard">
+    <h2>변경 사항 <span class="badge" id="chgBadge">변경 없음</span></h2>
+    <div class="sub" id="chgSub">설정을 바꾸면 위 결과창에 예상 지표가 표시됩니다.</div>
+    <div id="chgList" class="chglist"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" id="btnReset" disabled>되돌리기</button>
+      <button class="btn" id="btnSave" disabled>저장</button>
+    </div>
+    <div class="runbox">
+      <div class="runhead"><b>실행</b><span class="badge" id="runBadge">대기</span></div>
+      <div class="sub" id="runSub">저장하지 않은 변경이 있으면 실행 직전에 자동으로 저장합니다.</div>
+      <div class="runmain">
+        <button class="btn warn" id="btnCrawl">원문 재수집</button>
+        <button class="btn" id="btnChain">한 번에 실행</button>
+      </div>
+      <div class="note" id="planNote"></div>
+      <label class="chk"><input type="checkbox" id="chkGuard" checked>
+        <span>1단계 검증이 현재보다 나쁘면 멈추고 확인받기</span></label>
+      <div class="runbtns">
+        <button class="btn ghost sm" id="btnEval">① 테스트셋 검증</button>
+        <button class="btn ghost sm" id="btnApply">② 적용 &amp; 재빌드</button>
+        <button class="btn ghost sm" id="btnVerify">③ 재검증</button>
+      </div>
+      <div class="hint" id="runHint"></div>
+    </div>
+
+    <div class="goldenbox">
+      <button class="btn ghost sm" id="btnGolden" style="width:100%">기준 설정으로 되돌리기</button>
+      <div class="hint" id="goldenHint"></div>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+
+  <!-- 상단 고정 결과창 — 어느 탭에 있든 지표와 실행 결과가 같은 자리에 남는다. -->
+  <section class="resultbar" id="resultBar">
+    <div class="rbhead">
+      <h2>결과 <span class="badge" id="resBadge">변경 없음</span></h2>
+      <span class="rbmeta" id="resMeta"></span>
+      <button class="btn ghost sm" id="rbToggle">접기</button>
+    </div>
+    <table id="projTbl"></table>
+    <div id="chgNote"></div>
+    <div class="hint" id="accSrc"></div>
+    <div class="hint" id="bestHint"></div>
+    <div id="jobBox"></div>
+  </section>
+
+  <div class="mainbody">
+    <div class="panes">
   <!-- ① 답변 품질 -->
   <div class="pane on" id="p1">
     <div class="card">
@@ -196,7 +251,7 @@
       <div class="note bad">
         값을 바꾸면 <b>세 가지가 함께 무효화</b>됩니다 —
         ① 검색 프리셋 3종(개발자 재튜닝 필요) ② 검색 인덱스 전체 ③ 되묻기 조합 테이블의 근거 연결.
-        <b>오른쪽 [한 번에 실행]</b>을 쓰면 검증 → 빌드 → 재검증 순으로 처리하며,
+        <b>왼쪽 [한 번에 실행]</b>을 쓰면 검증 → 빌드 → 재검증 순으로 처리하며,
         1단계 검증이 현재보다 나쁘면 빌드 전에 멈추고 확인을 요청합니다.
       </div>
       <div id="preflight"></div>
@@ -214,8 +269,8 @@
         <table id="cmpTbl"></table>
         <div id="evNote"></div>
         <div class="hint" id="evSrc"></div>
-        <div class="hint">검증·재빌드 버튼은 <b>오른쪽 고정 패널</b>로 옮겼습니다.
-          어느 탭에서 무엇을 바꾸든 거기서 한 번에 실행할 수 있습니다.</div>
+        <div class="hint">검증·재빌드 버튼은 <b>왼쪽 사이드 패널</b>에 있습니다.
+          어느 탭에서 무엇을 바꾸든 거기서 한 번에 실행하고, 결과는 <b>위 결과창</b>에서 봅니다.</div>
       </div>
     </div>
     <div class="card">
@@ -335,45 +390,9 @@
       <div id="rpNotes"></div>
     </div>
   </div>
-</div>
-
-<!-- 우측 -->
-<div>
-  <div class="card sticky" id="chgCard">
-    <h2>변경 사항 <span class="badge" id="chgBadge">변경 없음</span></h2>
-    <div class="sub" id="chgSub">설정을 바꾸면 여기에 예상 결과가 표시됩니다.</div>
-    <div id="chgList" class="chglist"></div>
-    <table id="projTbl"></table>
-    <div class="hint" id="accSrc"></div>
-    <div id="chgNote"></div>
-    <div style="margin-top:12px;display:flex;gap:8px">
-      <button class="btn ghost" id="btnReset" disabled>되돌리기</button>
-      <button class="btn" id="btnSave" disabled>저장</button>
     </div>
-    <button class="btn ghost sm" id="btnGolden" style="width:100%;margin-top:8px">기준 설정으로 되돌리기</button>
-    <div class="hint" id="goldenHint"></div>
-    <div class="hint">정확도는 <b>실측값</b>(평가셋 TEST 430문항)입니다. 응답시간·콜 수는 경로 실측치로 계산하며, 비용은 추정입니다.</div>
 
-    <div class="runbox">
-      <div class="runhead"><b>실행</b><span class="badge" id="runBadge">대기</span></div>
-      <div class="sub" id="runSub">저장하지 않은 변경이 있으면 실행 직전에 자동으로 저장합니다.</div>
-      <div class="runmain">
-        <button class="btn warn" id="btnCrawl">원문 재수집</button>
-        <button class="btn" id="btnChain">한 번에 실행</button>
-      </div>
-      <div class="note" id="planNote"></div>
-      <label class="chk"><input type="checkbox" id="chkGuard" checked>
-        <span>1단계 검증이 현재보다 나쁘면 멈추고 확인받기</span></label>
-      <div class="runbtns">
-        <button class="btn ghost sm" id="btnEval">① 테스트셋 검증</button>
-        <button class="btn ghost sm" id="btnApply">② 적용 &amp; 재빌드</button>
-        <button class="btn ghost sm" id="btnVerify">③ 재검증</button>
-      </div>
-      <div id="jobBox"></div>
-      <div class="hint" id="runHint"></div>
-    </div>
-  </div>
-
+    <div class="info">
   <div class="card">
     <h2>데이터 신선도</h2>
     <div id="fresh"></div>
@@ -399,7 +418,10 @@
     <h2>변경 이력</h2>
     <table id="histTbl"></table>
   </div>
-</div>
+    </div>
+  </div>
+</main>
+
 </div>
 
 <div class="toast" id="toast"></div>

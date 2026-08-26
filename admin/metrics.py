@@ -35,7 +35,9 @@ BASELINE = {"acc": 0.9081, "calls": 1.72, "latency": 4.0, "cost": 9.7}
 
 # 경로별 실측 (exp/route_e2e_report.md)
 LAT_FAST, LAT_RAG = 1.32, 4.96
-FAST_SHARE = 0.28                                   # 조기차단 경로 비중
+FAST_SHARE = 0.28                                   # 조기차단(OOS) 경로 비중
+LAT_ASK = LAT_FAST                                  # 되묻기 문구 1콜 — 짧은 생성이라 OOS 실측을 프록시로
+GEN_SHARE = 0.45                                    # 응답시간·비용 중 답변 길이에 비례하는 몫 (가정)
 FIRE_RATE = {"msdr": 0.020, "msdr+dpin": 0.042}     # 큐폼 되묻기 발동률 (450셋 실측)
 
 
@@ -138,15 +140,39 @@ def current_point() -> dict:
             "src": "현재 조합은 A/B 표에도 없고 재빌드 실측 기록도 없습니다"}
 
 
+def _length_factor(cfg: dict) -> float:
+    """답변 길이 상한이 **생성 시간·비용에 비례하는 몫**만 반영한다.
+
+    응답시간에도 비용에도 같은 계수를 쓴다 — 한쪽만 고치면 두 숫자가 조용히 어긋난다.
+    `GEN_SHARE` 는 실측이 아니라 가정이므로, 이 계수가 1 이 아닌 순간 지표 등급은
+    '계산'이 아니라 '추정'이 된다(`projection()`).
+    """
+    return float(cfg.get("maxTokens", 512)) / 512 * GEN_SHARE + (1 - GEN_SHARE)
+
+
 def _ops(cfg: dict) -> dict:
-    """콜 수·응답시간·비용 — 설정 하나로 계산. 기준선과 예상값에 같은 함수를 쓴다."""
-    fast = FAST_SHARE if cfg.get("earlyBlock") else 0.0
-    calls = fast * 1 + (1 - fast) * 2
+    """콜 수·응답시간·비용 — 설정 하나로 계산. 기준선과 예상값에 같은 함수를 쓴다.
+
+    **조기차단은 토글이 아니라 확정 정책이다.** 소관 밖 질문은 `chain._route()`(소관밖→reject)
+    와 `orchestrator._process()`(라우터 미발동→`classify_oos`)에서 검색·생성을 건너뛴다.
+    관리자가 끄고 켜는 스위치가 아니라서 registry 에서 옛 `earlyBlock` 파라미터를 폐기했는데
+    (② 탭 주석 참조), 이 함수는 그 폐기된 키를 계속 읽고 있었다. 그래서 `fast` 가 늘 0 이 되어
+
+      · 응답시간이 설정을 무엇으로 바꿔도 4.96초에 붙박이로 굳고,
+      · 콜 수가 1.72 가 아니라 2.00, 비용이 ₩9.7 이 아니라 ₩11.3 으로 나왔다.
+
+    (`BASELINE` 의 1.72·4.0·9.7 이 조기차단을 반영한 값이다 — 표와 계산이 서로 어긋나 있었다.)
+
+    실제로 이 숫자를 움직이는 스위치는 셋이다 — ① 답변 길이 상한(`maxTokens`, ①탭)
+    ② 되묻기 문구 생성 방식(`askMode`, ②탭) ③ 되묻기 횟수·적용 업무(③탭).
+    """
+    ask = 0.0
     if cfg.get("askMode") == "llm":
-        calls += FIRE_RATE.get(cfg.get("QFORM_SCOPE"), 0.02) * int(cfg.get("MAX_ASK_TURNS", 2))
-    latency = fast * LAT_FAST + (1 - fast) * LAT_RAG
-    cost = BASELINE["cost"] * (calls / BASELINE["calls"]) * \
-        (float(cfg.get("maxTokens", 512)) / 512 * 0.45 + 0.55)
+        ask = FIRE_RATE.get(cfg.get("QFORM_SCOPE"), 0.02) * int(cfg.get("MAX_ASK_TURNS", 2))
+    calls = FAST_SHARE * 1 + (1 - FAST_SHARE) * 2 + ask
+    length = _length_factor(cfg)
+    latency = FAST_SHARE * LAT_FAST + (1 - FAST_SHARE) * LAT_RAG * length + ask * LAT_ASK
+    cost = BASELINE["cost"] * (calls / BASELINE["calls"]) * length
     return {"calls": round(calls, 2), "latency": round(latency, 2), "cost": round(cost, 1)}
 
 
@@ -167,18 +193,97 @@ def baseline_of(saved: dict) -> dict:
             "acc_src": acc.get("src"), "acc_metric": acc.get("metric"), **ops}
 
 
+def _history_point(rec: dict, k: int) -> dict:
+    """실측 기록 한 건을 네 지표로 편다.
+
+    정확도는 그 날 **실제로 잰 값**이고, 콜 수·응답시간·비용은 그 날 설정으로 다시 계산한
+    값이다(`cfg` 스냅샷). 스냅샷이 없는 옛 기록은 계산하지 않고 `None` 으로 둔다 —
+    설정을 모르는데 숫자를 지어내면 '역대 최저 비용'이 거짓말이 된다.
+    """
+    acc = _measured_at_k(rec, k)
+    cfg = rec.get("cfg")
+    ops = _ops(cfg) if cfg else {"calls": None, "latency": None, "cost": None}
+    return {"at": rec.get("at"), "chunks": rec.get("chunks"),
+            "acc": (acc or {}).get("value"), "acc_metric": (acc or {}).get("metric"),
+            "calls": ops["calls"], "latency": ops["latency"], "cost": ops["cost"]}
+
+
+def _config_timeline(saved: dict, limit: int = 60) -> list[dict]:
+    """변경 이력을 거꾸로 되짚어 **실제로 적용됐던 설정들**을 복원한다.
+
+    콜 수·응답시간·비용은 실측이 아니라 설정에서 계산되는 값이다. 그래서 지나온 설정이
+    곧 지나온 수치이고, 그 중 가장 좋았던 값이 '역대 최고'가 된다.
+
+    되짚기 규칙은 셋뿐이다.
+
+      · `from` 이 다 있으면 그대로 되돌린다.
+      · 재빌드 승격(`actor="system"`)은 **건너뛴다** — pending 을 override 로 옮길 뿐이라
+        관리자가 보던 값(`effective()`)은 그 전후로 같다.
+      · 그 밖에 `from` 이 없는 기록(되돌리기)에서는 **멈춘다**. 그 지점부터는 복원이 아니라
+        창작이다. 멈추면 최고가 실제보다 보수적으로 나올 뿐, 없는 값을 지어내지는 않는다.
+    """
+    cur = dict(saved)
+    out = [{"at": None, "cfg": dict(cur)}]
+    for h in (settings.load().get("history") or [])[:limit]:
+        changes = h.get("changes") or []
+        if any("from" not in c for c in changes):
+            if h.get("actor") == "system":
+                continue
+            break
+        for c in changes:
+            cur[c["key"]] = c["from"]
+        out.append({"at": h.get("at"), "cfg": dict(cur)})
+    return out
+
+
+def best_of(saved: dict) -> dict:
+    """'역대 최고' 열 — 항목마다 **따로** 고른다.
+
+    정확도는 클수록, 콜 수·응답시간·비용은 작을수록 좋다. 한 시점을 통째로 골라 최고라고
+    부르면 정확도가 가장 높았던 날의 비용을 최저 비용이라고 우기게 된다.
+
+    정확도의 후보는 **실측 기록뿐**이다. 반면 콜·응답시간·비용은 애초에 설정에서 계산되는
+    값이라 지금 저장된 설정도 후보에 넣는다(그래서 '최고'가 '직전'보다 나빠지는 일은 없다).
+    비교 잣대는 저장된 `k` 로 맞춘다 — hit@3 과 hit@5 를 섞어 최고를 뽑으면 안 된다.
+    """
+    k = int(saved.get("k", 5))
+    pts = [_history_point(r, k) for r in settings.measured_history()]
+    ops_pts = [p for p in pts if p["calls"] is not None]
+    ops_pts += [{"at": t["at"], "chunks": None, "acc": None, "acc_metric": None, **_ops(t["cfg"])}
+                for t in _config_timeline(saved)]
+
+    def pick(pool: list[dict], field: str, better):
+        cand = [p for p in pool if p.get(field) is not None]
+        if not cand:
+            return {"value": None, "at": None}
+        b = better(cand, key=lambda p: p[field])
+        return {"value": b[field], "at": b["at"], "chunks": b.get("chunks"),
+                "metric": b.get("acc_metric") if field == "acc" else None}
+
+    return {"acc": pick(pts, "acc", max), "calls": pick(ops_pts, "calls", min),
+            "latency": pick(ops_pts, "latency", min), "cost": pick(ops_pts, "cost", min),
+            "n": len(pts), "n_ops": len(ops_pts)}
+
+
 def projection(cfg: dict, changed: list[str], saved: dict | None = None) -> dict:
     """변경 후 예상 지표. 기준선은 **저장된 설정**에서 계산한다."""
     ops = _ops(cfg)
+    base = saved if saved is not None else cfg
     return {
+        "best": best_of(base),
         "accuracy": accuracy_for(cfg, changed),
         "calls": {"value": ops["calls"], "grade": "computed",
-                  "src": "경로 비중 × 경로별 콜 수 (reject 1 / rag 2)"},
-        "latency": {"value": ops["latency"], "grade": "computed",
-                    "src": f"경로별 실측 (reject {LAT_FAST}s / rag {LAT_RAG}s)"},
+                  "src": f"조기차단 비중 {FAST_SHARE} × 경로별 콜 수 (OOS 1 / RAG 2) + 되묻기 발동률"},
+        "latency": {"value": ops["latency"],
+                    # 길이 계수가 걸리면 실측 조합이 아니라 가정이 섞인다 — 등급을 낮춘다
+                    "grade": "computed" if _length_factor(cfg) == 1.0 else "estimated",
+                    "src": f"조기차단 비중 {FAST_SHARE} × 경로별 실측 "
+                           f"(OOS {LAT_FAST}s / RAG {LAT_RAG}s)"
+                           + ("" if _length_factor(cfg) == 1.0
+                              else f" · 답변 길이 상한은 생성 시간 비중 {GEN_SHARE} 가정")},
         "cost": {"value": ops["cost"], "grade": "estimated",
                  "src": "콜 수 × 답변 길이 계수 (추정)"},
-        "baseline": baseline_of(saved if saved is not None else cfg),
+        "baseline": baseline_of(base),
     }
 
 
