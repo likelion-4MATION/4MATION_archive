@@ -92,9 +92,12 @@ async function paint() {
   const ch = changedKeys();
   const rb = ch.filter(k => SCHEMA.rebuild_keys.includes(k));
 
-  $("#chgBadge").textContent = ch.length ? `${ch.length}건 변경 · 미적용` : "변경 없음";
-  $("#chgBadge").className = "badge " + (ch.length ? (rb.length ? "warn" : "ok") : "");
-  $("#chgSub").textContent = ch.length ? "저장하기 전 예상 결과입니다." : "설정을 바꾸면 여기에 예상 결과가 표시됩니다.";
+  const badge = ch.length ? `${ch.length}건 변경 · 미적용` : "변경 없음";
+  const badgeCls = "badge " + (ch.length ? (rb.length ? "warn" : "ok") : "");
+  $("#chgBadge").textContent = $("#resBadge").textContent = badge;
+  $("#chgBadge").className = $("#resBadge").className = badgeCls;
+  $("#chgSub").textContent = ch.length ? "저장하기 전 예상 결과는 위 결과창에 있습니다."
+    : "설정을 바꾸면 위 결과창에 예상 지표가 표시됩니다.";
   $("#chgList").innerHTML = ch.map(k => {
     const p = SCHEMA.params.find(x => x.key === k);
     return `<div><b>${p.label}</b> <span style="color:var(--tx3)">(${p.tab}번 탭)</span><br>
@@ -107,28 +110,61 @@ async function paint() {
   const pj = r.projection, base = pj.baseline;   // 서버가 '저장된 설정' 기준으로 계산해 준다
   const GRADE = {measured: ["측정", "ok"], computed: ["계산", ""], estimated: ["추정", "warn"],
                  unmeasured: ["미측정", "bad"], mixed: ["복합", "warn"]};
-  const line = (name, cur, next, g, unit = "") => {
-    const [lab, cls] = GRADE[g] || ["", ""];
-    return `<tr><td>${name}</td><td class="n">${cur}</td>
-      <td class="n">${next}</td><td class="n"><span class="tag ${cls}">${lab}</span></td></tr>`;
+  const acc = pj.accuracy, best = pj.best || {};
+  const nv = v => (v === null || v === undefined) ? null : Number(v);
+  const FMT = {                     // 지표마다 자릿수와 단위가 다르다 — 표기를 한 곳에 모은다
+    acc: v => v.toFixed(4), calls: v => v.toFixed(2),
+    latency: v => v.toFixed(1) + "초", cost: v => "₩" + v.toFixed(1),
   };
-  const acc = pj.accuracy;
-  const baseAcc = base.acc === null || base.acc === undefined ? "?" : base.acc.toFixed(4);
+  /* 변화율은 **직전 대비**다. 좋은 방향(up)을 함께 받아야 색을 칠할 수 있다 —
+     정확도는 오를수록, 콜 수·응답시간·비용은 내려갈수록 좋다. */
+  const rateCell = (prev, next, up) => {
+    if (prev === null || next === null || !prev) return `<span style="color:var(--tx3)">—</span>`;
+    const r = (next - prev) / Math.abs(prev) * 100;
+    if (Math.abs(r) < 0.005) return `<span style="color:var(--tx3)">0.00%</span>`;
+    return `<span class="rate" style="color:${(r > 0) === up ? "var(--ok)" : "var(--bad)"}">${
+      r > 0 ? "+" : ""}${r.toFixed(2)}%</span>`;
+  };
+  /* cmp=false 면 세 열이 서로 다른 잣대라 빼거나 나눌 수 없다 — 변화율도 '최고 경신'도
+     내지 않는다. 숫자를 나란히 보여주는 것까지가 정직한 한계다. */
+  const mrow = (name, sub, key, prev, next, grade, up, cmp = true) => {
+    const [lab, cls] = GRADE[grade] || ["", ""];
+    const b = best[key] || {}, bv = nv(b.value), f = FMT[key];
+    // '최고 경신'은 실제 값이 있을 때만 — 미측정(?)을 경신이라고 부르지 않는다
+    const beat = cmp && bv !== null && next !== null && (up ? next > bv + 1e-9 : next < bv - 1e-9);
+    return `<tr>
+      <td class="m">${name}${sub ? `<small>${sub}</small>` : ""}</td>
+      <td class="n best">${bv === null ? "—" : f(bv)}${
+        b.at ? `<br><small style="color:var(--tx3)">${String(b.at).slice(0, 10)}</small>` : ""}</td>
+      <td class="n">${prev === null ? "?" : f(prev)}</td>
+      <td class="n next">${next === null ? "?" : f(next)}${
+        beat ? ' <span class="tag ok">최고 경신</span>' : ""}</td>
+      <td class="n">${cmp ? rateCell(prev, next, up)
+        : '<span class="tag warn">잣대 다름</span>'}</td>
+      <td class="n"><span class="tag ${cls}">${lab}</span></td></tr>`;
+  };
   // 지표 이름을 고정하지 않는다 — k 를 바꾸면 hit@3 ↔ hit@5 로 잣대 자체가 달라진다
-  const accLab = "정확도 " + (base.acc_metric && acc.metric && base.acc_metric !== acc.metric
-    ? `${base.acc_metric} → ${acc.metric}` : (acc.metric || base.acc_metric || "anchor hit@5"));
+  const accSame = !(base.acc_metric && acc.metric && base.acc_metric !== acc.metric);
+  const accLab = accSame
+    ? (acc.metric || base.acc_metric || "anchor hit@5") + " · 높을수록 좋음"
+    : `${base.acc_metric} → ${acc.metric} · 잣대가 바뀌어 변화율을 내지 않습니다`;
   $("#projTbl").innerHTML = `
-    <tr><th>지표</th><th class="n">현재</th><th class="n">변경 후</th><th></th></tr>
-    ${line(accLab, baseAcc, acc.value === null ? "?" : acc.value.toFixed(4), acc.grade)}
-    ${line("LLM 콜 / 질의", base.calls.toFixed(2), pj.calls.value.toFixed(2), pj.calls.grade)}
-    ${line("평균 응답시간", base.latency.toFixed(1) + "초", pj.latency.value.toFixed(1) + "초", pj.latency.grade)}
-    ${line("비용 / 질의", "₩" + base.cost.toFixed(1), "₩" + pj.cost.value.toFixed(1), pj.cost.grade)}`;
+    <tr><th>지표</th><th class="n">최고</th><th class="n">직전</th>
+        <th class="n">변경 후</th><th class="n">변화율</th><th class="n">근거</th></tr>
+    ${mrow("정확도", accLab, "acc", nv(base.acc), nv(acc.value), acc.grade, true, accSame)}
+    ${mrow("LLM 콜 / 질의", "적을수록 좋음", "calls", nv(base.calls), nv(pj.calls.value), pj.calls.grade, false)}
+    ${mrow("평균 응답시간", "적을수록 좋음", "latency", nv(base.latency), nv(pj.latency.value), pj.latency.grade, false)}
+    ${mrow("비용 / 질의", "적을수록 좋음 · 추정", "cost", nv(base.cost), nv(pj.cost.value), pj.cost.grade, false)}`;
+  $("#bestHint").innerHTML =
+    `<b>최고</b>는 항목별로 따로 고른 역대 최고값 — 정확도는 실측 ${best.n || 0}건의 최댓값,
+     콜·응답시간·비용은 지나온 설정 ${best.n_ops || 0}개에서 계산한 최솟값입니다.
+     <b>직전</b>은 지금 저장·적용 중인 값이고 <b>변화율</b>은 직전 대비입니다.`;
 
   let note = "", cls = "note";
   if (rb.length) {
     cls = "note bad";
     note = `<b>재빌드가 필요한 변경 ${rb.length}건</b>이 있습니다. 저장만 해서는 반영되지 않습니다 —
-            아래 <b>[한 번에 실행]</b>을 누르면 검증 → 빌드 → 재검증까지 이어서 처리합니다.
+            왼쪽 <b>[한 번에 실행]</b>을 누르면 검증 → 빌드 → 재검증까지 이어서 처리합니다.
             재빌드 시 검색 프리셋과 되묻기 조합 테이블 근거가 함께 무효화됩니다.`;
   } else if (acc.grade === "mixed") {
     note = "정확도에 영향을 주는 항목을 <b>두 가지 이상</b> 동시에 바꿨습니다. 조합 효과는 곱해지지 않으므로 예측할 수 없습니다 — A/B 평가가 필요합니다.";
@@ -139,13 +175,16 @@ async function paint() {
     cls = "note bad";
     note = `'현재'는 <b>${base.acc_metric}</b>, '변경 후'는 <b>${acc.metric}</b>로
             <b>잣대가 서로 다른 수치</b>입니다. 두 값을 빼서 비교하지 마세요 —
-            같은 잣대로 보려면 아래 [한 번에 실행]으로 실제로 재야 합니다.`;
+            같은 잣대로 보려면 왼쪽 [한 번에 실행]으로 실제로 재야 합니다.`;
   } else if (acc.value !== null && base.acc != null && acc.value < base.acc - 1e-9) {
     cls = "note bad";
     note = `정확도가 <b>${base.acc.toFixed(4)} → ${acc.value.toFixed(4)}</b>로 떨어집니다.`;
   }
-  if (!ch.length && r.measured && r.measured["hit@5"] != null)
-    $("#chgSub").innerHTML = `현재 정확도는 <b>재빌드 실측값</b>입니다 (${String(r.measured.at).slice(0,10)} · ${r.measured.chunks}청크).`;
+  const M = r.measured || {};
+  $("#resMeta").innerHTML = M["hit@5"] != null
+    ? `직전 실측 ${String(M.at).slice(0, 10)} · ${M.chunks ?? "—"}청크${
+        M.n_evaluated ? ` · 앵커 채점 ${M.n_evaluated}문항` : ""}`
+    : "재빌드 실측 기록 없음 — 왼쪽 [③ 재검증]으로 지금 인덱스를 잴 수 있습니다.";
   $("#accSrc").innerHTML = acc.src
     ? `정확도 근거: <code>${esc(acc.src)}</code>` : "";
   $("#chgNote").innerHTML = note ? `<div class="${cls}">${note}</div>` : "";
@@ -201,11 +240,11 @@ function paintTab7(acc, measured) {
   const a = num(cur.all), b = g("all");
   if (!touched) {
     $("#evNote").innerHTML = cur.grade === "unmeasured"
-      ? `<div class="note">지금 조합은 <b>측정 기록이 없습니다.</b> 오른쪽 [③ 재검증]을 누르면 현재 인덱스를 그대로 재 실측치를 채웁니다.</div>`
+      ? `<div class="note">지금 조합은 <b>측정 기록이 없습니다.</b> 왼쪽 [③ 재검증]을 누르면 현재 인덱스를 그대로 재 실측치를 채웁니다.</div>`
       : "";
   } else if (!tgt) {
     $("#evNote").innerHTML = `<div class="note">이 조합은 <b>아직 평가한 적이 없습니다.</b>
-      오른쪽 [① 테스트셋 검증]으로 실제 수치를 확인한 뒤 적용하세요. 검색만 다시 돌리므로 LLM 비용은 들지 않습니다.</div>`;
+      왼쪽 [① 테스트셋 검증]으로 실제 수치를 확인한 뒤 적용하세요. 검색만 다시 돌리므로 LLM 비용은 들지 않습니다.</div>`;
   } else if (a !== null && b !== null && b < a - 1e-9) {
     $("#evNote").innerHTML = `<div class="note bad">이 조합은 <b>현재보다 나쁩니다.</b>
       앵커 정확도 ${a.toFixed(4)} → ${b.toFixed(4)}` +
@@ -215,7 +254,7 @@ function paintTab7(acc, measured) {
     $("#evNote").innerHTML = `<div class="note ok">이 조합은 현재보다 나은 결과를 보였습니다.</div>`;
   } else {
     $("#evNote").innerHTML = `<div class="note">두 지점의 측정 지표가 서로 달라 <b>차이를 계산하지 않습니다.</b>
-      직접 비교하려면 오른쪽 [① 테스트셋 검증]을 실행하세요.</div>`;
+      직접 비교하려면 왼쪽 [① 테스트셋 검증]을 실행하세요.</div>`;
   }
 
   $("#evSrc").innerHTML =
@@ -225,14 +264,25 @@ function paintTab7(acc, measured) {
       ? `<br><small>재빌드 실측은 전체 앵커 정확도만 냅니다 — 단일/복합 분해는 A/B 표에만 있습니다.</small>` : "");
 
   $("#crawlHint").innerHTML =
-    '이 탭의 값을 바꾸면 <b>다시 잘라야</b> 합니다 — 오른쪽 [한 번에 실행]이 알아서 재청킹까지 합니다.<br>' +
-    '홈페이지에서 원문을 새로 받아오는 것은 <b>별개</b>입니다. 오른쪽 <b>[원문 재수집]</b> 버튼만 접속합니다.';
+    '이 탭의 값을 바꾸면 <b>다시 잘라야</b> 합니다 — 왼쪽 [한 번에 실행]이 알아서 재청킹까지 합니다.<br>' +
+    '홈페이지에서 원문을 새로 받아오는 것은 <b>별개</b>입니다. 왼쪽 <b>[원문 재수집]</b> 버튼만 접속합니다.';
 }
 
-/* ── 실행 잡 — 우측 고정 패널 ──────────────────────────────
-   버튼과 진행 상황을 모두 사이드에 두어 어느 탭에서 무엇을 바꾸든
-   한 자리에서 검증 → 빌드 → 재검증까지 이어갈 수 있게 한다. */
-let jobTimer = null, WATCHED = null, BUSY = false;
+/* ── 실행 잡 — 좌측 사이드 패널(버튼) + 상단 결과창(진행 상황) ──────
+   버튼은 왼쪽 사이드에, 진행 상황과 결과는 상단 고정 결과창에 둔다. 어느 탭에서 무엇을
+   바꾸든 누르는 자리와 읽는 자리가 각각 하나로 고정된다. */
+let jobTimer = null, WATCHED = null, BUSY = false, JOB_SHOWN = null;
+
+/* ── 상단 결과창 접기 ───────────────────────────────────
+   접으면 **정확도 한 줄**만 남는다. 나머지 지표·근거·실행 진행 상황은 숨긴다.
+   선택은 브라우저에 기억시켜 새로고침해도 유지한다(읽기 실패해도 펼친 상태로 뜬다). */
+const RB_KEY = "kdic.admin.resultbar.compact";
+function setResultCompact(on, remember = true) {
+  $("#resultBar").classList.toggle("compact", on);
+  $("#rbToggle").textContent = on ? "펼치기" : "접기";
+  $("#rbToggle").title = on ? "지표 전체와 실행 진행 상황을 다시 봅니다" : "정확도 한 줄만 남깁니다";
+  if (remember) { try { localStorage.setItem(RB_KEY, on ? "1" : "0"); } catch (e) { /* 무시 */ } }
+}
 const KIND_LABEL = {eval: "테스트셋 검증", rebuild: "재청킹·재빌드",
                     verify: "현재 인덱스 재검증", chain: "한 번에 실행",
                     recrawl: "원문 재수집 + 재빌드", files: "첨부 파일 다시 받기"};
@@ -330,14 +380,30 @@ function setRunUI(j) {
   renderPlan();
 }
 
+/* 끝난 잡은 한 줄로 접는다 — 결과창은 상단 고정이라 여기서 자리를 다 먹으면
+   아래 설정 화면이 그만큼 밀린다. 돌고 있는 잡은 접지 않는다. */
+function jobSummary(j) {
+  const last = [...(j.stages || [])].reverse()
+    .find(s => s.metrics && !s.metrics.error && s.metrics["hit@5"] != null);
+  const [lab] = RUN_STATE[j.status] || ["", ""];
+  return `${lab}${last ? ` · 앵커 hit@5 ${hit5(last.metrics)}${
+    last.chunks ? ` · ${last.chunks}청크` : ""}` : ""}`;
+}
+
 function renderJob(j, pre) {
   const box = $("#jobBox");
   if (pre?.length && $("#preflight")) $("#preflight").innerHTML =
     `<div class="note">${pre.map(w => "· " + esc(w)).join("<br>")}</div>`;
   if (!j) { box.innerHTML = ""; setRunUI(null); return; }
-  box.innerHTML = `
-    <div style="font-size:11px;color:var(--tx3);margin-top:10px">${
-      esc(KIND_LABEL[j.kind] || j.kind)} · ${String(j.started_at || "").slice(11, 16)} 시작</div>
+  // 새 잡이 돌기 시작하면 접혀 있어도 펼친다 — 진행 상황을 접힌 채로 숨기지 않는다.
+  // 저장된 선택은 건드리지 않아 잡이 끝난 뒤 새로고침하면 원래 상태로 돌아온다.
+  if ((j.status === "running" || j.status === "awaiting") && JOB_SHOWN !== j.id) {
+    JOB_SHOWN = j.id;
+    setResultCompact(false, false);
+  }
+  const head = `${esc(KIND_LABEL[j.kind] || j.kind)} · ${
+    String(j.started_at || "").slice(11, 16)} 시작`;
+  const detail = `
     ${(j.stages || []).map(stageBlock).join("")}
     ${j.status === "awaiting" && j.gate ? gateBlock(j) : ""}
     ${j.status === "failed" ? `<div class="note bad">${esc(j.error || "")}${
@@ -350,6 +416,10 @@ function renderJob(j, pre) {
       · ${Math.round((j.result.files.bytes || 0) / 1024)}KB<br>
       <b>청크에 반영하려면 [한 번에 실행]</b>으로 다시 잘라야 합니다.</div>` : ""}
     ${j.status === "done" ? cmpBlock(j) : ""}`;
+  const folded = j.status === "done" || j.status === "aborted";
+  box.innerHTML = folded
+    ? `<details class="jobwrap"><summary>${head} · ${jobSummary(j)}</summary>${detail}</details>`
+    : `<div class="jobwrap"><div class="jobhead-line">${head}</div>${detail}</div>`;
   setRunUI(j);
 }
 
@@ -473,8 +543,12 @@ function renderDash() {
       ? `근거 <code>${esc(cp.src || "")}</code>`
       : `<b style="color:var(--warn)">측정 기록 없음</b>. 위 두 표는 겹침 100·표 처리 A/B 당시(215/181조각)의 기록이라 지금 조합과 다릅니다.`);
 
-  $("#latNote").innerHTML = `현재 설정 기준 예상 응답시간 — 소관 밖 <b>약 1.3초</b> / 일반 답변 <b>약 5.0초</b>.
-    "소관 밖 질문 즉시 안내"를 끄면 모든 질문이 5초대가 됩니다.`;
+  // 조기차단은 확정 정책이라 토글이 없다 — 여기서 "끄면"이라고 쓰면 없는 스위치를 안내하게 된다
+  $("#latNote").innerHTML = `경로별 실측 — 소관 밖 <b>약 1.3초</b>(1콜) / 일반 답변 <b>약 5.0초</b>(2콜).
+    소관 밖 조기차단은 <b>확정 정책이라 끄고 켜지 않습니다</b>. 질의의 약 28%가 이 경로로 빠져
+    평균이 4초대로 내려옵니다.<br>
+    이 숫자를 실제로 움직이는 것은 <b>답변 길이 상한</b>(①탭)과 <b>되묻기 문구 생성 방식</b>(아래),
+    <b>되묻기 횟수·적용 업무</b>(③탭)입니다.`;
 }
 
 function renderHistory(hist) {
@@ -527,6 +601,9 @@ async function reload() {
 /* ── 이벤트 ────────────────────────────────────────────── */
 document.addEventListener("click", async e => {
   const t = e.target;
+  if (t.closest("#rbToggle")) {
+    setResultCompact(!$("#resultBar").classList.contains("compact")); return;
+  }
   const tab = t.closest(".tab");
   if (tab) {$$(".tab").forEach(x => x.classList.remove("on")); $$(".pane").forEach(x => x.classList.remove("on"));
     tab.classList.add("on"); $("#" + tab.dataset.p).classList.add("on"); return;}
@@ -1026,6 +1103,9 @@ document.addEventListener("click", async e => {
 
 /* ── 시작 ──────────────────────────────────────────────── */
 (async () => {
+  let saved = null;
+  try { saved = localStorage.getItem(RB_KEY); } catch (e) { /* 무시 */ }
+  setResultCompact(saved === "1", false);
   SCHEMA = await api("/api/schema");
   await Promise.all([reload(), loadOOS()]);
 })().catch(e => toast("초기화 실패: " + e.message, true));

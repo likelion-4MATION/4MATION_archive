@@ -25,7 +25,13 @@ CONFIG_PATH = DATA / "admin_config.json"
 REPO = pathlib.Path(os.environ.get("KDIC_REPO", BASE.parent)).resolve()
 
 _LOCK = threading.Lock()
-_EMPTY = {"override": {}, "pending": {}, "history": [], "measured": {}, "dirty": {}}
+_EMPTY = {"override": {}, "pending": {}, "history": [], "measured": {}, "dirty": {},
+          "measured_history": []}
+
+# 실측 이력에 함께 남기는 설정 스냅샷 — 콜 수·응답시간·비용은 실측이 아니라 설정에서
+# 계산되는 값이라, 그때 무슨 설정이었는지를 같이 적어 둬야 나중에 다시 계산할 수 있다.
+OPS_KEYS = ("earlyBlock", "askMode", "QFORM_SCOPE", "MAX_ASK_TURNS", "maxTokens",
+            "k", "CHUNK_SIZE", "OVERLAP", "TABLE_KEEP")
 
 
 def _now() -> str:
@@ -46,6 +52,10 @@ def load() -> dict:
     # 파일은 건드리지 않고 읽을 때만 정리한다 — 다음 save() 때 자연히 사라진다.
     for slot in ("override", "pending"):
         d[slot] = {k: v for k, v in (d.get(slot) or {}).items() if k in registry.BY_KEY}
+    # 이력이 없던 시절의 단일 실측 기록도 '역대 최고'를 따질 때 한 지점으로 세어야 한다.
+    # 파일은 건드리지 않고 읽을 때만 채운다 — 다음 record_measured() 때 자연히 저장된다.
+    if d["measured"] and not d["measured_history"]:
+        d["measured_history"] = [json.loads(json.dumps(d["measured"]))]
     return d
 
 
@@ -100,20 +110,34 @@ def save(changes: dict, actor: str = "admin") -> dict:
 
 
 def record_measured(metrics: dict, chunks: int | None = None) -> dict:
-    """재빌드가 성공하면 그때 실측된 지표를 남긴다.
+    """재빌드·재검증이 성공하면 그때 실측된 지표를 남긴다.
 
     이 값이 있으면 대시보드의 '현재 정확도'가 **추정표가 아니라 실제 측정치**가 된다.
     코퍼스를 바꾼 뒤에도 화면이 옛 기준선을 계속 보여주는 문제를 막는다.
+
+    최신 1건은 `measured` 에 그대로 두고(기존 화면들이 이 자리를 본다), 같은 기록을
+    `measured_history` 에도 쌓는다. **덮어쓰기만 하면 '역대 최고'를 알 수 없다** —
+    직전 값과 비교만 되고, 지난달에 더 좋았다는 사실은 화면에서 사라진다.
     """
     with _LOCK:
         d = load()
-        d["measured"] = {**(metrics or {}), "chunks": chunks, "at": _now()}
+        cfg = registry.resolve(d["override"])
+        rec = {**(metrics or {}), "chunks": chunks, "at": _now(),
+               "cfg": {k: cfg.get(k) for k in OPS_KEYS}}
+        d["measured"] = rec
+        d["measured_history"] = ([rec] + [h for h in d["measured_history"]
+                                          if h.get("at") != rec["at"]])[:100]
         _save_raw(d)
     return d["measured"]
 
 
 def measured() -> dict:
     return load().get("measured") or {}
+
+
+def measured_history() -> list[dict]:
+    """실측 기록 전부 (최신 순). '역대 최고' 는 이 목록에서만 나온다."""
+    return list(load().get("measured_history") or [])
 
 
 # ── 재청킹이 필요한 상태 표시 ───────────────────────────────────────────
