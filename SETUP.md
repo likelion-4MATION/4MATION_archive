@@ -79,7 +79,7 @@ python -m pip install -r admin/requirements.txt
 python -m pip install streamlit python-dotenv pytest
 ```
 
-검색·라우터, FastAPI 관리자, Streamlit 챗봇과 회귀 테스트 의존성을 한 환경에 설치한다.
+검색·라우터, FastAPI 사용자/관리자 서버, 레거시 Streamlit 챗봇과 회귀 테스트 의존성을 한 환경에 설치한다.
 
 > `streamlit`·`python-dotenv`·`pytest`는 두 requirements 파일에 없으므로 별도로 설치한다.
 
@@ -206,15 +206,15 @@ cd admin
 python -m uvicorn main:app --host 127.0.0.1 --port 8600
 ```
 
-터미널 2 — 챗봇:
+터미널 2 — 사용자 챗봇:
 
 ```bash
 source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
-python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 8501
+python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
 ```
 
 - 관리자: <http://127.0.0.1:8600> — ⑧ OOS 안내처, ⑨ 오류 신고함 포함
-- 챗봇: <http://127.0.0.1:8501> — 절별 BF/OOS 라우팅과 상단 오류 신고 포함
+- 챗봇: <http://127.0.0.1:8501> — 정적 웹 UI, 절별 BF/OOS 라우팅과 오류 신고 포함
 
 질문을 넣어 출처가 함께 나오면 RAG 경로가 정상이다. 안내처는 관리자에서 공식값을 게시하기 전에는
 비어 있는 것이 정상이다. BF/OOS 경계 과다통과는 별도 라우터 작업 중인 알려진 제약이다.
@@ -223,8 +223,8 @@ python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 
 
 ## 자주 걸리는 문제
 
-**`ModuleNotFoundError: No module named 'streamlit'` / `'dotenv'`**
-`python -m pip install streamlit python-dotenv`를 실행한다.
+**`ModuleNotFoundError: No module named 'dotenv'`**
+`python -m pip install python-dotenv`를 실행한다. 레거시 UI를 실행할 때만 `streamlit`도 설치한다.
 
 **`ModuleNotFoundError: No module named 'fastapi'` / `'uvicorn'`**
 관리자를 다른 Python으로 실행했거나 관리자 requirements를 설치하지 않은 상태다.
@@ -346,7 +346,10 @@ grep -c "5천만" crawler/data/raw/kdic-www-sp-dpstrprot-ProtSystProtLmts-select
 (cd crawler && python eval.py)
 (cd crawler && python router_source.py)
 
-# 챗봇 — 루트에서
+# 사용자 챗봇 — 루트에서
+python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
+
+# 레거시 Streamlit UI (필요할 때만)
 python -m streamlit run chatbot/app.py
 
 # 관리자 — 별도 터미널

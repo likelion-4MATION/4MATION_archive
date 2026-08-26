@@ -65,11 +65,11 @@ python -m uvicorn main:app --host 127.0.0.1 --port 8600
 # http://127.0.0.1:8600
 ```
 
-터미널 2 — 챗봇:
+터미널 2 — 사용자 챗봇:
 
 ```bash
 source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
-python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 8501
+python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
 # http://127.0.0.1:8501
 ```
 
@@ -286,8 +286,11 @@ python runner.py --mode files   --config '{}'
 ## 5. 챗봇 — HCX LLM 호출
 
 ```bash
-# 데모 UI — 절별 6-BF/OOS 오케스트레이션 + 큐폼 E2E
-python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 8501
+# 데모 UI — FastAPI + 정적 HTML, 절별 6-BF/OOS 오케스트레이션 + 큐폼 E2E
+python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
+
+# 레거시 Streamlit UI (비교가 필요할 때만)
+python -m streamlit run chatbot/app.py --server.address 127.0.0.1 --server.port 8502
 
 # answer() 계약 관통 3문항 (정상·트랩·롤렛)
 python chatbot/chain.py
@@ -307,7 +310,7 @@ python chatbot/rag_hcx.py batch    # 대표 6문항 × {rag, bare} → chatbot/d
 ```
 
 `CALL_BUDGET` 은 프로세스 단위 안전장치다(`chain.py` 70콜, `rag_hcx.py` 20콜).
-소진되면 즉시 중단되고, Streamlit 은 앱 재시작으로 리셋한다.
+소진되면 즉시 중단되고, 사용자 FastAPI 서버를 재시작하면 리셋된다.
 
 ### 5-1. 현재 OOS 운영 경로
 

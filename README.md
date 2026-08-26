@@ -73,8 +73,8 @@ flowchart LR
 | 임베딩 | `dragonkue/BGE-m3-ko` (로컬, 1024d) | 최초 실행 시 HF 캐시 다운로드 |
 | 검색 | FAISS + BM25(kiwipiepy) + RRF + 6-BF soft boost | `crawler/rag.py` 정본 |
 | LLM | CLOVA Studio HCX | `.env` 설정 필요 |
-| UI | Streamlit 챗봇 + HTML/JS 관리자 | 로컬 PoC |
-| Backend | FastAPI + SQLite(OOS 운영 데이터) | 관리자 프로세스 |
+| UI | 정적 HTML/CSS/JS 챗봇 + HTML/JS 관리자 | 빌드 도구 없는 로컬 PoC |
+| Backend | FastAPI 사용자 API + FastAPI/SQLite 관리자 | 기존 Q-Form·RAG 재사용 |
 | Infra / 협업 | GitHub, Notion, Discord | — |
 
 ## 📂 프로젝트 구조
@@ -85,7 +85,8 @@ flowchart LR
 │   ├── README.md   #   실행 순서·산출물 안내
 │   ├── DECISIONS.md · HOLES.md   # 판단 로그 · 이슈/팀 이관
 │   └── data/       #   chunks.jsonl · 인덱스 · 평가 리포트
-├── chatbot/        # Streamlit 챗봇 · Qform · 절별 BF/OOS 오케스트레이션
+├── web/            # FastAPI 사용자 API · 정적 HTML/CSS/JS 챗봇 UI
+├── chatbot/        # Qform · 절별 BF/OOS 오케스트레이션 · 레거시 Streamlit UI
 ├── admin/          # FastAPI 관리자 콘솔 · OOS 안내처 · 오류 신고 저장소
 ├── docs/           # RUNBOOK · 운영 가이드 · 설계 문서
 └── CONTRIBUTING.md # 협업 규칙
@@ -104,7 +105,7 @@ cd admin && python -m uvicorn main:app --host 127.0.0.1 --port 8600
 
 # 터미널 2 — 리포지토리 루트
 source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
-python -m streamlit run chatbot/app.py --server.port 8501
+python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
 ```
 
 새 로컬의 전체 설치는 [`SETUP.md`](./SETUP.md), OOS 운영 절차는
