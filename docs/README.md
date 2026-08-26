@@ -93,7 +93,12 @@
 
 ### [`records/meeting/`](records/meeting/) — 회의록 16건
 
-`2026-07-13` ~ `2026-08-12`. **08-12 이후는 없다** — 이후는 `logs/` 와 커밋 로그를 본다.
+`2026-07-13` ~ `2026-08-12`. **08-13 부터는 형식이 바뀌어 [`meeting/`](meeting/) 으로 갈린다.**
+
+### [`meeting/`](meeting/) — 데일리 로그 5건 (08-13 ~ 08-20)
+
+위 회의록과 같은 날짜 축의 다음 권이다. `2026-08-13` · `08-14` · `08-18` · `08-19` · `08-20`.
+**08-20 이후는 없다** — 이후는 커밋 로그와 문서 날짜를 본다.
 
 ### [`records/handoff/`](records/handoff/) — 인계 3건
 
@@ -117,9 +122,10 @@
 |---|---|
 | `../README.md` | 프로젝트 소개·구성·기술 스택 |
 | `../SETUP.md` | 새 컴퓨터 설치 |
+| `../web/README.md` | 사용자 웹 챗봇(FastAPI+정적 UI) 실행·테스트 |
 | `../DECISIONS.md` | 판단 로그 (D0~D13) — 코드가 왜 그 모양인가 |
 | `../CONTRIBUTING.md` | 브랜치·커밋·PR 규칙 |
 | `../logs/` | 데일리 스탠드업 23건 (07-13 ~ 08-20) |
 | `../crawler/DECISIONS.md` · `../crawler/HOLES.md` | 파이프라인 판단 로그 · 미해결 홀 |
-| `../crawler/README.md` · `../admin/README.md` | 각 축의 실행 안내 |
+| `../crawler/README.md` · `../admin/README.md` · `../web/README.md` | 각 축의 실행 안내 |
 | `../archive/README.md` | 은퇴한 코드 19개와 은퇴 사유 |

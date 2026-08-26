@@ -407,11 +407,15 @@ score_mode     : anchor
 ## 7. 검증 · 테스트
 
 ```bash
-# 현재 OOS + 기존 가드 + 평가 등가성 묶음
+# 현재 OOS + 기존 가드 + 평가 등가성 + 웹 챗봇 API 묶음
 python -m pytest \
   tests/test_oos.py \
   crawler/tests/test_guards.py \
-  crawler/tests/test_eval_equivalence.py -q
+  crawler/tests/test_eval_equivalence.py \
+  tests/test_web_api.py -q
+
+# 웹 UI 자바스크립트 문법 검사 (node 필요)
+node --check web/static/app.js
 
 # eval.py 등가성 회귀 — archive/superseded/ 구 평가기와 판정이 같은지. 검색 스택 불필요
 python crawler/tests/test_eval_equivalence.py
@@ -436,9 +440,10 @@ python chatbot/verify_docs.py
 python chatbot/answer_checks.py
 ```
 
-현재 기준 기대값:
+현재 기준 기대값(2026-08-26 실측):
 
-- 위 pytest 묶음: **14 passed**
+- 위 pytest 묶음: **22 passed** — OOS·가드·등가성 14 + 웹 API(`tests/test_web_api.py`) 8
+- `node --check web/static/app.js`: 출력 없음이 정상
 - `verify_qform_e2e.py`: 104조합 통과
 - `verify_qform_panel.py`: 11/11 통과
 - `verify_qform_multiturn.py`: 기존 첨부 후단 필터 C2(`26→26`) 때문에 23/24. OOS

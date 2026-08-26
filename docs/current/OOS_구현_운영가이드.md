@@ -62,10 +62,13 @@ source .venv/bin/activate
 cd admin
 python -m uvicorn main:app --host 127.0.0.1 --port 8600
 
-# 터미널 2 — 리포지토리 루트에서 챗봇
+# 터미널 2 — 리포지토리 루트에서 챗봇 (정적 웹 UI, FastAPI)
 source .venv/bin/activate
-python -m streamlit run chatbot/app.py \
-  --server.address 127.0.0.1 --server.port 8501
+python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
+
+# 레거시 Streamlit UI (비교가 필요할 때만 — 포트는 8502)
+# python -m streamlit run chatbot/app.py \
+#   --server.address 127.0.0.1 --server.port 8502
 ```
 
 공통 의존성 설치와 인덱스 생성은 [RUNBOOK](./RUNBOOK.md#0-공통-준비)을 따른다.
