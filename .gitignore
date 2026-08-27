@@ -90,6 +90,13 @@ yarn-error.log*
 # ===== 기타 =====
 tmp/
 
+# ===== iCloud 동기화 충돌 사본 =====
+# iCloud Drive가 동기화 도중 만드는 "이름 2.확장자"/"이름 복사본.ext" 형태 복사본. 원본만 커밋 대상.
+**/* 2.*
+**/* 2/
+**/*복사본.*
+**/* 복사본 *
+
 # ===== Vector DB / RAG 로컬 산출물 =====
 chroma_db/
 *.faiss
@@ -106,5 +113,8 @@ backup/
 # 설정 오버라이드·첨부 오버레이·잡 기록·업로드·백업은 기기별 상태다. 코드만 커밋한다.
 admin/data/*
 !admin/data/.gitkeep
+# HCX/DeepSeek 생성 답변·OpenCode 심사 배치(키·응답 포함) — 실험 시 재생성
+chatbot/data/llm_compare/
+chatbot/demo_results_deepseek.jsonl
 # 마운트 환경에서 git이 남긴 잠금 파일 치우는 자리(삭제 권한이 없어 옮겨만 둔다)
 _to_delete/
