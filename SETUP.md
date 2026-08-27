@@ -38,7 +38,7 @@ python -m pip install streamlit python-dotenv pytest
 test -f .env || cp .env.example .env
 ```
 
-`.env`에 CLOVA 키를 채운 뒤([4절](#4-env-작성)), 데이터가 없는 새 클론이면 [6절](#6-크롤링--인덱스)을
+`.env`에 실험할 LLM 키를 채운 뒤([4절](#4-env-작성)), 데이터가 없는 새 클론이면 [6절](#6-크롤링--인덱스)을
 먼저 실행한다. 이미 인덱스가 있는 개발 환경은 [8절](#8-현재-통합-버전-실행)로 바로 간다.
 
 전체 명령과 평가·운영 절차는 [docs/current/RUNBOOK.md](./docs/current/RUNBOOK.md)를 본다.
@@ -51,7 +51,7 @@ test -f .env || cp .env.example .env
 |---|---|---|
 | Python | **3.11 이상** (3.13에서 검증) | `python --version` (POSIX 는 `python3 --version`) |
 | 디스크 | **최소 8GB** 여유 | 임베딩 2.2GB + 라우터 2.4GB + 원본·인덱스 |
-| CLOVA Studio | API 키 (챗봇 답변 생성용) | 팀 리드에게 요청 |
+| LLM API | HCX 또는 DeepSeek API 키 | 각 콘솔 또는 팀 리드에게 요청 |
 | HuggingFace | 계정 + 라우터 repo 접근권 (선택) | [7절](#7-라우터-체크포인트-선택) |
 
 **Windows**: 셸 표기 차이는 위 [셸 표기](#빠른-경로) 표를 본다. 활성화는 `.venv\Scripts\Activate.ps1` 이고, 이후 `python -m ...` 명령은 같다.
@@ -100,12 +100,18 @@ test -f .env || cp .env.example .env
 $EDITOR .env                   # PowerShell: notepad .env
 ```
 
-`.env`를 열어 CLOVA 항목을 채웁니다. **`.env`는 커밋 금지**입니다(`.gitignore`에 등록돼 있음).
+`.env`를 열어 사용할 모델과 API 항목을 채웁니다. **`.env`는 커밋 금지**입니다(`.gitignore`에 등록돼 있음).
 
 ```ini
+LLM_PROVIDER=hcx  # 운영 기본값. 로컬 실험에서만 deepseek로 변경
+
+DEEPSEEK_API_KEY=발급받은키
+DEEPSEEK_API_URL=https://api.deepseek.com/chat/completions
+DEEPSEEK_MODEL=deepseek-v4-flash
+
 CLOVA_API_KEY=발급받은키
-CLOVA_API_URL=https://clovastudio.stream.ntruss.com/...
-CLOVA_MODEL=HCX-...
+CLOVA_API_URL=https://clovastudio.stream.ntruss.com/.../chat-completions/HCX-003
+CLOVA_MODEL=HCX-003
 ```
 
 라우터를 쓸 거면 `HF_TOKEN`도 채웁니다([7절](#7-라우터-체크포인트-선택)). 안 쓸 거면 비워두세요.
@@ -187,7 +193,7 @@ python crawler/router_source.py
 
 ### ⚠️ 챗봇 실행 전에 미리 받아두세요
 
-`chatbot/rag_hcx.py`가 `HF_HUB_OFFLINE=1`을 설정합니다 — 챗봇 실행 중에는 **네트워크를 CLOVA API 한 곳으로만 제한**하기 때문에, 그 시점에 캐시가 없으면 라우터도 임베딩 모델도 못 받고 조용히 폴백합니다.
+`chatbot/rag_deepseek.py`가 `HF_HUB_OFFLINE=1`을 설정합니다. 그 시점에 로컬 캐시가 없으면 라우터나 임베딩 모델을 내려받지 못하고 폴백할 수 있습니다.
 
 ```bash
 python scripts/download_router_hf.py --verify-sha
@@ -230,8 +236,8 @@ python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
 관리자를 다른 Python으로 실행했거나 관리자 requirements를 설치하지 않은 상태다.
 가상환경을 켠 뒤(`source .venv/bin/activate` / PowerShell `.venv\Scripts\Activate.ps1`) `python -m pip install -r admin/requirements.txt`를 실행한다.
 
-**`KeyError: 'CLOVA_API_KEY'`**
-`.env`가 없거나 비어 있습니다. `test -f .env || cp .env.example .env`(PowerShell `Copy-Item .env.example .env`) 후 키를 채우세요.
+**`missing_deepseek_configuration` / `missing_hcx_configuration`**
+`.env`에서 `LLM_PROVIDER`로 선택한 모델의 키 또는 URL이 비어 있습니다. `test -f .env || cp .env.example .env`(PowerShell `Copy-Item .env.example .env`) 후 해당 항목을 채우세요.
 
 **`FileNotFoundError: data/index/faiss.index`**
 인덱스를 만들지 않았거나 깨진 상태다.
@@ -248,8 +254,8 @@ python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
 **`SSLCertVerificationError: CERTIFICATE_VERIFY_FAILED` — 브라우저는 되는데 python만 안 될 때**
 백신(Avast 등)의 SSL/TLS 스캐닝이 MITM 중입니다. 서버 인증서 발급자가
 `Avast Web/Mail Shield Root` 같은 백신 루트로 바뀌는데, python 이 쓰는 `certifi`
-번들에는 그 루트가 없습니다. HCX·HF 호출이 **전부** 막히므로 증상이 광범위합니다
-(`smoke_hcx.py` 실패 · 임베딩/라우터 다운로드 실패 → 챗봇은 "처리 중 오류"만 냅니다).
+번들에는 그 루트가 없습니다. LLM·HF 호출이 **전부** 막히므로 증상이 광범위합니다
+(LLM 스모크 실패 · 임베딩/라우터 다운로드 실패 → 챗봇은 "처리 중 오류"만 냅니다).
 
 Windows 인증서 저장소를 표준 라이브러리로 덤프해 `certifi` 번들과 합친 뒤
 `SSL_CERT_FILE` / `REQUESTS_CA_BUNDLE` 로 지정합니다. 의존성 추가는 없습니다.
@@ -283,7 +289,7 @@ export REQUESTS_CA_BUNDLE=~/.kdic-ca-bundle.pem
 python -c "
 import os, ssl, socket
 ctx = ssl.create_default_context(cafile=os.environ['SSL_CERT_FILE'])
-for h in ('huggingface.co', 'clovastudio.stream.ntruss.com'):
+for h in ('huggingface.co', 'api.deepseek.com'):
     with socket.create_connection((h, 443), timeout=10) as s, ctx.wrap_socket(s, server_hostname=h) as ss:
         print(h, 'TLS OK', dict(x[0] for x in ss.getpeercert()['issuer'])['commonName'])"
 ```

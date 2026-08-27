@@ -72,10 +72,22 @@ flowchart LR
 | 수집/전처리 | requests · BeautifulSoup(lxml) — 규칙 기반, LLM 미사용 | Playwright (동적 페이지 필요 시) |
 | 임베딩 | `dragonkue/BGE-m3-ko` (로컬, 1024d) | 최초 실행 시 HF 캐시 다운로드 |
 | 검색 | FAISS + BM25(kiwipiepy) + RRF + 6-BF soft boost | `crawler/rag.py` 정본 |
-| LLM | CLOVA Studio HCX | `.env` 설정 필요 |
+| LLM | HCX-003 / DeepSeek V4 Flash 실험 분기 | P0에서 DeepSeek 우세 신호, 운영 기본값 미변경 |
 | UI | 정적 HTML/CSS/JS 챗봇 + HTML/JS 관리자 | 빌드 도구 없는 로컬 PoC |
 | Backend | FastAPI 사용자 API + FastAPI/SQLite 관리자 | 기존 Q-Form·RAG 재사용 |
 | Infra / 협업 | GitHub, Notion, Discord | — |
+
+### 답변 생성 모델 비교 상태
+
+2026-08-26 P0 파일럿(40문항, 같은 검색 컨텍스트, 모델당 3회 생성)에서 DeepSeek V4 Flash가
+HCX-003보다 우세한 신호를 보였다. Solar Pro 4 블라인드 심사 F1 기준 DeepSeek 16승,
+HCX 2승, 동률 22건이며 F2도 같은 총계였다. 할루시네이션 판정과 지연시간도 DeepSeek 쪽이
+우세했다.
+
+이 결과는 **실험 브랜치의 P0 방향성**이며 운영 기본값 변경 결정이 아니다. 최종 판단은 P0와
+겹치지 않는 P1 150문항에서 재검증한다. 수치·한계·심사 감사 기록은
+[`docs/records/HCX_DeepSeek_P0_결과_20260826.md`](./docs/records/HCX_DeepSeek_P0_결과_20260826.md),
+실행 절차는 [`docs/current/OPENCODE_LLM_JUDGE.md`](./docs/current/OPENCODE_LLM_JUDGE.md)를 본다.
 
 ## 📂 프로젝트 구조
 
