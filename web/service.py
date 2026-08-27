@@ -38,6 +38,8 @@ def _utc_now() -> str:
 
 def _humanize_error(code) -> str:
     code = str(code or "")
+    if code in {"missing_deepseek_configuration", "missing_hcx_configuration"}:
+        return "선택한 LLM의 API 설정이 없습니다. 서버 설정을 확인해 주세요."
     if code == "call_budget_exhausted":
         return "이번 서버의 모델 호출 예산을 모두 사용했습니다. 잠시 후 관리자에게 문의해 주세요."
     match = _HTTP_RE.match(code)
@@ -128,7 +130,7 @@ class RuntimeBackend:
                 flow.get("base_q") or "", self.qform_trace.bf_debug(flow.get("base_q") or ""),
                 flow.get("slots_raw") or {}, event.get("survivors"), event.get("ask"),
                 event.get("result"), boost, search_q=event.get("search_q"),
-                hcx_calls=calls, ask_turn=flow.get("ask_turn") or 0,
+                llm_calls=calls, ask_turn=flow.get("ask_turn") or 0,
             )
         except Exception as exc:  # 진단 실패가 사용자 대화를 막지 않는다
             return {"error": type(exc).__name__, "layers": {}}

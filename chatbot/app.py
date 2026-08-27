@@ -5,7 +5,7 @@ confidence 표기는 07-22 결정대로 "관련 문서 유사도"(정답 확신�
 
 큐폼 배선 (Qform_ver2):
     질의 → classify_query_bf(질의) **1회** → extract(결정론, 콜 0) → next_question?
-         ├ 있으면 되묻기(최대 2턴). **되묻기 턴에는 answer()를 부르지 않는다** → HCX 콜 0
+         ├ 있으면 되묻기(최대 2턴). **되묻기 턴에는 answer()를 부르지 않는다** → LLM 콜 0
          └ 없으면 answer(query, qform=slots) → 첨부 후단 필터
 
 상태 전이는 `qform_flow` 가 전담한다. 이 파일은 **렌더와 토글만** 맡는다 —
@@ -60,15 +60,19 @@ SLOT_LABEL = {"party": "역할", "sub_task": "세부주제", "qualification": "�
 ASK_MODES = {"ⓐ 템플릿 (콜 0)": "template", "ⓑ LLM 생성 (턴당 1콜)": "llm"}
 
 MAX_VISIBLE_OPTIONS = 6         # 선택지 버튼 노출 상한. 넘으면 접는다 (T5 B1-4)
-LOW_CALL_WARN = 10              # 남은 HCX 콜이 이 이하면 사이드바에 경고 (T7 B6)
+LOW_CALL_WARN = 10              # 남은 모델 콜이 이 이하면 사이드바에 경고 (T7 B6)
 
 # ── 에러 문구 (T7 B6-3) ─────────────────────────────────────────────────────
-# `_meta.error` 원문을 화면에 그대로 뿌리면 안 된다. `chain._hcx` 는 실패 시
+# `_meta.error` 원문을 화면에 그대로 뿌리면 안 된다. `chain._llm` 은 실패 시
 # `http_{status}:{응답 본문 200자}` 를 담는데, 그 본문에 엔드포인트·토큰·요청 ID 가
 # 섞여 나올 수 있다. **코드를 사람 문구로 갈아 끼우고, 숫자 상태 코드만 통과시킨다.**
 import re  # noqa: E402  (에러 코드 파싱 전용)
 
 _ERROR_TEXT = {
+    "missing_deepseek_configuration":
+        "DeepSeek API 설정이 없습니다. 서버의 .env 설정을 확인해 주세요.",
+    "missing_hcx_configuration":
+        "HCX API 설정이 없습니다. 서버의 .env 설정을 확인해 주세요.",
     "call_budget_exhausted":
         "이번 세션의 모델 호출 예산을 모두 사용했습니다. 앱을 다시 시작하면 초기화됩니다. "
         "되묻기·선택지·슬롯 수정은 예산과 무관하게 계속 쓰실 수 있습니다.",
@@ -207,7 +211,8 @@ with _sb_admin:
                    "경로에 따라 OOS 분류 또는 답변 생성에 호출을 씁니다.")
 
     with st.expander("관리자 · 고급 설정"):
-        st.metric("HCX 콜 (재시도 포함)", f"{chain._calls} / {chain.CALL_BUDGET}")
+        st.metric(f"{chain.LLM_PROVIDER} 콜 (재시도 포함)",
+                  f"{chain._calls} / {chain.CALL_BUDGET}")
         st.caption("되묻기 턴은 ⓐ 모드에서 콜을 쓰지 않습니다. 예산 소진 시 앱 재시작으로 리셋됩니다.")
         st.divider()
         st.radio(
@@ -276,7 +281,7 @@ def render_slots(slots: dict, *, key_prefix: str = "", editable: bool = False) -
         st.caption("확정된 조건 — 잘못 잡혔으면 ✕ 로 풀고 다시 고르세요")
         for col, (f, lab, v) in zip(st.columns(len(filled)), filled):
             if col.button(f"{lab} {v}  ✕", key=f"unset-{key_prefix}-{f}", width="stretch",
-                          help=f"'{lab}' 조건을 해제하고 되묻기를 다시 받습니다 (HCX 콜 0)"):
+                          help=f"'{lab}' 조건을 해제하고 되묻기를 다시 받습니다 (LLM 콜 0)"):
                 unset = f
     return unset
 
@@ -399,7 +404,7 @@ def render_answer(r: dict, key_prefix: str = "live", slots: dict | None = None,
 
 
 def render_followups(items: list[dict], key_prefix: str) -> dict | None:
-    """후속 질문 추천 (T7 B5). 클릭된 {"field","value"} 를 돌려준다. **HCX 콜 +0.**
+    """후속 질문 추천 (T7 B5). 클릭된 {"field","value"} 를 돌려준다. **LLM 콜 +0.**
 
     라벨은 `축 이름 · 조합 테이블 값` 이다. 축 이름은 화면이 이미 쓰던 `SLOT_LABEL`,
     값은 생존 행 그대로 — **문구를 만들지 않는다**(CLAUDE.md §2-4).
@@ -439,7 +444,7 @@ def render_options(opts: list[str], key_prefix: str) -> str | None:
 
     **라벨 = 조합 테이블 값 그대로.** 다듬거나 부연을 붙이지 않는다(C6·CLAUDE.md §2-4).
     버튼 경로는 값이 enum 에서 직접 오므로 슬롯 오추출이 구조적으로 0 이고,
-    HCX 비결정성을 안 타서 시연이 결정론이 된다.
+    LLM 비결정성을 안 타서 시연이 결정론이 된다.
 
     key 에 턴 인덱스 prefix 를 붙여 히스토리 재렌더 충돌을 막는다(기존 관행).
     """
@@ -842,7 +847,7 @@ def render_support_card() -> None:
                     st.rerun()
 
 
-def build_trace(ev: dict, hcx_calls: int) -> dict | None:
+def build_trace(ev: dict, llm_calls: int) -> dict | None:
     """트레이스 조립 — **app 층에서만** 한다(E2). 파이프라인에는 계측이 없다.
 
     끄면 이 함수가 아예 안 불린다. 켜도 `answer()` 는 이미 끝난 뒤라 답변·첨부·콜수에
@@ -855,7 +860,7 @@ def build_trace(ev: dict, hcx_calls: int) -> dict | None:
         return qform_trace.collect(
             flow["base_q"], qform_trace.bf_debug(flow["base_q"]), flow["slots_raw"],
             ev.get("survivors"), ev.get("ask"), ev.get("result"), BOOST,
-            search_q=ev.get("search_q"), hcx_calls=hcx_calls, ask_turn=flow["ask_turn"],
+            search_q=ev.get("search_q"), llm_calls=llm_calls, ask_turn=flow["ask_turn"],
         )
     except Exception as e:  # noqa: BLE001  트레이스가 대화를 죽이면 안 된다
         return {"error": f"{type(e).__name__}: {e}", "layers": {}}
@@ -1000,7 +1005,7 @@ with _main_box:
         st.rerun()
 
     # 슬롯을 고친 뒤 되물을 것이 없으면 여기서 재생성을 **명시로** 받는다.
-    # 자동 재생성을 안 하는 이유: 칩을 만질 때마다 HCX 2콜이 나가면 예산이 샌다(AC6-5).
+    # 자동 재생성을 안 하는 이유: 칩을 만질 때마다 LLM 2콜이 나가면 예산이 샌다(AC6-5).
     # 위젯 key 와 상태 플래그 이름을 반드시 갈라 둔다 — 같은 이름이면 버튼이 매 런
     # 자기 반환값을 session_state 에 써서 플래그를 덮어쓴다.
     if st.session_state.get("needs_regen") and not pending:
@@ -1047,7 +1052,7 @@ if st.session_state.history:
 q = st.chat_input("궁금한 내용을 입력해주세요.")
 
 # 슬롯 해제(T6)와 후속 추천(T7 C안)은 **같은 경로**다 — 둘 다 슬롯을 고치고
-# 되묻기만 재판정한다. `answer()` 는 부르지 않으므로 HCX 콜 0 이다(AC6-5·AC7-1).
+# 되묻기만 재판정한다. `answer()` 는 부르지 않으므로 LLM 콜 0 이다(AC6-5·AC7-1).
 _edit = None
 if unset_field:
     _edit = (unset_field, None, "슬롯 칩 수정", f"'{SLOT_LABEL.get(unset_field, unset_field)}' 조건 해제")

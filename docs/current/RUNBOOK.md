@@ -43,11 +43,11 @@ python -m pip install -r crawler/requirements.txt
 python -m pip install -r admin/requirements.txt
 python -m pip install streamlit python-dotenv pytest
 
-# HCX 키 — .env (루트). chatbot/* 가 load_dotenv 로 읽는다
+# HCX/DeepSeek 키 — .env (루트). chatbot/* 가 load_dotenv 로 읽는다
 # 기존 .env가 있으면 덮어쓰지 않는다
 test -f .env || cp .env.example .env
 # PowerShell: if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-# CLOVA_API_KEY · CLOVA_API_URL · CLOVA_MODEL을 편집한다
+# LLM_PROVIDER와 선택한 모델의 API_KEY · API_URL · MODEL을 편집한다
 $EDITOR .env                   # PowerShell: notepad .env
 ```
 
@@ -289,7 +289,7 @@ python runner.py --mode files   --config '{}'
 
 ---
 
-## 5. 챗봇 — HCX LLM 호출
+## 5. 챗봇 — HCX/DeepSeek LLM 호출
 
 ```bash
 # 데모 UI — FastAPI + 정적 HTML, 절별 6-BF/OOS 오케스트레이션 + 큐폼 E2E
@@ -310,13 +310,28 @@ python chatbot/chain.py e2e        # 트랩셋 20문항 E2E → exp/route_e2e_re
 # HCX 최소 호출 확인
 python chatbot/smoke_hcx.py
 
+# DeepSeek 최소 호출 확인
+python chatbot/smoke_deepseek.py
+
 # 맨몸 HCX vs RAG(top-3) 대조 데모 (프로덕션 아님, 관측용)
 python chatbot/rag_hcx.py single "착오송금 반환 신청은 어떻게 하나요?"
 python chatbot/rag_hcx.py batch    # 대표 6문항 × {rag, bare} → chatbot/demo_results.jsonl
+
+# 맨몸 DeepSeek vs RAG(top-3) 대조 데모
+python chatbot/rag_deepseek.py single "착오송금 반환 신청은 어떻게 하나요?"
+python chatbot/rag_deepseek.py batch
 ```
 
-`CALL_BUDGET` 은 프로세스 단위 안전장치다(`chain.py` 70콜, `rag_hcx.py` 20콜).
+`CALL_BUDGET` 은 프로세스 단위 안전장치다(`chain.py`와 DeepSeek 데모 70콜,
+`rag_hcx.py` 20콜).
 소진되면 즉시 중단되고, 사용자 FastAPI 서버를 재시작하면 리셋된다.
+
+두 모델의 동일 컨텍스트 블라인드 비교 절차는
+[`OPENCODE_LLM_JUDGE.md`](./OPENCODE_LLM_JUDGE.md)를 따른다. P0 40문항에서는 DeepSeek
+16승 / HCX 2승 / 동률 22로 DeepSeek 우세 신호가 확인됐지만, 공유 기본값은 HCX로 유지한다.
+상세 결과는
+[`../records/HCX_DeepSeek_P0_결과_20260826.md`](../records/HCX_DeepSeek_P0_결과_20260826.md)를
+본다.
 
 ### 5-1. 현재 OOS 운영 경로
 

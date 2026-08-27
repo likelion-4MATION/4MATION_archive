@@ -174,7 +174,7 @@ def _no_ask_reason(slots: dict, surv: list, turn: int | None,
 def collect(query: str, bf_debug: dict, slots: dict, surv: list | None,
             ask: dict | None, result: dict | None, boost_on: bool, *,
             search_q: str | None = None, hits: list | None = None,
-            search_fn=None, hcx_calls: int | None = None,
+            search_fn=None, llm_calls: int | None = None,
             ask_turn: int | None = None, slot_origin: dict | None = None) -> dict:
     """질의 1건의 층별 트레이스를 조립한다. **LLM 콜 0.**
 
@@ -284,12 +284,12 @@ def collect(query: str, bf_debug: dict, slots: dict, surv: list | None,
 
     # ── 생성 — `_meta` 읽기 + app 층 콜 회계 ───────────────────────────────
     gate_c, ask_c = L["gate"]["calls"], L["ask"]["calls"]
-    gen_c = None if hcx_calls is None else max(0, hcx_calls - gate_c - ask_c)
+    gen_c = None if llm_calls is None else max(0, llm_calls - gate_c - ask_c)
     text = (result or {}).get("text")
     L["generate"] = {
         "status": SKIP_PENDING if pending else (SKIP_REJECT if rejected else "수집"),
         "calls": 0 if rejected else gen_c, "latency_ms": meta.get("latency_ms"),
-        "hcx_status": meta.get("hcx_status"), "error": meta.get("error"),
+        "model_status": meta.get("model_status"), "error": meta.get("error"),
         "chars": len(text) if isinstance(text, str) else None,
     }
 
@@ -320,7 +320,7 @@ def collect(query: str, bf_debug: dict, slots: dict, surv: list | None,
     return {
         "query": query, "search_q": search_q, "boost_on": bool(boost_on),
         "pending": pending, "rejected": rejected,
-        "calls": {"total": hcx_calls, "gate": gate_c, "ask": ask_c, "generate": gen_c,
+        "calls": {"total": llm_calls, "gate": gate_c, "ask": ask_c, "generate": gen_c,
                   "deterministic": list(DETERMINISTIC)},
         "layers": {k: L[k] for k in LAYER_ORDER},
     }
@@ -548,16 +548,16 @@ if __name__ == "__main__":
                 "checks": {"ok": True, "flags": []},
                 "attachments": _att.collect(FIXED_HITS, qform=qform),
                 "_meta": {"cls_label": "정상", "cls_reason": "소관 업무", "cls_calls": 1,
-                          "cls_parse_fail": 0, "cls_latency_ms": 300, "hcx_status": 200,
+                          "cls_parse_fail": 0, "cls_latency_ms": 300, "model_status": 200,
                           "latency_ms": 1200, "error": None, "k": 3, "qform": qform}}
 
-    def trace_of(state, ev, *, boost=False, hcx_calls=2):
+    def trace_of(state, ev, *, boost=False, llm_calls=2):
         """app 층이 할 조립을 그대로 재현 — 전이 이벤트 + 상태에서 트레이스를 만든다."""
         return collect(
             state["base_q"], bf_debug(state["base_q"]), state["slots_raw"],
             ev.get("survivors"), ev.get("ask"), ev.get("result"), boost,
             search_q=ev.get("search_q"), search_fn=stub_search,
-            hcx_calls=hcx_calls, ask_turn=state["ask_turn"])
+            llm_calls=llm_calls, ask_turn=state["ask_turn"])
 
     # ── AC1. 트레이스 수집이 HCX 콜을 늘리지 않음 ───────────────────────────
     print("\n── AC1. 트레이스 수집 = LLM 콜 0 ──")
@@ -572,7 +572,7 @@ if __name__ == "__main__":
         if isinstance(n, ast.Call) and id(n) not in main_ids:
             f = n.func
             nm = f.attr if isinstance(f, ast.Attribute) else getattr(f, "id", "")
-            if nm in ("_hcx", "answer", "classify", "post"):
+            if nm in ("_llm", "answer", "classify", "post"):
                 banned_calls.append((nm, n.lineno))
     ANSWER_CALLS.clear()
     st_a = qform_flow.new_state()
@@ -581,7 +581,7 @@ if __name__ == "__main__":
     before_ans = len(ANSWER_CALLS)
     tr_a = trace_of(st_a, ev_a)
     ac1t = not banned_calls and len(ANSWER_CALLS) == before_ans
-    print(f"  런타임 코드 내 LLM 호출({', '.join(('_hcx', 'answer', 'classify'))}) : "
+    print(f"  런타임 코드 내 LLM 호출({', '.join(('_llm', 'answer', 'classify'))}) : "
           f"{len(banned_calls)}곳 (기대 0)")
     print(f"  collect() 실행 중 answer() 추가 호출: {len(ANSWER_CALLS) - before_ans}회 (기대 0)")
     print(f"  검색 재호출 {search_calls[0]}회 — 결정론(rag 순수 함수), LLM 콜 아님"
@@ -641,7 +641,7 @@ if __name__ == "__main__":
                                "latency_ms": 280, "k": 3}}
     QR = "미국 은행에 넣은 예금도 보호되나요?"
     tr_r = collect(QR, bf_debug(QR), extract(QR, business_function=rag.classify_query_bf(QR)),
-                   None, None, reject_result, False, search_fn=stub_search, hcx_calls=1)
+                   None, None, reject_result, False, search_fn=stub_search, llm_calls=1)
     skipped = [k for k in ("search", "generate", "attachments")
                if tr_r["layers"][k]["status"].startswith("생략")]
     ac4t = skipped == ["search", "generate", "attachments"] and tr_r["layers"]["gate"]["label"] == "소관밖"
@@ -654,7 +654,7 @@ if __name__ == "__main__":
     st_p = qform_flow.new_state()
     ev_p = qform_flow.start(st_p, "착오송금 반환 신청 서류가 뭐예요?",
                             classify_fn=rag.classify_query_bf, answer_fn=stub_answer)
-    tr_p = trace_of(st_p, ev_p, hcx_calls=0)
+    tr_p = trace_of(st_p, ev_p, llm_calls=0)
     ac4p = (ev_p["kind"] == "ask" and tr_p["pending"]
             and tr_p["layers"]["ask"]["fired"] and tr_p["layers"]["combos"]["remaining"] == 7)
     print(f"  [되묻기 턴] pending={tr_p['pending']} · 되묻기 발동={tr_p['layers']['ask']['fired']} · "
@@ -674,7 +674,7 @@ if __name__ == "__main__":
                       stub_answer("착오송금 반환 신청 서류가 뭐예요?",
                                   {"party": "송금인", "sub_task": "반환신청",
                                    "qualification": "대리인", "subject": "법인", "method": None}),
-                      False, hits=FIXED_HITS, hcx_calls=2)
+                      False, hits=FIXED_HITS, llm_calls=2)
     A = tr_full["layers"]["attachments"]
     ac5t = A["before_forms"] == 11 and A["before_files"] == 24
     print(f"  필터 전 {A['before_forms']}서식 / {A['before_files']}파일  (기준 11서식 / 24파일)")
@@ -708,7 +708,7 @@ if __name__ == "__main__":
         }[k]()
         badge = "콜0" if k in DETERMINISTIC else (str(c) if c is not None else "?")
         print(f"  {i:>2} {LAYER_LABEL[k]:12} {badge:>3}  {summary}")
-    print(f"  총 HCX {tr['calls']['total']}콜 = 게이트 {tr['calls']['gate']} + "
+    print(f"  총 LLM {tr['calls']['total']}콜 = 게이트 {tr['calls']['gate']} + "
           f"되묻기 {tr['calls']['ask']} + 생성 {tr['calls']['generate']}")
     print(f"  결정론 구간 {len(DETERMINISTIC)}층은 전부 콜 0 (재계산·반환값 읽기)")
 

@@ -156,7 +156,7 @@ def panel_model(trace: dict) -> dict:
             cards.append(_card(
                 key, f"{lay['latency_ms'] or '?'}ms · {lay['chars'] or 0}자",
                 open_=bool(lay["error"]), calls=lay["calls"],
-                rows=[("생성 콜", lay["calls"]), ("HTTP", lay["hcx_status"]),
+                rows=[("생성 콜", lay["calls"]), ("HTTP", lay["model_status"]),
                       ("오류", lay["error"] or "—")]))
 
         elif key == "attachments":
@@ -182,10 +182,10 @@ def panel_model(trace: dict) -> dict:
         subtitle = f"생존 {L['combos']['remaining']}행 · 답변 전 (분류·검색·생성 미실행)"
     elif trace.get("rejected"):
         title = "소관 밖 — 거절"
-        subtitle = f"{L['gate']['reason'] or ''} · HCX {c.get('total')}콜 · 검색·생성 생략"
+        subtitle = f"{L['gate']['reason'] or ''} · LLM {c.get('total')}콜 · 검색·생성 생략"
     else:
         title = f"답변 · {L['bf']['bf'] or '업무 불명'}"
-        subtitle = f"생존 {L['combos']['remaining']}행 · HCX {c.get('total')}콜"
+        subtitle = f"생존 {L['combos']['remaining']}행 · LLM {c.get('total')}콜"
     return {"title": title, "subtitle": subtitle, "calls": c, "cards": cards}
 
 
@@ -238,7 +238,7 @@ def _render_calls(st, calls: dict) -> None:
         return
     parts = [f"게이트 {calls.get('gate')}", f"되묻기 {calls.get('ask')}",
              f"생성 {calls.get('generate')}"]
-    st.caption(f"**HCX {calls.get('total')}콜** = " + " + ".join(parts)
+    st.caption(f"**LLM {calls.get('total')}콜** = " + " + ".join(parts)
                + f"  ·  결정론 {len(calls.get('deterministic', []))}층 콜 0")
 
 
@@ -303,7 +303,7 @@ if __name__ == "__main__":
                 "attachments": _att.collect(HITS, qform=qform),
                 "_meta": {"cls_label": "정상", "cls_reason": "착오송금 반환지원 문의",
                           "cls_calls": 1, "cls_parse_fail": 0, "cls_latency_ms": 310,
-                          "hcx_status": 200, "latency_ms": 1180, "error": None, "k": 3}}
+                          "model_status": 200, "latency_ms": 1180, "error": None, "k": 3}}
 
     def conversation(ask_mode="template", llm_call=None, boost=False):
         """되묻기 2턴 대화를 돌려 트레이스 3건을 만든다 (ask · ask · answer)."""
@@ -316,7 +316,7 @@ if __name__ == "__main__":
         traces.append(qform_trace.collect(
             s["base_q"], qform_trace.bf_debug(s["base_q"]), s["slots_raw"],
             ev.get("survivors"), ev.get("ask"), ev.get("result"), boost,
-            search_q=ev.get("search_q"), hits=HITS, hcx_calls=calls, ask_turn=s["ask_turn"]))
+            search_q=ev.get("search_q"), hits=HITS, llm_calls=calls, ask_turn=s["ask_turn"]))
         for rep in script[1:]:
             if ev["kind"] != "ask":
                 break
@@ -326,7 +326,7 @@ if __name__ == "__main__":
             traces.append(qform_trace.collect(
                 s["base_q"], qform_trace.bf_debug(s["base_q"]), s["slots_raw"],
                 ev.get("survivors"), ev.get("ask"), ev.get("result"), boost,
-                search_q=ev.get("search_q"), hits=HITS, hcx_calls=calls,
+                search_q=ev.get("search_q"), hits=HITS, llm_calls=calls,
                 ask_turn=s["ask_turn"]))
         return traces
 
@@ -444,7 +444,7 @@ if __name__ == "__main__":
          "_meta": {"cls_label": "소관밖", "cls_reason": "외국 소재 금융기관 예금",
                    "cls_calls": 1, "cls_parse_fail": 0, "cls_latency_ms": 290,
                    "latency_ms": 290, "k": 3}},
-        False, hits=[], hcx_calls=1)
+        False, hits=[], llm_calls=1)
     mr = panel_model(rej)
     print(f"  제목 \"{mr['title']}\" · 부제 \"{mr['subtitle']}\"")
     for c in mr["cards"]:

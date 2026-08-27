@@ -35,7 +35,7 @@ LLM 모드 ⓑ (T3):
         · 한 문장인가 / 개행 없는가 / 길이 상한          → multi_sentence · multi_line · too_long
         · 콜 실패 · 예산 소진                          → call_failed · budget_exhausted
 
-    콜 회계는 `chain._hcx` 를 재사용해 `chain.CALL_BUDGET` 을 공유한다(별도 예산 금지).
+    콜 회계는 `chain._llm` 을 재사용해 `chain.CALL_BUDGET` 을 공유한다(별도 예산 금지).
 """
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ def build_question(slot: str, slots: dict, survivors: list[dict],
     """되묻기 문구 1건 생성. **선택지는 생존 행에서만 나온다.**
 
     mode      "template"(ⓐ, 콜 0) | "llm"(ⓑ, 턴당 1콜)
-    llm_call  `(messages) -> (text|None, meta)`. 미지정이면 `chain._hcx` 사용.
+    llm_call  `(messages) -> (text|None, meta)`. 미지정이면 `chain._llm` 사용.
               검증 하니스가 콜 0으로 가드를 전수 시험하기 위한 주입점이다.
 
     반환: {"slot", "text", "values", "phrases", "mode", "uncovered",
@@ -134,7 +134,8 @@ def _template_question(slot: str, slots: dict, survivors: list[dict]) -> dict:
 
 
 # ── LLM 모드 ⓑ — 표현 층에만 개입 ───────────────────────────────────────────
-ASK_PARAMS = {"temperature": 0.3, "topP": 0.8, "maxTokens": 128}
+ASK_PARAMS = {"temperature": 0.3, "top_p": 0.8, "max_tokens": 128,
+              "thinking": {"type": "disabled"}}
 MAX_LEN = 140                 # 가드 상한. 프롬프트에는 120자로 지시해 여유를 둔다.
 
 ASK_SYS_PROMPT = (
@@ -149,10 +150,10 @@ ASK_SYS_PROMPT = (
 
 
 def _default_llm(messages: list[dict]):
-    """기본 호출 경로 — `chain._hcx` 재사용. 예산(`chain.CALL_BUDGET`)을 공유한다."""
+    """기본 호출 경로 — `chain._llm` 재사용. 예산(`chain.CALL_BUDGET`)을 공유한다."""
     import chain                                  # 지연 임포트: ⓐ 모드는 chain 없이도 돈다
     c0 = chain._calls
-    text, meta = chain._hcx(messages, req_id="qform-ask", params=ASK_PARAMS)
+    text, meta = chain._llm(messages, req_id="qform-ask", params=ASK_PARAMS)
     return text, {**meta, "calls": chain._calls - c0}
 
 
@@ -588,9 +589,9 @@ if __name__ == "__main__":
 
     print(f"\n  이 구간 실제 LLM 콜: 0 (전부 주입 스텁) · chain 미임포트")
 
-    # ── --live: 실제 HCX 스모크 (되묻기 2턴 = 2콜) ──────────────────────────
+    # ── --live: 선택된 LLM 스모크 (되묻기 2턴 = 2콜) ────────────────────────
     if "--live" in sys.argv:
-        print("\n── [--live] 실제 HCX 되묻기 생성 (2콜 예정) ──")
+        print(f"\n── [--live] 실제 {chain.LLM_PROVIDER} 되묻기 생성 (2콜 예정) ──")
         import chain
         c0 = chain._calls
         for name, sc in SCENES:
@@ -599,12 +600,12 @@ if __name__ == "__main__":
             print(f"  {name:18} 콜 {r['calls']} · 폴백 {r['fallback_reason']}")
             print(f"    ⓐ {build_question(q['slot'], sc, qform_state.survivors(sc))['text']}")
             print(f"    ⓑ {r['text']}")
-        print(f"  누적 HCX 콜 {chain._calls} / 예산 {chain.CALL_BUDGET} (이번 구간 +{chain._calls - c0})")
+        print(f"  누적 {chain.LLM_PROVIDER} 콜 {chain._calls} / 예산 {chain.CALL_BUDGET} (이번 구간 +{chain._calls - c0})")
         if chain._calls >= chain.CALL_BUDGET:
             print("  ⛔ 예산 소진 — 즉시 중단하고 보고할 것")
     else:
-        print("\n  실제 HCX 스모크는 생략됨. 환경이 준비된 곳에서:")
-        print("    python3 chatbot/qform_ask.py --live      # 되묻기 2턴 = HCX 2콜")
+        print("\n  실제 LLM 스모크는 생략됨. 환경이 준비된 곳에서:")
+        print("    python3 chatbot/qform_ask.py --live      # 되묻기 2턴 = LLM 2콜")
 
     print()
     if fails:

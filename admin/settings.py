@@ -242,7 +242,7 @@ def apply_runtime() -> list[str]:
 
     try:                                        # 생성
         import chain
-        chain.GEN_PARAMS["maxTokens"] = int(cfg["maxTokens"])
+        chain.GEN_PARAMS["max_tokens"] = int(cfg["maxTokens"])
         chain.GEN_PARAMS["temperature"] = float(cfg["temperature"])
         chain.CALL_BUDGET = int(cfg["CALL_BUDGET"])
         touched += ["chain.GEN_PARAMS", "chain.CALL_BUDGET"]
