@@ -21,7 +21,9 @@ import oos_store
 
 
 ACTIONS = ("BOT_FEEDBACK", "REFERRAL", "CASUAL", "FAR_OOS", "PHONE_GUIDE")
-OOS_PARAMS = {"temperature": 0.0, "topP": 0.8, "maxTokens": 80}
+OOS_PARAMS = {"temperature": 0.0, "top_p": 0.8, "max_tokens": 80,
+              "thinking": {"type": "disabled"},
+              "response_format": {"type": "json_object"}}
 
 BOT_TARGET = ("챗봇", "방금 답변", "네 답변", "너의 답변", "출처", "설명한 내용", "답변 내용")
 BOT_ERROR = ("틀렸", "오류", "사실과 다르", "이상하", "신고", "잘못 답", "정확하지 않")
@@ -112,7 +114,7 @@ def parse_candidate(text: str | None) -> dict | None:
 
 def _default_llm(messages: list[dict]):
     import chain
-    return chain._hcx(messages, req_id="oos", params=OOS_PARAMS)
+    return chain._llm(messages, req_id="oos", params=OOS_PARAMS)
 
 
 def classify_oos(query: str, *, llm_call=None) -> dict:

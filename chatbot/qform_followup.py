@@ -125,12 +125,12 @@ if __name__ == "__main__":
     print(f"후속 질문 추천 — 자기검사 (조합 테이블 {len(COMBOS)}행 · 최대 {MAX_SUGGESTIONS}개)\n")
 
     # ── AC7-1. LLM 진입점 없음 ─────────────────────────────────────────────
-    print("── AC7-1 추천 생성 HCX 콜 +0 ──")
+    print("── AC7-1 추천 생성 LLM 콜 +0 ──")
     # 하니스 블록은 제외하고 **런타임 코드만** 본다 — 안 그러면 아래 금칙어 목록
     # 자체가 걸려서 자기 자신을 오탐한다.
     src = pathlib.Path(__file__).read_text(encoding="utf-8")
     runtime_src = src.split('if __name__ == "__main__":')[0]
-    banned = [w for w in ("import chain", "_hcx", "requests") if w in runtime_src]
+    banned = [w for w in ("import chain", "_llm", "requests") if w in runtime_src]
     ac1 = not banned and "chain" not in sys.modules
     print(f"  모듈 내 LLM 진입점 {banned or '없음'} · chain 로딩={'chain' in sys.modules}"
           f"  → {'OK' if ac1 else 'DIFF ⛔'}")

@@ -3,7 +3,7 @@
 계약(임시 동결, DECISIONS.md 07-22): answer(query) -> {text, sources, confidence, route}
   - 4필드 축소 금지 · 부가(checks/_meta/attachments)만 추가 가능. route 내부 구현만 교체 가능.
   - attachments(부가): 근거 문서 첨부 목록(청크 태깅 우선 + 문서 폴백, attachments.collect).
-    검색 hits만 소비 → HCX 추가 콜 0. reject 경로는 []. 스키마는 attachments.py._fmt 참조.
+    검색 hits만 소비 → LLM 추가 콜 0. reject 경로는 []. 스키마는 attachments.py._fmt 참조.
   - 새 흐름: **분류(1콜) → [소관밖] 고정 거절 문구 즉시 반환(검색·생성·검증 생략)
     / [정상·모호] 검색 → 생성(1콜) → 검증**. 분류 라벨·사유는 _meta에 기록.
   - confidence: 표시용 dense 코사인 top1("관련 문서 유사도" — 정책 분기 금지, Q12).
@@ -43,12 +43,28 @@ load_dotenv(ROOT / ".env")  # 키 값은 어떤 로그·에러에도 싣지 않�
 import answer_checks
 import attachments  # 근거 문서 첨부 조회(청크 태깅 우선 + 문서 폴백) — 순수 로컬, 계약 부가 필드
 
-API_KEY = os.environ["CLOVA_API_KEY"]
-API_URL = os.environ["CLOVA_API_URL"]
-MODEL_NAME = os.environ.get("CLOVA_MODEL", "(미설정)")
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "hcx").strip().lower()
+if LLM_PROVIDER not in {"hcx", "deepseek"}:
+    raise ValueError("LLM_PROVIDER는 'hcx' 또는 'deepseek'여야 합니다.")
 
-GEN_PARAMS = {"temperature": 0.2, "topP": 0.8, "maxTokens": 512}  # 생성(전야와 동일 — 재현성)
-CLS_PARAMS = {"temperature": 0.1, "topP": 0.8, "maxTokens": 128}  # 분류(JSON 한 줄 — 결정성 우선)
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "").strip()
+DEEPSEEK_API_URL = os.environ.get(
+    "DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions"
+).strip()
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash").strip()
+HCX_API_KEY = os.environ.get("CLOVA_API_KEY", "").strip()
+HCX_API_URL = os.environ.get("CLOVA_API_URL", "").strip()
+HCX_MODEL = os.environ.get("CLOVA_MODEL", "HCX-003").strip()
+MODEL_NAME = DEEPSEEK_MODEL if LLM_PROVIDER == "deepseek" else HCX_MODEL
+
+GEN_PARAMS = {
+    "temperature": 0.2, "top_p": 0.8, "max_tokens": 512,
+    "thinking": {"type": "disabled"},
+}  # 짧은 RAG 답변 — 지연과 재현성을 위해 비사고 모드
+CLS_PARAMS = {
+    "temperature": 0.1, "top_p": 0.8, "max_tokens": 128,
+    "thinking": {"type": "disabled"}, "response_format": {"type": "json_object"},
+}  # 분류 — DeepSeek JSON Output 사용
 CALL_BUDGET = 70  # 07-22 route 세션 예산(재시도 포함) — chatbot/CLAUDE.md v3 금지 5항
 _calls = 0
 
@@ -96,10 +112,51 @@ def get_searcher():
     return _searcher
 
 
-def _hcx(messages: list[dict], req_id: str, params: dict = GEN_PARAMS) -> tuple[str | None, dict]:
-    """smoke_hcx.py 검증 구조. 실패 시 콜당 1회 재시도. 예외는 타입명만 기록(.env 보호)."""
+def _provider_settings(provider: str) -> tuple[str, str, str]:
+    """provider -> (api_key, api_url, model). 비밀값은 호출부 밖으로 기록하지 않는다."""
+    if provider == "deepseek":
+        return DEEPSEEK_API_KEY, DEEPSEEK_API_URL, DEEPSEEK_MODEL
+    if provider == "hcx":
+        return HCX_API_KEY, HCX_API_URL, HCX_MODEL
+    raise ValueError(f"지원하지 않는 LLM provider: {provider!r}")
+
+
+def _request_parts(provider: str, messages: list[dict], req_id: str,
+                   params: dict, attempt: int) -> tuple[dict, dict]:
+    """공통 파라미터를 각 공급자의 요청 스키마로 변환한다."""
+    api_key, _api_url, model = _provider_settings(provider)
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    if provider == "deepseek":
+        return headers, {"model": model, "messages": messages, "stream": False, **params}
+
+    # CLOVA Studio는 모델명이 URL에 포함되고 파라미터가 camelCase다.
+    headers["X-NCP-CLOVASTUDIO-REQUEST-ID"] = f"{req_id}-t{attempt}"
+    payload = {"messages": messages}
+    key_map = {"max_tokens": "maxTokens", "top_p": "topP"}
+    for key, value in params.items():
+        if key in {"thinking", "response_format", "stream"}:
+            continue
+        payload[key_map.get(key, key)] = value
+    return headers, payload
+
+
+def _response_content(provider: str, data: dict) -> str:
+    if provider == "deepseek":
+        return data["choices"][0]["message"]["content"]
+    return data["result"]["message"]["content"]
+
+
+def _llm(messages: list[dict], req_id: str, params: dict = GEN_PARAMS, *,
+         provider: str | None = None) -> tuple[str | None, dict]:
+    """선택한 LLM을 호출한다. 실패 시 1회 재시도하며 비밀값은 기록하지 않는다."""
     global _calls
-    meta = {"hcx_status": None, "latency_ms": None, "error": None}
+    provider = (provider or LLM_PROVIDER).strip().lower()
+    api_key, api_url, model = _provider_settings(provider)
+    meta = {"provider": provider, "model": model, "model_status": None,
+            "latency_ms": None, "error": None}
+    if not api_key or not api_url:
+        meta["error"] = f"missing_{provider}_configuration"
+        return None, meta
     for attempt in (1, 2):
         if _calls >= CALL_BUDGET:
             meta["error"] = "call_budget_exhausted"
@@ -107,21 +164,30 @@ def _hcx(messages: list[dict], req_id: str, params: dict = GEN_PARAMS) -> tuple[
         _calls += 1
         t0 = time.time()
         try:
-            r = requests.post(API_URL, json={"messages": messages, **params}, timeout=30, headers={
-                "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": "application/json",
-                "X-NCP-CLOVASTUDIO-REQUEST-ID": f"{req_id}-t{attempt}",
-            })
+            headers, payload = _request_parts(provider, messages, req_id, params, attempt)
+            r = requests.post(api_url, json=payload, timeout=30, headers=headers)
             meta["latency_ms"] = int((time.time() - t0) * 1000)
-            meta["hcx_status"] = r.status_code
+            meta["model_status"] = r.status_code
             if r.status_code == 200:
-                return r.json()["result"]["message"]["content"], meta
+                return _response_content(provider, r.json()), meta
             meta["error"] = f"http_{r.status_code}:" + r.text[:200].replace("\n", " ")
         except Exception as e:
             meta["latency_ms"] = int((time.time() - t0) * 1000)
             meta["error"] = f"exception:{type(e).__name__}"
-        time.sleep(5 if meta["hcx_status"] == 429 else 2)
+        time.sleep(5 if meta["model_status"] == 429 else 2)
     return None, meta
+
+
+def _deepseek(messages: list[dict], req_id: str,
+              params: dict = GEN_PARAMS) -> tuple[str | None, dict]:
+    """실험·호환용 명시적 DeepSeek 호출."""
+    return _llm(messages, req_id, params, provider="deepseek")
+
+
+def _hcx(messages: list[dict], req_id: str,
+         params: dict = GEN_PARAMS) -> tuple[str | None, dict]:
+    """실험·호환용 명시적 HCX 호출."""
+    return _llm(messages, req_id, params, provider="hcx")
 
 
 def _parse_cls(text: str | None) -> dict | None:
@@ -148,9 +214,9 @@ def classify(query: str) -> tuple[str, str, dict]:
     global _calls
     messages = [{"role": "system", "content": CLS_PROMPT}, {"role": "user", "content": query}]
     meta = {"cls_calls": 0, "cls_parse_fail": 0, "cls_latency_ms": 0, "cls_error": None}
-    for _ in (1, 2):  # 파싱 실패 재시도 1회(HTTP 재시도는 _hcx 내부에서 별도)
+    for _ in (1, 2):  # 파싱 실패 재시도 1회(HTTP 재시도는 _llm 내부에서 별도)
         c0 = _calls
-        text, m = _hcx(messages, req_id="cls", params=CLS_PARAMS)
+        text, m = _llm(messages, req_id="cls", params=CLS_PARAMS)
         meta["cls_calls"] += _calls - c0
         meta["cls_latency_ms"] += m["latency_ms"] or 0
         meta["cls_error"] = m["error"]
@@ -200,7 +266,7 @@ def answer(query: str, k: int = 3, qform: dict | None = None) -> dict:
     context = "\n\n".join(f"[출처{i}] {h['page_title']}\n{h['text']}" for i, h in enumerate(hits, 1))
     messages = [{"role": "system", "content": SYS_PROMPT_V2},
                 {"role": "user", "content": f"[참고문서]\n{context}\n\n[질문]\n{query}"}]
-    text, meta = _hcx(messages, req_id="chain")
+    text, meta = _llm(messages, req_id="chain")
 
     sources, seen = [], set()
     for h in hits:
@@ -236,7 +302,7 @@ def answer_in_scope(query: str, k: int = 3, qform: dict | None = None,
     context = "\n\n".join(f"[출처{i}] {h['page_title']}\n{h['text']}" for i, h in enumerate(hits, 1))
     messages = [{"role": "system", "content": SYS_PROMPT_V2},
                 {"role": "user", "content": f"[참고문서]\n{context}\n\n[질문]\n{query}"}]
-    text, meta = _hcx(messages, req_id="chain-in")
+    text, meta = _llm(messages, req_id="chain-in")
 
     sources, seen = [], set()
     for h in hits:
@@ -278,7 +344,7 @@ def _confidence(query: str) -> float:
 
 
 def _print_calls() -> None:
-    print(f"[calls] 이번 실행 HCX 콜(재시도 포함): {_calls} / 예산 {CALL_BUDGET}")
+    print(f"[calls] 이번 실행 {LLM_PROVIDER} 콜(재시도 포함): {_calls} / 예산 {CALL_BUDGET}")
 
 
 # ── 실행 모드 (T1 스모크 · T3 E2E · T4 정상 분류) ───────────────────────
@@ -314,7 +380,7 @@ def run_e2e() -> None:
             "cls_label": m.get("cls_label"), "cls_reason": m.get("cls_reason"),
             "route": r["route"], "text": r["text"],
             "checks_flags": r["checks"]["flags"],
-            "hcx_calls_this_q": _calls - c0,
+            "llm_calls_this_q": _calls - c0,
             "latency_ms": int((time.time() - t0) * 1000),
             # 부가(분석용)
             "trap_type": t["trap_type"], "cls_parse_fail": m.get("cls_parse_fail", 0),
