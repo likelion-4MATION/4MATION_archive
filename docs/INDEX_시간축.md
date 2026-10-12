@@ -67,18 +67,18 @@
 - **08-05** **MOAI 채택** · **OOS 학습셋 700건 기각**(일반화 실패 위험) ·
   **G6 채점 제외** · **앵커텍스트 방식 최종 채택**(Parent-Child 문제 해법)
 
-**회의록 형식이 08-13 부터 바뀐다.** `records/meeting/`(07-13 ~ 08-12) 뒤를
-`meeting/`(08-13 ~ 08-20, "데일리 로그" 형식 5건)이 잇는다 — 같은 날짜 축의 다음 권이다.
+**회의록 형식이 08-13 부터 바뀐다.** 07-13 ~ 08-12 회의록 뒤를 08-13 ~ 08-20 "데일리 로그"
+형식 5건이 잇는다 — 같은 날짜 축의 다음 권이라 모두 `records/meeting/`에 둔다.
 
 ## 국면 Ⅳ — 통합·OOS (08-18 ~ 08-26)
 
 | 날짜 | 스탠드업 | 회의록 | 그날의 문서 |
 |---|:-:|:-:|---|
-| 08-18 | ✓ | [`meeting/`](meeting/2026-08-18.md) | Qform ver4 **M0~M7** 8건 · `Qform_ver4_논의정리_0817_v4` · `Qform_ver4_최종보고` · `current/QFORM_ARCH_설계스펙.md` · `Qform_ver3_task_assignment` · `QformSprintDemo_task_assignment` |
-| 08-19 | ✓ | [`meeting/`](meeting/2026-08-19.md) | `Qform_ver4_M9_스팬이행_대조표` · `Qform_ver4_구현정리` · `Qform_ver4_문제점_분석` · **`current/관리자콘솔_사양서.md`** · `records/방법론_정확도개선_결론_20260818.md` · `records/데이터셋_평가셋_수정내역_20260818.md` · `current/KDIC_소관경계_정리.md` · `current/faq_routing_bf.md` · `plans/OOS_처리로직_계획서.md` |
-| 08-20 | ✓ | [`meeting/`](meeting/2026-08-20.md) | **`plans/통합계획서_release_v1.md`** · `plans/복합질의_라우팅_3안비교.md` |
+| 08-18 | ✓ | [`records/meeting/`](records/meeting/2026-08-18.md) | Qform ver4 **M0~M7** 8건 · `Qform_ver4_논의정리_0817_v4` · `Qform_ver4_최종보고` · `current/QFORM_ARCH_설계스펙.md` · `Qform_ver3_task_assignment` · `QformSprintDemo_task_assignment` |
+| 08-19 | ✓ | [`records/meeting/`](records/meeting/2026-08-19.md) | `Qform_ver4_M9_스팬이행_대조표` · `Qform_ver4_구현정리` · `Qform_ver4_문제점_분석` · **`current/관리자콘솔_사양서.md`** · `records/방법론_정확도개선_결론_20260818.md` · `records/데이터셋_평가셋_수정내역_20260818.md` · `current/KDIC_소관경계_정리.md` · `current/faq_routing_bf.md` · `plans/OOS_처리로직_계획서.md` |
+| 08-20 | ✓ | [`records/meeting/`](records/meeting/2026-08-20.md) | **`plans/통합계획서_release_v1.md`** · `plans/복합질의_라우팅_3안비교.md` |
 | 08-24 | — | — | `current/router_checkpoint.md` · **`current/RUNBOOK.md`** |
-| 08-25 | — | — | **`current/OOS_구현_운영가이드.md`** · `records/router_판정경계_측정_20260825.md` · `docs/chatbot-ui_변경사항_20260825.md`(레거시 Streamlit 3컬럼 개편) |
+| 08-25 | — | — | **`current/OOS_구현_운영가이드.md`** · `records/router_판정경계_측정_20260825.md` · `records/chatbot-ui_변경사항_20260825.md`(레거시 Streamlit 3컬럼 개편) |
 | 08-26 | — | — | **`web/` FastAPI 사용자 챗봇 신규**(PRs #26·#27 — chat service·정적 UI·API 보안 테스트) · admin 콘솔 좌측 사이드+상단 결과창 재편(KDIC 색상) |
 
 **`DECISIONS` D10~D13** 이 이 국면이다. D13(08-24)은 평가기 6종을 `crawler/eval.py` 하나로 통합한 기록.
@@ -106,7 +106,6 @@
 | | |
 |---|---|
 | `logs/` | 데일리 스탠드업 23건. 작성 규칙은 `logs/README.md` |
-| `docs/records/meeting/` | 회의록 16건 (07-13 ~ 08-12) |
-| `docs/meeting/` | 데일리 로그 5건 (08-13 ~ 08-20, 위와 같은 축의 다음 형식) |
+| `docs/records/meeting/` | 회의록 16건 (07-13 ~ 08-12) + 데일리 로그 형식 5건 (08-13 ~ 08-20) |
 | `DECISIONS.md` | 판단 로그. 코드가 왜 그 모양인지 |
 | `crawler/DECISIONS.md` · `crawler/HOLES.md` | 파이프라인 판단 로그 · 미해결 홀 원장 |
