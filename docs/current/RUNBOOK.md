@@ -536,8 +536,8 @@ cd .. && python crawler/span_tools.py     # 자기검사(왕복·유일성). 파
 - 유일하게 남은 참조는 `crawler/tests/test_eval_equivalence.py` → `archive/superseded/` 다.
   통합 결과가 구 평가기와 같은 판정을 내는지 대조하는 **회귀 테스트**이므로 의도된 연결이다.
   이 테스트가 기준값으로 쓰기 때문에 `superseded/eval_anchor_v3.py` 는 지우면 안 된다.
-- `backup/` · `crawler/*.bak_*` 의 옛 사본은 `.bak` 확장자라 import 대상이 아니다
-  (`backup/` 은 git 미추적).
+- 손으로 떠 둔 옛 사본(`*.bak*`)은 `archive/bak/` 에 모았다(`archive/README.md` 참고).
+  `.bak` 확장자라 import 대상이 아니다. 루트 `backup/` 은 git 미추적이다.
 
 **예외 1건** — `exp/harness.py` 는 `eval.py` 를 import 하지 않고 지표 셈법(`KMAX=10`,
 랭크 계산)을 **복제**해 갖고 있다. 스스로 그렇게 밝히고 있고(`"실행·수정 없이 셈법만 복제"`)
