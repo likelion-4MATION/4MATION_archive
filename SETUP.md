@@ -58,10 +58,14 @@ test -f .env || cp .env.example .env
 
 ## 2. 클론 · 가상환경
 
+> 이 전체 이력판의 원격은 `likelion-4MATION/4MATION_archive`다. `likelion-4MATION/4MATION`은
+> 2026-08-28에 만든 essential 재구성본(별도 이력)이라, 현행 서비스를 설치하려면 그쪽 `SETUP.md`를
+> 따른다([README](./README.md) 상단 참고).
+
 ```bash
-git clone https://github.com/likelion-4MATION/4MATION.git
+git clone https://github.com/likelion-4MATION/4MATION_archive.git 4MATION
 cd 4MATION
-git checkout feature/merge_v1    # 현재 통합 브랜치
+git switch dev                 # 통합 브랜치. feature/merge_v1 은 PR #27 로 dev 에 병합됨
 
 python3 -m venv .venv          # PowerShell: python -m venv .venv
 source .venv/bin/activate      # PowerShell: .venv\Scripts\Activate.ps1
@@ -162,7 +166,7 @@ python -c "import json; print('청크 수:', sum(1 for _ in open('crawler/data/c
 test -f crawler/data/index/faiss.index && echo 'FAISS 인덱스 있음'
 # PowerShell: if (Test-Path crawler/data/index/faiss.index) { 'FAISS 인덱스 있음' }
 (cd crawler && python router_source.py)
-(cd crawler && python eval.py)
+(cd crawler && python eval.py chunk --gt ../final_testset/gt_natural430_anchored.jsonl)
 ```
 
 ## 7. 라우터 체크포인트 (선택)
@@ -193,7 +197,7 @@ python crawler/router_source.py
 
 ### ⚠️ 챗봇 실행 전에 미리 받아두세요
 
-`chatbot/rag_deepseek.py`가 `HF_HUB_OFFLINE=1`을 설정합니다. 그 시점에 로컬 캐시가 없으면 라우터나 임베딩 모델을 내려받지 못하고 폴백할 수 있습니다.
+`chatbot/chain.py`·`chatbot/rag_hcx.py`·`admin/jobs.py`가 `HF_HUB_OFFLINE=1`을 기본으로 켭니다(`web/`·`rag_deepseek.py`도 `chain`을 import 하므로 같다). 그 시점에 로컬 캐시가 없으면 라우터나 임베딩 모델을 내려받지 못하고 폴백할 수 있습니다.
 
 ```bash
 python scripts/download_router_hf.py --verify-sha
@@ -349,7 +353,7 @@ grep -c "5천만" crawler/data/raw/kdic-www-sp-dpstrprot-ProtSystProtLmts-select
 (cd crawler && python pipeline.py --manifest crawl_manifest.csv --rebuild)
 
 # 평가 · 라우터 확인
-(cd crawler && python eval.py)
+(cd crawler && python eval.py chunk --gt ../final_testset/gt_natural430_anchored.jsonl)
 (cd crawler && python router_source.py)
 
 # 사용자 챗봇 — 루트에서
@@ -368,7 +372,7 @@ python -m streamlit run chatbot/app.py
 |---|---|
 | [README.md](./README.md) | 프로젝트 개요·아키텍처·팀 |
 | [crawler/README.md](./crawler/README.md) | 파이프라인 단계별 실행·재수집·매니페스트 |
-| [crawler/DECISIONS.md](./crawler/DECISIONS.md) | 설계 판단 근거 |
+| [DECISIONS.md](./DECISIONS.md) | 설계 판단 근거 (D0~D13) |
 | [crawler/HOLES.md](./crawler/HOLES.md) | 미해결 이슈 |
 | [docs/current/router_checkpoint.md](./docs/current/router_checkpoint.md) | 라우터 배포·업로드·제약 |
 | [CONTRIBUTING.md](./CONTRIBUTING.md) | 협업 규칙 |

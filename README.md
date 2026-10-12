@@ -10,6 +10,13 @@
 
 ---
 
+> **저장소 상태 (2026-10-12 확인)** — 이 저장소는 2026-07-10 ~ 08-31의 **전체 이력판**이고 원격은
+> [`likelion-4MATION/4MATION_archive`](https://github.com/likelion-4MATION/4MATION_archive)다.
+> 2026-08-28 구동에 필요한 최소 파일만 뽑아 새 이력으로 재구성한 essential 저장소는
+> [`likelion-4MATION/4MATION`](https://github.com/likelion-4MATION/4MATION)(첫 커밋 `b29eea7`)에 따로 있고,
+> 08-28 이후 개발은 그쪽에서 했다. 두 저장소는 이력이 이어지지 않으므로 서로 병합하지 않는다.
+> 이 저장소는 실험·평가·회의 기록과 은퇴 코드를 찾을 때 쓴다. 통합 브랜치는 `dev`다.
+
 ## 📌 프로젝트 소개
 
 예금보험공사 공개 웹사이트(kdic.or.kr, fins.kdic.or.kr)에 산재한 데이터를 **중앙화**하고, 기존 Rule 기반 챗봇을 **RAG 기반 자연어 AI 챗봇**으로 개편하는 PoC 프로젝트.
@@ -95,7 +102,7 @@ HCX 2승, 동률 22건이며 F2도 같은 총계였다. 할루시네이션 판�
 4MATION/
 ├── crawler/        # 실전 1: 데이터 파이프라인 (수집→파싱→청킹→인덱스→평가)
 │   ├── README.md   #   실행 순서·산출물 안내
-│   ├── DECISIONS.md · HOLES.md   # 판단 로그 · 이슈/팀 이관
+│   ├── HOLES.md    #   이슈 원장 (판단 로그는 루트 DECISIONS.md)
 │   └── data/       #   chunks.jsonl · 인덱스 · 평가 리포트
 ├── web/            # FastAPI 사용자 API · 정적 HTML/CSS/JS 챗봇 UI
 ├── chatbot/        # Qform · 절별 BF/OOS 오케스트레이션 · 레거시 Streamlit UI
@@ -109,7 +116,9 @@ HCX 2승, 동률 22건이며 F2도 같은 총계였다. 할루시네이션 판�
 │   ├── records/    #   기록 — 측정·회의록·인계·7월 진행도
 │   ├── plans/      #   계획 — 실행 여부를 배지에 명시
 │   └── superseded/ #   폐기·경위
+├── archive/        # 은퇴한 평가·라벨링 코드 · 손으로 떠 둔 옛 사본(bak/)
 ├── logs/           # 데일리 스탠드업
+├── DECISIONS.md    # 판단 로그 (D0~D13)
 └── CONTRIBUTING.md # 협업 규칙
 ```
 

@@ -6,7 +6,7 @@
 
 # RUNBOOK — 현재 통합 버전 실행 명령어 모음
 
-`feature/merge_v1` 기준(2026-08-25). 여섯 축(라우팅 · RAG · 크롤링+청킹 ·
+`dev` 기준(코드는 2026-08-27 PR #29 병합본 — 이후 08-31까지는 문서 커밋만 있다 · 2026-10-12 문서 점검). 여섯 축(라우팅 · RAG · 크롤링+청킹 ·
 관리자 UI · 챗봇 · OOS)과 평가·검증을 실행하는 명령어만 모았다. 설계 근거는 각 모듈 docstring과
 `docs/records/handoff/eval_유상.md` · `docs/current/router_checkpoint.md` 를 본다.
 
@@ -422,12 +422,8 @@ score_mode     : anchor
 ## 7. 검증 · 테스트
 
 ```bash
-# 현재 OOS + 기존 가드 + 평가 등가성 + 웹 챗봇 API 묶음
-python -m pytest \
-  tests/test_oos.py \
-  crawler/tests/test_guards.py \
-  crawler/tests/test_eval_equivalence.py \
-  tests/test_web_api.py -q
+# OOS + 평가 등가성 + 웹 챗봇 API + DeepSeek 공급자·LLM 비교 하네스 묶음
+python -m pytest tests crawler/tests/test_eval_equivalence.py -q
 
 # 웹 UI 자바스크립트 문법 검사 (node 필요)
 node --check web/static/app.js
@@ -436,7 +432,7 @@ node --check web/static/app.js
 python crawler/tests/test_eval_equivalence.py
 pytest crawler/tests/test_eval_equivalence.py
 
-# 관리자 가드
+# 수집 가드 — pytest 함수가 없는 스크립트라 따로 실행
 python crawler/tests/test_guards.py
 
 cd crawler
@@ -455,9 +451,10 @@ python chatbot/verify_docs.py
 python chatbot/answer_checks.py
 ```
 
-현재 기준 기대값(2026-08-26 실측):
+현재 기준 기대값(pytest는 2026-10-12, 나머지는 2026-08-26 실측):
 
-- 위 pytest 묶음: **22 passed** — OOS·가드·등가성 14 + 웹 API(`tests/test_web_api.py`) 8
+- 위 pytest 묶음: **29 passed** — `test_oos.py` 13 · `test_web_api.py` 8 ·
+  `test_deepseek_provider.py` 4 · `test_llm_compare.py` 3 · `test_eval_equivalence.py` 1
 - `node --check web/static/app.js`: 출력 없음이 정상
 - `verify_qform_e2e.py`: 104조합 통과
 - `verify_qform_panel.py`: 11/11 통과
