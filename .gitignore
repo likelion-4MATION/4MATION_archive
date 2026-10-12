@@ -40,7 +40,7 @@ build/
 # 라우터 체크포인트 — faq_bf_map.py --router 입력. 산출물 bf_map.jsonl은 커밋돼 있다.
 # 가중치 pytorch_model.bin(2.38GB)만 제외하고, 설정·토크나이저 8개(15.9MB)는 커밋한다.
 # 그래야 id2label 6대 업무 일치(faq_bf_map V1 검증)를 가중치 없이도 코드리뷰에서 확인할 수 있다.
-# 가중치 배포는 HF 프라이빗 repo — docs/router_checkpoint.md · crawler/router_source.py
+# 가중치 배포는 HF 프라이빗 repo — docs/current/router_checkpoint.md · crawler/router_source.py
 router_moai_embedding_model/*
 !router_moai_embedding_model/config.json
 !router_moai_embedding_model/tokenizer.json

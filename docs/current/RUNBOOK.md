@@ -126,7 +126,7 @@ print(rag.classify_query_bf('착오송금 반환 신청 구비서류'))   # (업
 ```
 
 HF 접속 자체가 안 되면(`CERTIFICATE_VERIFY_FAILED`) 백신의 TLS 스캐닝일 수 있다 —
-CA 번들 합치는 절차는 [SETUP.md 자주 걸리는 문제](../SETUP.md#자주-걸리는-문제) 에 있다.
+CA 번들 합치는 절차는 [SETUP.md 자주 걸리는 문제](../../SETUP.md#자주-걸리는-문제) 에 있다.
 
 받아 놓은 뒤 오프라인으로 강제하려면 `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` 을 붙인다
 (`chatbot/*` 은 이미 스스로 그렇게 설정한다). 로컬이 완전하면 이 상태에서도 라우터가 뜬다.

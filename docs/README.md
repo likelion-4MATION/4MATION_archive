@@ -19,7 +19,7 @@
 | 계층 | 뜻 | 개수 |
 |---|---|---:|
 | [`current/`](current/) | **정본** — 지금 이대로 돌아간다 | 9 |
-| [`records/`](records/) | **기록** — 그때의 사실, 고치지 않는다 | 78 |
+| [`records/`](records/) | **기록** — 그때의 사실, 고치지 않는다 | 79 |
 | [`plans/`](plans/) | **계획** — 실행 여부를 배지에 적었다. 현행과 다를 수 있다 | 5 (+미커밋 2) |
 | [`superseded/`](superseded/) | **폐기·경위** — 왜 그 길로 안 갔는지 | 3 |
 
@@ -107,9 +107,9 @@
 - [`chatbot-ui_변경사항_20260825.md`](records/chatbot-ui_변경사항_20260825.md) — 레거시 Streamlit 3컬럼 개편(08-25)
 - [`관리자콘솔_목업.html`](records/관리자콘솔_목업.html) — 콘솔 구현 전 HTML 목업(08-19 회의록의 `관리자콘솔_목업_3.html`)
 
-### [`records/handoff/`](records/handoff/) — 인계 3건
+### [`records/handoff/`](records/handoff/) — 인계 4건
 
-`eval_유상.md`(평가 트랙 인계) · `eval_TEMPLATE.md` · `README.md`
+`eval_유상.md`(평가 트랙 인계) · `eval_TEMPLATE.md` · `README.md` · `handoff_chain_draft.md`(07-22 chain.py 인계 초안, 옛 `chatbot/` 위치)
 
 ### [`records/진행도_2607/`](records/진행도_2607/) — 7월 원본·정리 19건
 
