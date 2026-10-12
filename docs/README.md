@@ -18,14 +18,14 @@
 
 | 계층 | 뜻 | 개수 |
 |---|---|---:|
-| [`current/`](current/) | **정본** — 지금 이대로 돌아간다 | 8 |
+| [`current/`](current/) | **정본** — 지금 이대로 돌아간다 | 9 |
 | [`records/`](records/) | **기록** — 그때의 사실, 고치지 않는다 | 78 |
-| [`plans/`](plans/) | **계획** — 실행 여부를 배지에 적었다. 현행과 다를 수 있다 | 7 |
+| [`plans/`](plans/) | **계획** — 실행 여부를 배지에 적었다. 현행과 다를 수 있다 | 5 (+미커밋 2) |
 | [`superseded/`](superseded/) | **폐기·경위** — 왜 그 길로 안 갔는지 | 3 |
 
 ---
 
-## current/ — 정본 8건
+## current/ — 정본 9건
 
 | 문서 | 무엇 |
 |---|---|
@@ -37,10 +37,12 @@
 | [`router_checkpoint.md`](current/router_checkpoint.md) | 라우터 체크포인트 배포·무결성 |
 | [`faq_routing_bf.md`](current/faq_routing_bf.md) | FAQ 청크 BF 태깅 규약 |
 | [`qform_시험질의셋.md`](current/qform_시험질의셋.md) | 시연 질의 원문 — 코드가 인용하는 고정 자산 |
+| [`OPENCODE_LLM_JUDGE.md`](current/OPENCODE_LLM_JUDGE.md) | HCX·DeepSeek 동일 컨텍스트 블라인드 비교와 OpenCode 심사 절차 |
 
-## plans/ — 계획 7건
+## plans/ — 계획 5건 (+미커밋 2건)
 
 배지에 **실행 상태**를 적었다. 본문이 현행과 다를 수 있다.
+표 끝의 두 건은 08-27 문서 지도(PR #30)에 등재됐지만 파일이 커밋되지 않아 이 저장소 어느 이력에도 없다(링크 없음).
 
 | 문서 | 실행 상태 |
 |---|---|
@@ -49,8 +51,8 @@
 | [`1150_테스트셋_생성계획서.md`](plans/1150_테스트셋_생성계획서.md) | 생성 완료. §10 의 "G6 130건"은 실물과 다름(210건) |
 | [`복합질의_라우팅_3안비교.md`](plans/복합질의_라우팅_3안비교.md) | **구현됨** — `orchestrator.py`·`query_units.py` |
 | [`통합계획서_release_v1.md`](plans/통합계획서_release_v1.md) | 미승인 초안. M1·M4·M5 구현, 나머지 미착수 |
-| [`답변품질_LLM심사_HCX_vs_DeepSeek.md`](plans/답변품질_LLM심사_HCX_vs_DeepSeek.md) | **HCX 파일럿 + bounded parent A/B 완료(08-26)** · DeepSeek 대기. 결과 §14 · §15 · 판정축 §16 · 앵커≠답변품질 §17 · 본채점 150 자동지표 §18 · 헤드룸·리랭커 §19 · k=5·BF절제 §20 |
-| [`실전1-2_피드백_해결계획.md`](plans/실전1-2_피드백_해결계획.md) | **미착수.** 실전1 15건 + 실전2 13건 + 종합 예상질문 18건 — 신규 작업 7건 · 팀 확인 1건. 우선순위는 §20 |
+| `답변품질_LLM심사_HCX_vs_DeepSeek.md` *(미커밋)* | **HCX 파일럿 + bounded parent A/B 완료(08-26)** · DeepSeek 대기. 결과 §14 · §15 · 판정축 §16 · 앵커≠답변품질 §17 · 본채점 150 자동지표 §18 · 헤드룸·리랭커 §19 · k=5·BF절제 §20 |
+| `실전1-2_피드백_해결계획.md` *(미커밋)* | **미착수.** 실전1 15건 + 실전2 13건 + 종합 예상질문 18건 — 신규 작업 7건 · 팀 확인 1건. 우선순위는 §20 |
 
 ## superseded/ — 폐기·경위 3건
 
@@ -73,6 +75,7 @@
 | [`방법론_정확도개선_결론_20260818.md`](records/방법론_정확도개선_결론_20260818.md) | hit@5 `.765 → .891` 계보 5단계 |
 | [`router_판정경계_측정_20260825.md`](records/router_판정경계_측정_20260825.md) | 라우터 OOS 차단율 · 시드 분산 σ=0.015 |
 | [`router_finetune_record.md`](records/router_finetune_record.md) | MoAI vs kf-deberta 선정 경위 |
+| [`HCX_DeepSeek_P0_결과_20260826.md`](records/HCX_DeepSeek_P0_결과_20260826.md) | 답변 모델 P0 40문항 — DeepSeek 16승 · HCX 2승 · 동률 22 |
 | [`GT_방법론_정리_20260812.md`](records/GT_방법론_정리_20260812.md) | 정답셋 방법론 |
 | [`데이터셋_평가셋_수정내역_20260818.md`](records/데이터셋_평가셋_수정내역_20260818.md) | 평가셋 변경 이력 |
 
@@ -130,6 +133,6 @@
 | `../DECISIONS.md` | 판단 로그 (D0~D13) — 코드가 왜 그 모양인가 |
 | `../CONTRIBUTING.md` | 브랜치·커밋·PR 규칙 |
 | `../logs/` | 데일리 스탠드업 23건 (07-13 ~ 08-20) |
-| `../crawler/DECISIONS.md` · `../crawler/HOLES.md` | 파이프라인 판단 로그 · 미해결 홀 |
+| `../crawler/HOLES.md` | 파이프라인 미해결 홀 원장 (판단 로그는 `../DECISIONS.md` 하나다) |
 | `../crawler/README.md` · `../admin/README.md` · `../web/README.md` | 각 축의 실행 안내 |
 | `../archive/README.md` | 은퇴한 코드 19개와 은퇴 사유 |
