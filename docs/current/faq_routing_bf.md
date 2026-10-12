@@ -83,7 +83,7 @@ MSP가 낮으면 `bf = null`. 부모 태그는 틀렸다고 이미 아는 값이
 
 ### I5. 재현성은 버전 기록으로 확보
 
-`bf_map`에 `model`·`msp`·`labeled_at`을 함께 기록하고 산출물을 커밋한다. 재크롤 시 `content_hash`가 불변이면 재추론하지 않고 기존 값을 재사용하므로, 정상 재크롤에서 사람 개입이 발생하지 않는다. 모델을 교체할 때만 전체 재라벨 + diff.
+`bf_map`에 `model`·`msp`·`labeled_at`을 함께 기록하고 산출물을 커밋한다. 재사용 키는 `content_hash`가 아니라 **(`qhash`, `--router` 경로 문자열)** 이다(`faq_bf_map.py` I5 블록). 같은 모델·같은 질문이면 재추론하지 않는다. 단 `pipeline.py`·`build_dataset.py`·관리자 작업은 `faq_bf_map.py`를 부르지 않으므로, 재청킹·재크롤로 FAQ 질문이 바뀌면 `python faq_bf_map.py --router ../router_moai_embedding_model`을 **수동으로 다시 돌린다**(새 질문은 그전까지 미매핑 → 업무 부스트 없음, `Searcher`가 재실행 경고를 낸다). 모델을 교체할 때는 전체 재라벨 + diff.
 
 ---
 
@@ -165,13 +165,15 @@ MSP가 낮으면 `bf = null`. 부모 태그는 틀렸다고 이미 아는 값이
 
 ---
 
-## 8. 전제 확인 필요
+## 8. 전제 확인 — 확인됨
 
-| # | 항목 |
-|---|---|
-| Q1 | `split_faq()`가 질문을 어떤 형태로 저장하는가 (접두어 / 첫 줄 / 별도 필드) |
-| Q2 | 라우터 체크포인트 경로와 `id2label` 표기 |
-| Q3 | `is_board()` 판정 청크 수 |
+`crawler/data/bf_map_report.md`(2026-08-18 생성)로 확인했다.
+
+| # | 항목 | 결과 |
+|---|---|---|
+| Q1 | `split_faq()`가 질문을 어떤 형태로 저장하는가 | 질문 추출 108건 성공 · 실패 0건 (V2·V3) |
+| Q2 | 라우터 체크포인트 경로와 `id2label` 표기 | `../router_moai_embedding_model` · 6업무 명칭 일치 (V1) |
+| Q3 | `is_board()` 판정 청크 수 | 108 / 전체 181 (V5) · null 3/108 = 2.8% (V7) |
 
 ---
 
