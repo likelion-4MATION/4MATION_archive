@@ -8,7 +8,7 @@
 
 > **출처**: 본 문서의 모든 내용은 프로젝트 크롤링 데이터(`crawler/data/chunks.jsonl`, 38페이지 / 181청크)의 **원문 문장에만** 근거한다.
 > 크롤링 데이터에 없는 사실·추론·일반지식은 포함하지 않았다.
-> 크롤링 기준 시점: raw HTML 수집 2026-04, 청크 재생성 2026-04-16.
+> 크롤링 기준 시점: raw HTML 수집 2026-07-22(`crawler/data/crawl_report.json`), 청크 재생성 2026-08-18(표 원자성 반영, `e7e898f`).
 > 챗봇 답변범위(scope) / 라우터 / 거절(refusal) 정책 설계용.
 
 ---
@@ -340,7 +340,7 @@
 | H3 | 착오송금인 유의사항 원문에 "1억원 이하"로 되어 있으나 같은 페이지 웹툰은 5천만원. 즉 H1은 **같은 business_function 내부 충돌** | `착오송금 반환 신청` 전체 | 라우터가 정상 분기해도 청크 선택에서 오답 |
 | H4 | **웹툰/캐릭터 대화 텍스트가 청크에 그대로 포함**("예튼이", "예솜이", "야호! 만세!", 지하철 노선·버스 번호 목록) | `MtrsGvbkSprtProc#01~03`, `MtrsVstRcptGudn#00` | 노이즈. 임베딩 품질·답변 톤 저해 |
 | H5 | **청크 경계에서 문장 중간 절단 + 앞 청크 꼬리 중복**. 예: "ney.or.kr)을 이용 바랍니다", "c.or.kr)에 접속하여", "644-0120, sfwc..." | `DpsmIbamtExpln#02~03`, `DpsmIbamtAplyProc#00~01`, `LbltAjmtSprtPsnBr#03~04` 등 다수 | URL·전화번호가 잘려 오답. 오버랩 전략 재검토 필요 |
-| H6 | **표(table) 직렬화가 불완전**. "구분[...], ... 항목으로 구성된 표"라는 **캡션만 남고 본문이 다음 청크로 분리**되거나, 헤더-셀 매핑이 깨져 어느 업권의 상품인지 판별 불가 | `selectProtSystProtTrgtPrdctSumr#00~01`, `MsdrprPossDcmntGudn#00~01`, `LbltAjmtSprtLbltAjmtSyst#00~02` | 보호/비보호 상품, 구비서류 질문에서 **업권 혼동** 발생 |
+| H6 | **표(table) 직렬화가 불완전**. "구분[...], ... 항목으로 구성된 표"라는 **캡션만 남고 본문이 다음 청크로 분리**되거나, 헤더-셀 매핑이 깨져 어느 업권의 상품인지 판별 불가 | `selectProtSystProtTrgtPrdctSumr#00~01`, `MsdrprPossDcmntGudn#00~01`, `LbltAjmtSprtLbltAjmtSyst#00~02` | 보호/비보호 상품, 구비서류 질문에서 **업권 혼동** 발생. *(10-12 추기: 08-18 표 원자성 반영 뒤 현 코퍼스에는 '…구성된 표' 캡션만 남은 청크가 없다. 헤더-셀 매핑 모호성은 남음 — `crawler/HOLES.md` 상태 요약표 H13)* |
 | H7 | **각주(도움말) 본문이 참조 지점에서 분리**. 본문에는 "1 아래 도움말 참조"만 남고 정의는 청크 끝 또는 다음 청크 | `ProtSystProtLmts#00~01`, `selectProtSystProtSumr#02`, `DpsmIbamtExpln#03` | "소정이자란?", "보험사고란?" 질문에 정의 누락 |
 | H8 | **동일 FAQ가 두 도메인(www/fins)에 중복 존재**. 은닉재산 FAQ 12건이 `SprtFndCncmDclrFaq`와 `selectFaqCncmPrptDclr`에 거의 동일하게, 착오송금 FAQ 10건이 `selectFaqMsdrGvbkAply`와 `selectFaqTop10`에 중복 | 은닉재산 29청크 중 약 24, 착오송금 FAQ | 검색결과 상위가 동일 내용으로 채워짐 → **MMR/dedup 필수** |
 | H9 | **business_function 라벨 오배정**. `selectFaqNramtAply`(미수령금 FAQ) 청크가 `예금자보호제도`(#02~05)·`예금보험금 안내`(#06~37)·`공통`(#00~01)로 3분할되고, `selectFaqTop10`(착오송금 TOP10) #05만 `공통`으로 빠짐. 정작 `고객 미수령금 신청` 라벨에는 5청크만 남음 | 청크 메타데이터 | 라우터/facet 필터 학습 시 라벨 노이즈. **미수령금 질문이 미수령금 facet으로 안 걸림** |

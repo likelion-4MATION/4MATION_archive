@@ -94,7 +94,7 @@
 질문의 정확도가 0.82 → 0.31 로 떨어졌다.
 
 **원인** `_blocks()` 의 "연속 파이프 줄 = 표" 휴리스틱이, **셀 안 `<br>` 다항목**이 만든
-파이프 없는 줄에서 끊긴다. `crawler/HOLES.md` H13 이 이미 등재한 홀이었다.
+파이프 없는 줄에서 끊긴다. `crawler/HOLES.md` 상태 요약표 H13 행이 이미 등재한 홀이었다.
 
 **해결** `TABLE_GAP_MAX=12` — '표 → 설명 → 표' 구조에서 몇 줄까지 함께 묶을지 정한다.
 코퍼스가 215 → **181청크**로 줄었다(청크가 자기완결적이 됐다).
@@ -131,7 +131,8 @@
 → 코드 `crawler/rag.py:classify_query_bf` · `crawler/faq_bf_map.py:Router`
 
 **단서** 일반화가 셋에 따라 흔들린다 — 450셋 100% vs 355셋 **83.4%**. 어휘 신호가 없는
-질의에서 무너진다(`crawler/HOLES.md` H31).
+질의에서 무너진다(`records/방법론_정확도개선_결론_20260818.md` §02·§03). 450셋은 라우터 학습셋과
+같은 질문이라 100%는 학습셋 정확도다.
 
 ---
 
@@ -230,7 +231,7 @@
 **문제** 검색 5축·청킹 4축·생성 파라미터를 조정하려면 파일을 고쳐야 했다. 비전공자
 관리자가 할 수 없고, 고치면 되돌리기도 어렵다.
 
-**해결** FastAPI 콘솔. **원본 코드를 수정하지 않는다** — 값은 `data/admin_config.json` 에
+**해결** FastAPI 콘솔. **원본 코드를 수정하지 않는다** — 값은 `admin/data/admin_config.json`(실행 시 생성, git 미추적) 에
 쌓이고 `settings.apply_runtime()` 이 모듈 상수에 주입한다. 청킹 파라미터는 재빌드 시
 `runner.inject()` 가 `chunk` 모듈에 주입한다.
 
@@ -250,6 +251,8 @@
 HF 프라이빗 repo(`us788/moai_yebo_ft`)에서 받는다. `crawler/router_source.py` 가
 `ROUTER_PATH`(env) → 로컬 디렉토리(크기 일치) → `hf_repo` → `None`(키워드 폴백) 순으로
 해석한다. **예외를 던지지 않는다** — 체크포인트가 없어도 검색은 돌아야 한다.
+단 `chatbot/chain.py`·`admin/jobs.py` 는 `HF_HUB_OFFLINE=1` 로 돌기 때문에 챗봇·콘솔 경로에서는
+자동 다운로드가 일어나지 않는다 — `scripts/download_router_hf.py` 로 미리 받는다(`SETUP.md` §7).
 
 **함정** 재학습하면 **매니페스트도 갱신해야 한다.** 안 하면 `resolve()` 가 새 로컬 파일을
 "크기 불일치"로 보고 HF 의 옛 가중치를 받아온다 — 조용히 다른 모델을 쓰게 되는 최악의 실패.
@@ -269,4 +272,4 @@ HF 프라이빗 repo(`us788/moai_yebo_ft`)에서 받는다. `crawler/router_sour
 | **민원·오류신고 경계** | OOS 로 볼지 큐폼으로 볼지 미결(08-05 이슈 4) → 일부는 `BOT_FEEDBACK` 으로 구현됨 | `records/meeting/2026-08-05.md` |
 | **앵커 소실** | 원문 사이트 동적 변경 시 정답 구절 소실 대응 미정 | `records/meeting/2026-08-05.md` §3 |
 | **ARCH 갭 G1~G13** | 설계-구현 갭 13건 원장. 일부 해소, 전수 재확인 필요 | `records/ARCH_통합_v0.md` §4 |
-| **파이프라인 홀** | H1~H31 원장 | `crawler/HOLES.md` |
+| **파이프라인 홀** | H1~H46 원장 | `crawler/HOLES.md` |

@@ -1,3 +1,7 @@
+<!-- 상태:records -->
+> **기록** — 2026-07-22 시점의 사실(원래 `chatbot/handoff_chain_draft.md`). 고치지 않는다.
+> 현행 답변 계약은 `chatbot/chain.py`(`answer()`·`answer_in_scope()`)와 `docs/current/RUNBOOK.md` §5를 본다.
+
 # handoff — chain.py 인수인계 초안 (체인 담당: 규남)
 
 > 밤1(07-22) CC 작성. **answer()는 초안이며 동결 아님 — 동결 서명은 사람.** 근거 실측은 `exp/night1_report.md` 참조.

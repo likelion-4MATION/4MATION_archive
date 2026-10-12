@@ -1,3 +1,7 @@
+<!-- 상태:records -->
+> **기록** — 2026-08-25 시점의 사실(레거시 Streamlit `chatbot/app.py` UI 변경). 고치지 않는다.
+> 08-26부터 정식 사용자 UI는 `web/`(FastAPI)이다 — `web/README.md`
+
 # 챗봇 UI 변경 사항 — `feature/chatbot-ui` (Qform_ver4 대비)
 
 > **작성자** kungean · **브랜치** `feature/chatbot-ui` (`c844d33` + 워킹트리 변경분)

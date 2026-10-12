@@ -1,7 +1,9 @@
 # KDIC 데이터 파이프라인 v0 — 선발대 스프린트 (`crawler/`)
 
 수집(crawl) → 본문추출(parse) → 청킹(chunk) → 임베딩·적재(index) → 검색·평가(eval)를 담는 폴더.
-D0 수집 + D1 파이프라인 반영 현행화판(2026-07-13). 판단 근거는 [`DECISIONS.md`](./DECISIONS.md), 미해결·팀 이관은 [`HOLES.md`](./HOLES.md).
+D0 수집 + D1 파이프라인 현행화판(2026-07-13)을 2026-10-12에 `dev`(08-27) 코드 기준으로 다시 맞췄다.
+판단 근거는 루트 [`DECISIONS.md`](../DECISIONS.md), 미해결·팀 이관은 [`HOLES.md`](./HOLES.md).
+전체 명령과 평가 옵션의 정본은 [`docs/current/RUNBOOK.md`](../docs/current/RUNBOOK.md) §2·§3·§6이다.
 
 > **모든 명령은 이 폴더(`crawler/`)에서 실행한다.** 경로 상수가 전부 상대경로다.
 
@@ -14,16 +16,13 @@ pip install -r requirements.txt
 
 # 0) 가드 로직 검증 (네트워크 불필요)
 python tests/test_guards.py
-# ① 크롤+첨부+데이터셋
+# ① 라이브 수집 → 파싱 → 첨부 다운로드·연결 → 청킹 (38건 · 요청당 1.5s+지터)
 python build_dataset.py --crawl
-
-# 1) 라이브 재수집 → 파싱 → 청킹 → 임베딩 → 인덱스 (원커맨드)
-#    38건 · 요청당 1.5s+지터 폴라이트 · 최초 실행 시 임베딩 모델 ~440MB 다운로드 ≈ 3~5분   
-# ② 검색 인덱스(캐시 재사용)
+# ② ①이 만든 data/raw 캐시로 임베딩·인덱스 생성 (무네트워크)
+#    최초 실행 시 임베딩 모델 dragonkue/BGE-m3-ko 약 2.2GB 다운로드
 python pipeline.py --manifest crawl_manifest.csv --use-cache --rebuild
-
-# 2) 검색 평가 (hit@1 / hit@3 / MRR, dense vs hybrid) → data/eval_report.md
-python eval.py
+# ③ 검색 평가 — 앵커텍스트 판정(정본) → 터미널 + data/eval_chunk_report.md
+python eval.py chunk --gt ../final_testset/gt_natural430_anchored.jsonl
 ```
 
 **수집 직후 필수 확인 (H6 — 보호한도 페이지 구버전 간헐 서빙)**: 서버가 낮은 빈도로 "5천만원" 스테일 변형을 내려준다. 재수집할 때마다 확인한다.
@@ -40,14 +39,15 @@ grep -c "5천만" data/raw/kdic-www-sp-dpstrprot-ProtSystProtLmts-selectScrn.htm
 | ① 수집 | `python run_crawl.py --manifest crawl_manifest.csv` | 매니페스트 → `data/raw/*.html` · `data/meta/*.json` · `data/crawl_report.json` |
 | ①' 스모크 | `python run_crawl.py --manifest crawl_manifest.csv --limit 3` | 앞 3건만 |
 | ② 파싱 | `python parser.py` | `data/raw` → `data/parsed/*.json` |
-| ③ 청킹 | `python chunk.py` | `data/parsed` → `data/chunks.jsonl` (11필드 스키마) |
+| ②' 첨부 | `python fetch_attachments.py` → `python link_files.py` | 첨부 실파일 → `data/files/` · parsed 문서에 `local_path` 연결 |
+| ③ 청킹 | `python chunk.py` | `data/parsed` → `data/chunks.jsonl` (14필드) · `data/doc_attachments.json` |
 | ③' FAQ BF 태깅 | `python faq_bf_map.py --router <ckpt>` | `data/chunks.jsonl` → `data/bf_map.jsonl` · `data/bf_map_report.md` |
 | ④⑤ 인덱스 | `python pipeline.py --use-cache --rebuild` | `data/raw` 캐시(무네트워크) → `data/index/` |
-| 평가셋 | `python build_testset.py` | `data/chunks.jsonl` → `data/testset.jsonl` |
-| 채점 | `python eval.py` | testset + index → `data/eval_report.md` |
+| 채점 | `python eval.py chunk --gt ../final_testset/gt_natural430_anchored.jsonl` | 앵커 GT + index → `data/eval_chunk_report.md` |
 
 - 임베딩·적재 단독 스크립트는 없다 — `pipeline.py`(내부 `rag.Store`)가 담당.
-- `--use-cache`는 `data/raw`가 이미 있을 때만 동작한다(없으면 전건 `cache_miss`). **클론 직후에는 쓰지 말 것** — 위 빠른 시작의 `--rebuild`(라이브)를 쓴다.
+- `--use-cache`는 `data/raw`가 이미 있을 때만 동작한다(없으면 전건 `cache_miss`). 클론 직후에는 빠른 시작 ①로 `data/raw`를 먼저 만든다.
+- 인자 없는 `python eval.py`는 `chunk` + 기본 GT `data/gt_schema_v6.jsonl`(1,651행)로 돈다. 현행 수치와 비교하려면 위처럼 `--gt`를 명시한다.
 
 ## 재수집 — 운영 트리거 프로토타입
 
@@ -85,13 +85,14 @@ python verify_rerun.py run1 run2
 | 구분 | 파일 | 비고 |
 |---|---|---|
 | 레포 포함 | `crawl_manifest.csv` · `kdic_필수페이지_URL매핑.csv` · `분석필요태깅_포함여부분석.xlsx` | 38건 = 필수 37 + 분석포함 1 (xlsx는 판정 원천) |
-| 레포 포함 | `data/chunks.jsonl` | 136청크 × 11필드 — 검색 대상 핵심 |
-| 레포 포함 | `data/testset.jsonl` · `data/eval_report.md` | 평가셋 52건 · 지표 리포트(D1 델타 병기) |
-| 레포 포함 | `data/crawl_report.json` | 상태별 카운트 · robots 차단 목록(33 ok / 5 blocked, 38건) |
+| 레포 포함 | `data/chunks.jsonl` · `data/doc_attachments.json` | 181청크 × 14필드 — 검색 대상 핵심 · 문서별 첨부 메타 |
+| 레포 포함 | `data/eval_report.md` | 구세대 지표 리포트(450건 · RRF k=5). 현행 평가는 `eval.py chunk` |
+| 레포 포함 | `data/crawl_report.json` | 상태별 카운트 · robots 차단 목록(07-22 수집: 38 ok / 0 blocked) |
 | 레포 포함 | `link_registry.json` | 소관 밖 라우팅 6건 — **전건 url 충전 완료(H7 해소, 07-13)** |
 | 레포 포함 | `data/bf_map.jsonl` | FAQ 청크 108건의 BF(라우터 산출) — qhash 조인 레이어, `chunks.jsonl` 무수정 |
 | 레포 제외 | `data/raw/*.html` · `data/meta/*.json` | .gitignore(`data/raw/`) — 클론 후 라이브 재수집으로 확보 |
-| 레포 제외 | `data/parsed/*.json` · `data/index/*` · `router_moai_embedding_model/` | 재생성 가능 산출물 · 라우터 체크포인트(2.4GB) |
+| 레포 제외 | `data/parsed/*.json` · `data/index/*` · `data/files/` | 재생성 가능 산출물 |
+| 레포 제외 | `router_moai_embedding_model/pytorch_model.bin` | 라우터 가중치 2.38GB만 제외 — 설정·토크나이저 8개는 커밋 |
 
 `data/meta/{doc_id}.json` 필드: source_url · business_function · sub_category · page_type · coverage · variant · robots_status · breadcrumb · collected_at · raw/text sha256.
 
@@ -109,13 +110,13 @@ python verify_rerun.py run1 run2
 | 재실행 동일 결과 | `verify_rerun.py` — 텍스트 해시 기준 (raw 바이트는 CSRF/세션값 변동으로 제외) |
 | 파서 v0 (값 유실 없음) | `parser.py` — `.contents` 컨테이너 · 표 행 직렬화 · 스팟체크 5/5 |
 | 청킹 + 스키마 | `chunk.py` — 800자/오버랩 100 · 표 중간분할 금지 · FAQ 1쌍=1청크 |
-| 임베딩·벡터DB | `rag.py` — ko-sroberta(768d) + FAISS IndexFlatIP + BM25(kiwi) + RRF(k=60) |
+| 임베딩·벡터DB | `rag.py` — `dragonkue/BGE-m3-ko`(1024d) + FAISS IndexFlatIP + BM25(kiwi) + 가중 RRF(`RRF_ALPHA` 0.65 · `RRF_K` 4) + 6업무 soft boost |
 | 재수집 트리거 | `pipeline.py` `recollect()` — content_hash 스킵 |
-| 평가셋 + 지표 | `build_testset.py` · `eval.py` — 52건, hybrid hit@3 .923 |
+| 평가셋 + 지표 | `eval.py chunk`(앵커 판정) — 430 앵커셋 `hybrid_bf` hit@5 0.884(08-24, RUNBOOK 부록 C) |
 
 ## 주의
 
-- **fins `/cm/bbs/` FAQ 게시판 5건**(미수령금·착오송금·채무정보조회·은닉재산·TOP10): 매니페스트에 **유지하되 크롤러가 robots_blocked로 차단**한다(기록만) — 화이트리스트 원칙과 robots 준수의 양립(DECISIONS D0). 매니페스트에서 빼지 말 것. 고객사 허용 확인(대기 중 — 로드맵 확인사항 D5, 디스코드 게시됨) 시 `config.POLICY_DISALLOW`의 fins 항목 제거 후 `python pipeline.py` → 5건 즉시 편입.
+- **fins `/cm/bbs/` FAQ 게시판 5건**(미수령금·착오송금·채무정보조회·은닉재산·TOP10): 초기에는 robots_blocked로 차단했으나 robots 해석 변경 뒤 `config.POLICY_DISALLOW["fins.kdic.or.kr"]`가 비어 수집·인덱싱된다(HOLES H18 해소).
 - 대기열 마커 문구는 정상 페이지에도 숨김 모달로 존재 → 본문이 짧을 때만 대기열 판정.
-- 첨부(PDF/HWP)는 이번 스프린트 스킵 — 파서가 `attachments` 링크 목록만 보존.
+- 첨부(PDF/HWP)는 `fetch_attachments.py` → `link_files.py`(또는 `build_dataset.py`)가 실파일을 받아 연결한다. `pipeline.py`만으로는 다시 받지 않는다.
 - **소스 원문 무수정 원칙**: H6b(상속 페이지 stale 5천만) 등 구값은 raw/청크를 고치지 않는다 — 보정은 D2 답변 레이어에서만.

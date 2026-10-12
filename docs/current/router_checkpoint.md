@@ -6,7 +6,7 @@
 
 # 질의 BF 라우터 체크포인트 — 배포와 설정
 
-> **한 줄** 가중치 2.38GB는 git에 못 넣는다. 임베딩 모델(`dragonkue/BGE-m3-ko`)과 **같은 방식**으로 런타임에 HuggingFace에서 받아 캐시한다. 없어도 검색은 돈다.
+> **한 줄** 가중치 2.38GB는 git에 못 넣는다. HF 프라이빗 repo에서 `scripts/download_router_hf.py`로 레포 안 `router_moai_embedding_model/`에 **한 번** 받아 두면 이후엔 로컬에서 돈다. 없어도 검색은 돈다(키워드 폴백).
 
 ---
 
@@ -33,6 +33,8 @@
 ```bash
 pip install -r crawler/requirements.txt        # torch · transformers · huggingface-hub 포함
 export HF_TOKEN=hf_...                          # read 권한이면 충분
+python scripts/download_router_hf.py            # 레포 안 router_moai_embedding_model/ 로 (크기 맞는 파일은 건너뜀)
+python scripts/download_router_hf.py --verify-sha   # 받은 뒤 sha256 전수 검증
 ```
 
 토큰 발급: <https://huggingface.co/settings/tokens> → **Read** 권한.
@@ -56,7 +58,7 @@ HF repo    : us788/moai_yebo_ft (프라이빗 — HF_TOKEN 필요)
 resolve() -> us788/moai_yebo_ft
 ```
 
-이 상태면 정상이다. 최초 검색 시 `transformers`가 2.38GB를 받아 `~/.cache/huggingface/hub`에 캐시하고, 이후에는 캐시에서 읽는다.
+위는 가중치를 아직 안 받은 상태다(`resolve()`가 HF repo id로 해석). 이때 `transformers`를 직접 부르면 HF 캐시로 받을 수 있지만, 챗봇(`chatbot/chain.py`, 이를 import 하는 `web/`)과 관리자 작업(`admin/jobs.py`)은 `HF_HUB_OFFLINE=1`로 돌아 **자동 다운로드가 일어나지 않고 키워드 폴백**으로 간다. 그래서 위 `download_router_hf.py`로 받아 `로컬 상태 : 사용 가능`이 나오게 해 둔다.
 
 ### 라우터 없이 쓰기
 
@@ -66,7 +68,7 @@ resolve() -> us788/moai_yebo_ft
 [router] 로드 실패(OSError) — 키워드 분류로 폴백: us788/moai_yebo_ft
 ```
 
-다만 폴백 시 **키워드 분류 기권률이 28.6%(128/448)** 이고 그 구간은 부스트를 못 받는다. 수치를 리포트할 때는 라우터 사용 여부를 반드시 밝힐 것 — 같은 코드라도 `bf_source`가 다르면 다른 측정이다.
+다만 폴백 시 **키워드 분류 기권률이 28.6%(128/448)** 이고 그 구간은 부스트를 못 받는다(`rag.py`의 PRF 단계 — `QBF_PRF_TOPN`·`QBF_PRF_MIN_SHARE` — 가 기권 질의 일부를 1차 검색 상위 문서의 업무 투표로 다시 분류한다). 수치를 리포트할 때는 라우터 사용 여부를 반드시 밝힐 것 — 같은 코드라도 `bf_source`가 다르면 다른 측정이다.
 
 ---
 
@@ -130,7 +132,9 @@ for f in *; do printf '%s %s ' "$f" "$(stat -f%z "$f")"; shasum -a 256 "$f" | cu
 
 **(a) pickle이다.** `pytorch_model.bin`은 `torch.load` 경로라 임의 코드 실행 위험이 있는 포맷이다. 프라이빗 repo라 외부 노출은 없지만, `safetensors`로 바꾸면 이 위험이 사라지고 크기도 절반(bf16 기준 ~1.2GB)이 된다. 바꾸려면 **448문항 예측 일치 검증을 거친 뒤** 매니페스트를 다시 만들 것.
 
-**(b) MSP를 OOS 판정에 쓰지 말 것.** 이 체크포인트는 held-out 450셋에서 MSP 최솟값 0.9991 · 중앙값 1.0000으로 체계적 과신 상태다. `QBF_MSP_MIN`을 0.00~0.99 어디에 둬도 걸러지는 게 한 건도 없고, 6업무 밖 질의도 1.000이 나온다. 소관밖 판정은 다른 신호(예: PRF 투표 비중과의 불일치)가 필요하다.
+**(b) MSP를 OOS 판정에 쓰지 말 것.** 이 체크포인트는 450셋에서 MSP 최솟값 0.9991 · 중앙값 1.0000으로 체계적 과신 상태다. `QBF_MSP_MIN`을 0.00~0.99 어디에 둬도 걸러지는 게 한 건도 없고, 6업무 밖 질의도 1.000이 나온다. 소관밖 판정은 다른 신호(예: PRF 투표 비중과의 불일치)가 필요하다.
+
+> **정정(2026-10-12 추기)** — 위 450셋은 라우터 학습셋 `testset_natural_450`과 같은 450문항이라 held-out이 아니다. 학습에 쓰지 않은 dev 1,150셋에서는 전 문항 최솟값 0.3022 · in-scope 최솟값 0.4319로 분포가 다르다(`docs/records/router_판정경계_측정_20260825.md`). 현행 코드는 `rag.classify_query_bf()`가 MSP < `QBF_MSP_MIN`(0.70)이면 기권(`None`)하고, 오케스트레이터가 기권한 절을 OOS 정책으로 보낸다 — 경계 성능은 같은 측정 기록을 본다.
 
 **(c) 파라미터가 라우터 유무에 종속된다.** `BF_BOOST`는 "분류가 거의 안 틀린다"는 전제 위에서만 안전하다. 라우터 착륙 후에는 `router` / `fallback` 두 구성에서 각각 재스윕해 두 세트를 병기할 것.
 

@@ -646,3 +646,31 @@ M2 판정 1의 연장이다. 빈 축을 패널에 남기면 사용자가 채울 
 | `crawler/rag.py` · `chatbot/chain.py` · `chatbot/qform_panel.py` | **diff 0줄** |
 | 450셋 되묻기 발동률 | **9건 / 2.0% — 무변동** |
 | 패널 조작 `answer()` 호출 | **0회** (edit·clear·pass·move·drop 전 경로) |
+
+---
+
+# rev.9 추기 — 현행 코드 대조 (2026-10-12)
+
+> 이 문서는 ver4 M3(rev.8)에서 멈췄고, M5~M9 설계 변경은 `docs/records/Qform_ver4_M5_scope.md` ~
+> `Qform_ver4_M9_스팬이행_대조표.md`에만 있다. 앞 본문은 `chatbot/verify_docs.py` AC4가 지문으로 고정한
+> 추기 전용 영역이므로 고치지 않고, 현재 `dev` 코드와 다른 곳을 여기 모은다.
+
+## §25. 본문과 현재 코드의 차이
+
+| 본문 위치 | 본문 | 현재 코드 |
+|---|---|---|
+| §2-1 `party` | `party`는 `sub_task`에서 유도 | ver4 M6-a에서 유도 규칙 제거. 질의에 근거 어휘가 있을 때만 채운다(`qform_extract.py` 4번 블록) |
+| §2-1 · §8 · §19 되묻기 조건 | `qualification`은 반환신청일 때만, `subject`는 대리인일 때만 · 게이트는 `sub_task=="반환신청"`일 때만 | M6-b·c에서 하드코딩 제거. 생존 행을 실제로 가르는 슬롯만 `_ASK_ORDER`(`qualification` → `subject`) 순서로 묻고, 업무별 조합표를 쓴다(`qform_state.py`). DPIN `보험금신청`에서도 자격을 묻고, `qualification=본인`이어도 `subject`가 행을 가르면 묻는다 |
+| §1 D1 | 모든 질의에 추출기를 돌린다 · 진입/미진입 개념 없음 | 두 UI 모두 `orchestrator.start_turn()`을 거친다. 6업무 라우터가 BF로 판정한 절만 `qform_flow.start()`로 가고 나머지는 OOS로 간다. 그 안에서 `QFORM_SCOPE`(기본 `msdr`, 허용 `msdr`·`msdr+dpin`) 스코프 게이트가 한 번 더 건다. 웹 UI는 세션별로 스코프를 고른다 |
+| §5 AC2 | `evidence_chunks_v0`의 chunk_id 실재 | M9-2b 이후 DPIN은 `evidence_spans` 텍스트 대조, MSDR만 chunk_id 방식(`crawler/verify_combos.py`) |
+| §10 E1 | 트레이스 패널 우측 고정·상시 표시 | 레거시 Streamlit에만 있다. 웹 UI는 `트레이스 표시` 설정이 기본 꺼짐이고 트레이스를 화면에 그리지 않는다 |
+| §13 · §21 G13 | 부스트 시 `rag.search`가 업무를 재분류 — 열림 | 사용자 경로는 `chain.answer_in_scope(bf=…)` → `search(bf_override=bf)`라 재분류하지 않는다. 재분류는 레거시 `chain.answer()`에만 남아 있다 |
+| §14 F4 · §16 | 업무 판정 불명이면 직전 업무 상속 | UI 경로에서는 업무 불명 절이 OOS로 가므로 이 분기는 `qform_flow`를 직접 부를 때만 동작한다 |
+| §24-6 K13 | parallel/cross 다중 의도 → '대기 중인 용건' 큐 | 오케스트레이터가 `detect_multi=False`로 부른다. 두 UI에서 `state["queue"]`는 채워지지 않고, 절 분리 `unit_queue`가 그 역할을 한다 |
+| 머리말 · 여러 곳 | `CLAUDE.md` §2·§6-5·§9 | 저장소에 `CLAUDE.md`가 없다(작업 당시 개인 지침 문서) |
+| 부록(확정 결정 로그) | `docs/ARCH_통합_v0.md` | `docs/records/ARCH_통합_v0.md` |
+| rev.4 실측 | `qform_prompts.csv` 20행 | 28행(보험금신청 8행 추가) |
+
+본문 수치 중 `CARRYOVER_TTL=3`, `CARRYOVER_SCOPE=bf_match`, `MAX_ASK_TURNS=2`, `MAX_QUEUE=3`,
+`PANEL_EXPIRED=gray`, `CALL_BUDGET=70`, `LAYER_ORDER` 9층, MSDR 14행, DPIN 9행(머리 `#` 주석 3행 제외)은
+현재 코드와 같다.

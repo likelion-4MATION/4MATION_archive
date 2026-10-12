@@ -6,7 +6,7 @@
 
 # RUNBOOK — 현재 통합 버전 실행 명령어 모음
 
-`feature/merge_v1` 기준(2026-08-25). 여섯 축(라우팅 · RAG · 크롤링+청킹 ·
+`dev` 기준(코드는 2026-08-27 PR #29 병합본 — 이후 08-31까지는 문서 커밋만 있다 · 2026-10-12 문서 점검). 여섯 축(라우팅 · RAG · 크롤링+청킹 ·
 관리자 UI · 챗봇 · OOS)과 평가·검증을 실행하는 명령어만 모았다. 설계 근거는 각 모듈 docstring과
 `docs/records/handoff/eval_유상.md` · `docs/current/router_checkpoint.md` 를 본다.
 
@@ -126,7 +126,7 @@ print(rag.classify_query_bf('착오송금 반환 신청 구비서류'))   # (업
 ```
 
 HF 접속 자체가 안 되면(`CERTIFICATE_VERIFY_FAILED`) 백신의 TLS 스캐닝일 수 있다 —
-CA 번들 합치는 절차는 [SETUP.md 자주 걸리는 문제](../SETUP.md#자주-걸리는-문제) 에 있다.
+CA 번들 합치는 절차는 [SETUP.md 자주 걸리는 문제](../../SETUP.md#자주-걸리는-문제) 에 있다.
 
 받아 놓은 뒤 오프라인으로 강제하려면 `HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1` 을 붙인다
 (`chatbot/*` 은 이미 스스로 그렇게 설정한다). 로컬이 완전하면 이 상태에서도 라우터가 뜬다.
@@ -422,12 +422,8 @@ score_mode     : anchor
 ## 7. 검증 · 테스트
 
 ```bash
-# 현재 OOS + 기존 가드 + 평가 등가성 + 웹 챗봇 API 묶음
-python -m pytest \
-  tests/test_oos.py \
-  crawler/tests/test_guards.py \
-  crawler/tests/test_eval_equivalence.py \
-  tests/test_web_api.py -q
+# OOS + 평가 등가성 + 웹 챗봇 API + DeepSeek 공급자·LLM 비교 하네스 묶음
+python -m pytest tests crawler/tests/test_eval_equivalence.py -q
 
 # 웹 UI 자바스크립트 문법 검사 (node 필요)
 node --check web/static/app.js
@@ -436,7 +432,7 @@ node --check web/static/app.js
 python crawler/tests/test_eval_equivalence.py
 pytest crawler/tests/test_eval_equivalence.py
 
-# 관리자 가드
+# 수집 가드 — pytest 함수가 없는 스크립트라 따로 실행
 python crawler/tests/test_guards.py
 
 cd crawler
@@ -455,9 +451,10 @@ python chatbot/verify_docs.py
 python chatbot/answer_checks.py
 ```
 
-현재 기준 기대값(2026-08-26 실측):
+현재 기준 기대값(pytest는 2026-10-12, 나머지는 2026-08-26 실측):
 
-- 위 pytest 묶음: **22 passed** — OOS·가드·등가성 14 + 웹 API(`tests/test_web_api.py`) 8
+- 위 pytest 묶음: **29 passed** — `test_oos.py` 13 · `test_web_api.py` 8 ·
+  `test_deepseek_provider.py` 4 · `test_llm_compare.py` 3 · `test_eval_equivalence.py` 1
 - `node --check web/static/app.js`: 출력 없음이 정상
 - `verify_qform_e2e.py`: 104조합 통과
 - `verify_qform_panel.py`: 11/11 통과
@@ -536,8 +533,8 @@ cd .. && python crawler/span_tools.py     # 자기검사(왕복·유일성). 파
 - 유일하게 남은 참조는 `crawler/tests/test_eval_equivalence.py` → `archive/superseded/` 다.
   통합 결과가 구 평가기와 같은 판정을 내는지 대조하는 **회귀 테스트**이므로 의도된 연결이다.
   이 테스트가 기준값으로 쓰기 때문에 `superseded/eval_anchor_v3.py` 는 지우면 안 된다.
-- `backup/` · `crawler/*.bak_*` 의 옛 사본은 `.bak` 확장자라 import 대상이 아니다
-  (`backup/` 은 git 미추적).
+- 손으로 떠 둔 옛 사본(`*.bak*`)은 `archive/bak/` 에 모았다(`archive/README.md` 참고).
+  `.bak` 확장자라 import 대상이 아니다. 루트 `backup/` 은 git 미추적이다.
 
 **예외 1건** — `exp/harness.py` 는 `eval.py` 를 import 하지 않고 지표 셈법(`KMAX=10`,
 랭크 계산)을 **복제**해 갖고 있다. 스스로 그렇게 밝히고 있고(`"실행·수정 없이 셈법만 복제"`)

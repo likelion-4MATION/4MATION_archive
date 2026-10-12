@@ -16,7 +16,7 @@ BF로 판정된 절만 Qform과 범위 제한 RAG로 들어가며, 나머지는 
 작업에서 수정하더라도 `chatbot/router_adapter.py`가 기존 라우터 결과를 그대로 받아 쓴다.
 
 여기서 말하는 **"현재 경계 문제"는 08-25 에 수치화됐다** —
-`docs/router_판정경계_측정_20260825.md`. 요지는 셋이다.
+`docs/records/router_판정경계_측정_20260825.md`. 요지는 셋이다.
 
 - 기권 규칙(MSP < 0.70)의 dev 1,150 성적: **far-OOD 47.5% · near-OOD 25.0% ·
   경계(G6) 6.0% 차단 · in-scope 오차단 5.76%.** near-OOD 는 4개 중 3개가 통과한다.
@@ -54,24 +54,8 @@ SQLite 파일은 `admin/data/oos.sqlite3`이며 Git에 포함하지 않는다.
 
 ## 실행과 확인
 
-리포지토리 루트에서 챗봇과 관리자 콘솔을 각각 실행한다.
-
-```bash
-# 터미널 1 — 관리자
-source .venv/bin/activate
-cd admin
-python -m uvicorn main:app --host 127.0.0.1 --port 8600
-
-# 터미널 2 — 리포지토리 루트에서 챗봇 (정적 웹 UI, FastAPI)
-source .venv/bin/activate
-python -m uvicorn web.main:app --host 127.0.0.1 --port 8501
-
-# 레거시 Streamlit UI (비교가 필요할 때만 — 포트는 8502)
-# python -m streamlit run chatbot/app.py \
-#   --server.address 127.0.0.1 --server.port 8502
-```
-
-공통 의존성 설치와 인덱스 생성은 [RUNBOOK](./RUNBOOK.md#0-공통-준비)을 따른다.
+관리자 콘솔(8600)과 사용자 챗봇(8501) 실행, 공통 의존성 설치와 인덱스 생성은
+[RUNBOOK §0·§0-1](./RUNBOOK.md#0-공통-준비)을 따른다. OOS API 생존 확인은 RUNBOOK §5-1에 있다.
 
 OOS 단위 테스트:
 

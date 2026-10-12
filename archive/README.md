@@ -81,3 +81,31 @@ git mv archive/eval_retired/eval_mmr.py crawler/eval_mmr.py   # 되살리기
 현행 라벨링 도구는 `crawler/promote_gt_anchors.py` · `crawler/fill_anchors.py` ·
 `crawler/audit_anchors.py` 이며, 정답셋 정본은 `final_testset/` 아래에 있다
 (`docs/records/handoff/eval_유상.md` §2 참조).
+
+---
+
+## bak/ — 작업 중 남긴 백업 사본 (2026-10-12 이동)
+
+코드가 아니라 **그때그때 손으로 떠 둔 사본**이다. 원래 `crawler/`·`crawler/data/`·루트에 섞여
+있던 것을 원 경로 구조 그대로 옮겼다. import·실행 대상이 아니며, 같은 내용은 아래 커밋의 diff 로도
+볼 수 있다. 이 사본을 언급하는 `docs/records/진행도_2607/` 문서는 당시 경로(`crawler/...`)로 적혀 있다.
+
+| 파일 | 원 경로 | 만든 시점 | 무엇의 사본인가 |
+|---|---|---|---|
+| `crawler/crawler.py.bak` | `crawler/` | 07-15 `e097931` | FAQ 페이지네이션(`_collect_faq_pages`) 추가 직전 크롤러 |
+| `crawler/data/testset_merged.jsonl.bak` · `.bak2` | `crawler/data/` | 07-15 `e097931` | 평가셋 최초 원본 · 1차 재라벨 직후 |
+| `crawler/chunk.py.bak_pretag` · `crawler/data/chunks.jsonl.bak_pretag` | `crawler/` · `crawler/data/` | 07-21 `a82d962` | FAQ 청크별 업무 재태깅 직전 청커·코퍼스 |
+| `crawler/rag.py.bak_bf` · `.bak_cap` · `.bak_ws` | `crawler/` | 07-21 `a82d962` · `5368bb9` · `8d00300` | 업무 하드필터 · doc-count cap · 질의 공백정규화 직전 검색기 |
+| `setup_docs.bundle` | 루트 | 08-24 `c295ad1` | `git bundle` 1커밋(`14f94f8` "루트 실행용 온보딩 가이드 + Makefile"). `SETUP.md` 는 이후 본 이력에 반영됐고 `Makefile` 은 채택되지 않았다 |
+
+`setup_docs.bundle` 내용을 보려면 빈 저장소에서 받는다(전제 커밋 `d37c47c` 가 필요하므로 이 저장소를 먼저 fetch).
+
+```bash
+git init /tmp/b && cd /tmp/b
+git fetch <이 저장소 경로> dev
+git fetch <이 저장소 경로>/archive/bak/setup_docs.bundle HEAD:bundle
+git show --stat bundle
+```
+
+iCloud 동기화가 남긴 `label_retired/data/gt_labeled 복사본.jsonl` 은 `gt_labeled.jsonl`
+앞부분과 바이트 단위로 같은 잘린 사본이라 삭제했다(정보 손실 없음).
